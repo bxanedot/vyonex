@@ -1,3 +1,4 @@
+// bxane
 pluginManagement {
     repositories {
         gradlePluginPortal()
