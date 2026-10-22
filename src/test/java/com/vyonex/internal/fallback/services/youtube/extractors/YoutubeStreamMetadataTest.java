@@ -124,4 +124,16 @@ class YoutubeStreamMetadataTest {
         assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractUploaderUrl(
                 JsonParser.object().from("{}")));
     }
+
+    @Test
+    void readsUploaderAvatarAndAllowsMissingImageForAgeRestrictedVideo() throws Exception {
+        final var owner = JsonParser.object().from("{\"thumbnail\":{\"thumbnails\":[{"
+                + "\"url\":\"https://img.example/avatar.jpg\"}]}}");
+        final var avatars = YoutubeStreamExtractor.extractUploaderAvatars(owner, 0);
+        assertEquals("https://img.example/avatar.jpg", avatars.get(0).getUrl());
+        assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractUploaderAvatars(
+                JsonParser.object().from("{}"), 0));
+        assertEquals(java.util.List.of(), YoutubeStreamExtractor.extractUploaderAvatars(
+                JsonParser.object().from("{}"), 18));
+    }
 }

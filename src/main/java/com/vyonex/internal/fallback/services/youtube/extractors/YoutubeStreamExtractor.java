@@ -559,28 +559,25 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Override
     public List<Image> getUploaderAvatars() throws ParsingException {
         assertPageFetched();
-        final JsonObject owner = getVideoSecondaryInfoRenderer().getObject("owner")
-                        .getObject("videoOwnerRenderer");
+        return extractUploaderAvatars(getVideoSecondaryInfoRenderer().getObject("owner")
+                .getObject("videoOwnerRenderer"), ageLimit);
+    }
 
+    static List<Image> extractUploaderAvatars(@Nonnull final JsonObject owner,
+                                              final int ageLimit) throws ParsingException {
         final List<Image> imageList;
         if (owner.has("avatarStack")) {
             imageList = getImagesFromThumbnailsArray(
-                owner.getObject("avatarStack").getObject("avatarStackViewModel")
-                    .getArray("avatars")
-                    // only consider the first collaborator, which is the video owner
-                    .getObject(0)
-                    .getObject("avatarViewModel")
-                    .getObject("image")
-                    .getArray("sources"));
+                    owner.getObject("avatarStack").getObject("avatarStackViewModel")
+                            .getArray("avatars").getObject(0).getObject("avatarViewModel")
+                            .getObject("image").getArray("sources"));
         } else {
             imageList = getImagesFromThumbnailsArray(owner.getObject(THUMBNAIL)
                     .getArray(THUMBNAILS));
         }
-
         if (imageList.isEmpty() && ageLimit == NO_AGE_LIMIT) {
             throw new ParsingException("Could not get uploader avatars");
         }
-
         return imageList;
     }
 
