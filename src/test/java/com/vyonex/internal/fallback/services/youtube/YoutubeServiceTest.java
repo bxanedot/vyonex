@@ -67,6 +67,14 @@ class YoutubeServiceTest {
             assertEquals("Trending Movie Trailers",
                     kiosks.getExtractorById("trending_movies_and_shows", null).getName());
 
+            final Localization requestedLocale = new Localization("fr", "CH");
+            assertEquals(requestedLocale, kiosks.getExtractorById("trending_music", null,
+                    requestedLocale).getExtractorLocalization());
+            final Localization forcedLocale = new Localization("de", "AT");
+            kiosks.forceLocalization(forcedLocale);
+            assertEquals(forcedLocale, kiosks.getExtractorById("trending_music", null,
+                    requestedLocale).getExtractorLocalization());
+
             kiosks.forceContentCountry(new ContentCountry("MY"));
             assertThrows(UnsupportedContentInCountryException.class,
                     () -> kiosks.getExtractorById("trending_music", null).onFetchPage(null));
