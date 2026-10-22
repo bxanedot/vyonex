@@ -104,7 +104,7 @@ class RemotePlayerConfigStoreTest {
 
     private companion object {
         const val CONFIG_URL =
-            "https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json"
+            "https://raw.githubusercontent.com/bxanedot/vyonex/main/player_configs.json"
         const val PLAYER_URL = "https://www.youtube.com/s/player/1234abcd/player_ias.vflset/en_US/base.js"
         const val PLAYER_CONFIG_JSON =
             """{"schemaVersion":1,"players":{"1234abcd":{"sig":"x(1,2,INPUT)","nClass":"A","sts":12345}}}"""
