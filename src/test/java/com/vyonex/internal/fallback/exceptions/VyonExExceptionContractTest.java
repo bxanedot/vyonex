@@ -40,4 +40,17 @@ class VyonExExceptionContractTest {
         assertEquals("captcha", captcha.getMessage());
         assertEquals("https://example.org", captcha.getUrl());
     }
+
+    @Test
+    void preservesAccountTerminationReasonDefaults() {
+        final AccountTerminatedException unknown = new AccountTerminatedException("terminated");
+        final AccountTerminatedException violation = new AccountTerminatedException(
+                "terminated", AccountTerminatedException.Reason.VIOLATION);
+        final AccountTerminatedException caused = new AccountTerminatedException(
+                "terminated", new IllegalStateException("probe"));
+
+        assertEquals(AccountTerminatedException.Reason.UNKNOWN, unknown.getReason());
+        assertEquals(AccountTerminatedException.Reason.VIOLATION, violation.getReason());
+        assertEquals(AccountTerminatedException.Reason.UNKNOWN, caused.getReason());
+    }
 }
