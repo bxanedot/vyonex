@@ -115,4 +115,13 @@ class YoutubeStreamMetadataTest {
         assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractUploaderName(
                 JsonParser.object().from("{}")));
     }
+
+    @Test
+    void buildsUploaderUrlFromChannelId() throws Exception {
+        assertEquals("https://www.youtube.com/channel/UC123",
+                YoutubeStreamExtractor.extractUploaderUrl(
+                        JsonParser.object().from("{\"channelId\":\"UC123\"}")));
+        assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractUploaderUrl(
+                JsonParser.object().from("{}")));
+    }
 }
