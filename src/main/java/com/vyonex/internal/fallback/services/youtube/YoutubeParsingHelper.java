@@ -41,7 +41,8 @@ import static com.vyonex.internal.fallback.utils.Utils.HTTPS;
 import static com.vyonex.internal.fallback.utils.Utils.getStringResultFromRegexArray;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.CodedInputStream;
+import com.google.protobuf.WireFormat;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonBuilder;
 import com.vyonex.internal.json.JsonObject;
@@ -61,8 +62,6 @@ import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.localization.ContentCountry;
 import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
-import com.vyonex.internal.fallback.services.youtube.protos.video.Xtags.XTags;
-import com.vyonex.internal.fallback.services.youtube.protos.video.Xtags.KeyValuePair;
 import com.vyonex.internal.fallback.stream.AudioTrackType;
 import com.vyonex.internal.fallback.utils.JsonUtils;
 import com.vyonex.internal.fallback.utils.Parser;
@@ -83,7 +82,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -159,10 +157,8 @@ public final class YoutubeParsingHelper {
     public static final String RACY_CHECK_OK = "racyCheckOk";
 
     private static String clientVersion;
-
     private static String youtubeMusicClientVersion;
-
-    private static boolean clientVersionExtracted = false;
+    private static boolean clientVersionExtracted;
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     private static Optional<Boolean> hardcodedClientVersionValid = Optional.empty();
 
@@ -459,15 +455,13 @@ public final class YoutubeParsingHelper {
         if (clientVersionExtracted) {
             return;
         }
-        final String url = "https://www.youtube.com/sw.js";
-        final var headers = getOriginReferrerHeaders("https://www.youtube.com");
-        final String response = getDownloader().get(url, headers).responseBody();
+        final String response = getDownloader().get("https://www.youtube.com/sw.js",
+                getOriginReferrerHeaders("https://www.youtube.com")).responseBody();
         try {
             clientVersion = getStringResultFromRegexArray(response,
                     INNERTUBE_CONTEXT_CLIENT_VERSION_REGEXES, 1);
         } catch (final Parser.RegexException e) {
-            throw new ParsingException("Could not extract YouTube WEB InnerTube client version "
-                    + "from sw.js", e);
+            throw new ParsingException("Could not extract YouTube client version from sw.js", e);
         }
         clientVersionExtracted = true;
     }
@@ -487,10 +481,8 @@ public final class YoutubeParsingHelper {
                 .getArray("serviceTrackingParams");
 
         // Try to get version from initial data first
-        final var serviceTrackingParamsStream = serviceTrackingParams.streamAsJsonObjects();
-
         clientVersion = getClientVersionFromServiceTrackingParam(
-                serviceTrackingParamsStream, "CSI", "cver");
+                serviceTrackingParams, "CSI", "cver");
 
         if (clientVersion == null) {
             try {
@@ -504,14 +496,11 @@ public final class YoutubeParsingHelper {
         // digits
         if (isNullOrEmpty(clientVersion)) {
             clientVersion = getClientVersionFromServiceTrackingParam(
-                    serviceTrackingParamsStream, "ECATCHER", "client.version");
+                    serviceTrackingParams, "ECATCHER", "client.version");
         }
 
-        if (clientVersion == null) {
-            throw new ParsingException(
-                    // CHECKSTYLE:OFF
-                    "Could not extract YouTube WEB InnerTube client version from HTML search results page");
-                    // CHECKSTYLE:ON
+        if (isNullOrEmpty(clientVersion)) {
+            throw new ParsingException("Could not extract YouTube client version from HTML");
         }
 
         clientVersionExtracted = true;
@@ -519,10 +508,10 @@ public final class YoutubeParsingHelper {
 
     @Nullable
     private static String getClientVersionFromServiceTrackingParam(
-            @Nonnull final Stream<JsonObject> serviceTrackingParamsStream,
+            @Nonnull final JsonArray serviceTrackingParams,
             @Nonnull final String serviceName,
             @Nonnull final String clientVersionKey) {
-        return serviceTrackingParamsStream.filter(serviceTrackingParam ->
+        return serviceTrackingParams.streamAsJsonObjects().filter(serviceTrackingParam ->
                         serviceTrackingParam.getString("service", "")
                                 .equals(serviceName))
                 .flatMap(serviceTrackingParam -> serviceTrackingParam.getArray("params")
@@ -543,26 +532,23 @@ public final class YoutubeParsingHelper {
             return clientVersion;
         }
 
-        // Always extract the latest client version, by trying first to extract it from the
-        // JavaScript service worker, then from HTML search results page as a fallback, to prevent
-        // fingerprinting based on the client version used
         try {
             extractClientVersionFromSwJs();
-        } catch (final Exception e) {
-            extractClientVersionFromHtmlSearchResultsPage();
+        } catch (final IOException | ExtractionException ignored) {
+            try {
+                extractClientVersionFromHtmlSearchResultsPage();
+            } catch (final IOException | ExtractionException htmlFailure) {
+                if (isHardcodedClientVersionValid()) {
+                    clientVersion = WEB_HARDCODED_CLIENT_VERSION;
+                    clientVersionExtracted = true;
+                    return clientVersion;
+                }
+                throw new ExtractionException("Could not get YouTube client version",
+                        htmlFailure);
+            }
         }
 
-        if (clientVersionExtracted) {
-            return clientVersion;
-        }
-
-        // Fallback to the hardcoded one if it is valid
-        if (isHardcodedClientVersionValid()) {
-            clientVersion = WEB_HARDCODED_CLIENT_VERSION;
-            return clientVersion;
-        }
-
-        throw new ExtractionException("Could not get YouTube WEB client version");
+        return clientVersion;
     }
 
     /**
@@ -582,7 +568,9 @@ public final class YoutubeParsingHelper {
      */
     public static void resetClientVersion() {
         clientVersion = null;
+        youtubeMusicClientVersion = null;
         clientVersionExtracted = false;
+        hardcodedClientVersionValid = Optional.empty();
     }
 
     /**
@@ -1398,34 +1386,54 @@ public final class YoutubeParsingHelper {
         if (xtags == null) {
             return null;
         }
-        final String atype;
         try {
-            atype = XTags.parseFrom(Base64.getUrlDecoder().decode(xtags))
-                    .getXtagsList().stream()
-                    .filter(tag -> "acont".equals(tag.getKey()))
-                    .findFirst()
-                    .map(KeyValuePair::getValue)
-                    .orElse(null);
-        } catch (final InvalidProtocolBufferException ignored) {
+            final CodedInputStream tags = CodedInputStream.newInstance(
+                    Base64.getUrlDecoder().decode(xtags));
+            boolean foundAudioType = false;
+            String audioType = null;
+            while (!tags.isAtEnd()) {
+                final int tag = tags.readTag();
+                if (tag == 0) break;
+                if (WireFormat.getTagFieldNumber(tag) == 1
+                        && WireFormat.getTagWireType(tag) == WireFormat.WIRETYPE_LENGTH_DELIMITED) {
+                    final CodedInputStream pair = CodedInputStream.newInstance(tags.readByteArray());
+                    String key = null;
+                    String value = null;
+                    while (!pair.isAtEnd()) {
+                        final int pairTag = pair.readTag();
+                        if (pairTag == 0) break;
+                        if (WireFormat.getTagFieldNumber(pairTag) == 1
+                                && WireFormat.getTagWireType(pairTag)
+                                == WireFormat.WIRETYPE_LENGTH_DELIMITED) {
+                            key = pair.readStringRequireUtf8();
+                        } else if (WireFormat.getTagFieldNumber(pairTag) == 2
+                                && WireFormat.getTagWireType(pairTag)
+                                == WireFormat.WIRETYPE_LENGTH_DELIMITED) {
+                            value = pair.readStringRequireUtf8();
+                        } else if (!pair.skipField(pairTag)) {
+                            break;
+                        }
+                    }
+                    if (!foundAudioType && "acont".equals(key)) {
+                        foundAudioType = true;
+                        audioType = value;
+                    }
+                } else if (!tags.skipField(tag)) {
+                    break;
+                }
+            }
+            if (!foundAudioType) return null;
+            if (audioType == null) return null;
+            switch (audioType) {
+                case "original": return AudioTrackType.ORIGINAL;
+                case "dubbed":
+                case "dubbed-auto": return AudioTrackType.DUBBED;
+                case "descriptive": return AudioTrackType.DESCRIPTIVE;
+                case "secondary": return AudioTrackType.SECONDARY;
+                default: return null;
+            }
+        } catch (final IOException | IllegalArgumentException ignored) {
             return null;
-        }
-
-        if (atype == null) {
-            return null;
-        }
-
-        switch (atype) {
-            case "original":
-                return AudioTrackType.ORIGINAL;
-            case "dubbed":
-            case "dubbed-auto":
-                return AudioTrackType.DUBBED;
-            case "descriptive":
-                return AudioTrackType.DESCRIPTIVE;
-            case "secondary":
-                return AudioTrackType.SECONDARY;
-            default:
-                return null;
         }
     }
 

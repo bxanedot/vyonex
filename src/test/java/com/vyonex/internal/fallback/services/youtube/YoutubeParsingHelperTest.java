@@ -9,17 +9,23 @@ import com.vyonex.internal.fallback.exceptions.AccountTerminatedException;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.Localization;
+import com.vyonex.internal.fallback.stream.AudioTrackType;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Random;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,6 +97,21 @@ class YoutubeParsingHelperTest {
                 "https://video.example/play?c=WEB_EMBEDDED_PLAYER"));
         assertFalse(YoutubeParsingHelper.isWebStreamingUrl(
                 "https://video.example/play?other=c%3DWEB"));
+    }
+
+    @Test
+    void readsAudioTrackTypeFromEncodedTags() throws IOException {
+        assertEquals(AudioTrackType.ORIGINAL,
+                YoutubeParsingHelper.extractAudioTrackType(audioTags("original")));
+        assertEquals(AudioTrackType.DUBBED,
+                YoutubeParsingHelper.extractAudioTrackType(audioTags("dubbed-auto")));
+        assertEquals(AudioTrackType.DESCRIPTIVE,
+                YoutubeParsingHelper.extractAudioTrackType(audioTags("descriptive")));
+        assertEquals(AudioTrackType.SECONDARY,
+                YoutubeParsingHelper.extractAudioTrackType(audioTags("secondary")));
+        assertNull(YoutubeParsingHelper.extractAudioTrackType("!"));
+        assertNull(YoutubeParsingHelper.extractAudioTrackType(
+                Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[]{1})));
     }
 
     @Test
@@ -197,5 +218,23 @@ class YoutubeParsingHelperTest {
 
     private static String navigation(final String json) throws JsonParserException {
         return YoutubeParsingHelper.getUrlFromNavigationEndpoint(JsonParser.object().from(json));
+    }
+
+    private static String audioTags(final String value) throws IOException {
+        final byte[] keyBytes = "acont".getBytes(StandardCharsets.UTF_8);
+        final byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+        final ByteArrayOutputStream pair = new ByteArrayOutputStream();
+        pair.write(0x0a);
+        pair.write(keyBytes.length);
+        pair.write(keyBytes);
+        pair.write(0x12);
+        pair.write(valueBytes.length);
+        pair.write(valueBytes);
+
+        final ByteArrayOutputStream tags = new ByteArrayOutputStream();
+        tags.write(0x0a);
+        tags.write(pair.size());
+        tags.write(pair.toByteArray());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(tags.toByteArray());
     }
 }
