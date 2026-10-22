@@ -69,4 +69,22 @@ class StreamModelContractTest {
                 () -> new AudioStream.Builder().setId("audio").build());
         assertFalse(video.equalStats(null));
     }
+
+    @Test
+    void comparesStreamsWithoutFormatsByIdAndDeliveryMethod() {
+        final AudioStream first = audioWithoutFormat("unknown", DeliveryMethod.HLS);
+        final AudioStream same = audioWithoutFormat("unknown", DeliveryMethod.HLS);
+        final AudioStream otherId = audioWithoutFormat("other", DeliveryMethod.HLS);
+        final AudioStream otherDelivery = audioWithoutFormat("unknown", DeliveryMethod.DASH);
+
+        assertTrue(first.equalStats(same));
+        assertFalse(first.equalStats(otherId));
+        assertFalse(first.equalStats(otherDelivery));
+    }
+
+    private static AudioStream audioWithoutFormat(final String id,
+                                                  final DeliveryMethod deliveryMethod) {
+        return new AudioStream.Builder().setId(id).setContent("https://media.example/audio", true)
+                .setMediaFormat(null).setDeliveryMethod(deliveryMethod).build();
+    }
 }
