@@ -336,19 +336,21 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
     }
 
-    private int getDurationFromFirstAdaptiveFormat(@Nonnull final List<JsonObject> streamingDatas)
+    static long getDurationFromFirstAdaptiveFormat(@Nonnull final List<JsonObject> streamingDatas)
             throws ParsingException {
         for (final JsonObject streamingData : streamingDatas) {
+            if (streamingData == null) continue;
             final JsonArray adaptiveFormats = streamingData.getArray(ADAPTIVE_FORMATS);
-            if (adaptiveFormats.isEmpty()) {
-                continue;
-            }
-
-            final String durationMs = adaptiveFormats.getObject(0)
-                    .getString("approxDurationMs");
-            try {
-                return Math.round(Long.parseLong(durationMs) / 1000f);
-            } catch (final NumberFormatException ignored) {
+            for (int index = 0; index < adaptiveFormats.size(); index++) {
+                final String durationMs = adaptiveFormats.getObject(index)
+                        .getString("approxDurationMs");
+                try {
+                    final long milliseconds = Long.parseLong(durationMs);
+                    if (milliseconds < 0) continue;
+                    return milliseconds / 1000 + (milliseconds % 1000 >= 500 ? 1 : 0);
+                } catch (final NumberFormatException ignored) {
+                    // A later format or client may still include a usable duration.
+                }
             }
         }
 
