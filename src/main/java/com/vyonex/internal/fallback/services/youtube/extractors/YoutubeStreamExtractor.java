@@ -1526,19 +1526,23 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public List<StreamSegment> getStreamSegments() throws ParsingException {
+        return parseStreamSegments(nextResponse, getUrl(), getLength());
+    }
 
-        if (!nextResponse.has("engagementPanels")) {
+    static List<StreamSegment> parseStreamSegments(final JsonObject nextResponse,
+                                                   final String videoUrl,
+                                                   final long duration)
+            throws ParsingException {
+        final JsonArray panels = nextResponse.getArray("engagementPanels");
+        if (panels.isEmpty()) {
             return Collections.emptyList();
         }
 
-        final JsonArray segmentsArray = nextResponse.getArray("engagementPanels")
+        final JsonArray segmentsArray = panels
                 .streamAsJsonObjects()
-                // Check if the panel is the correct one
                 .filter(panel -> "engagement-panel-macro-markers-description-chapters".equals(
-                        panel
-                                .getObject("engagementPanelSectionListRenderer")
+                        panel.getObject("engagementPanelSectionListRenderer")
                                 .getString("panelIdentifier")))
-                // Extract the data
                 .map(panel -> panel
                         .getObject("engagementPanelSectionListRenderer")
                         .getObject("content")
@@ -1547,23 +1551,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                 .findFirst()
                 .orElse(null);
 
-        // If no data was found exit
-        if (segmentsArray == null) {
+        if (segmentsArray == null || segmentsArray.isEmpty()) {
             return Collections.emptyList();
         }
 
-        final long duration = getLength();
         final List<StreamSegment> segments = new ArrayList<>();
-        final var segmentStream = segmentsArray.streamAsJsonObjects()
-                .map(object -> object.getObject("macroMarkersListItemRenderer"));
-        final var it = segmentStream.iterator();
-
-        while (it.hasNext()) {
-            final var segmentJson = it.next();
+        for (final JsonObject item : segmentsArray.streamAsJsonObjects().toList()) {
+            final JsonObject segmentJson = item.getObject("macroMarkersListItemRenderer");
             final int startTimeSeconds = segmentJson.getObject("onTap")
                     .getObject("watchEndpoint").getInt("startTimeSeconds", -1);
 
-            if (startTimeSeconds == -1) {
+            if (startTimeSeconds < 0) {
                 throw new ParsingException("Could not get stream segment start time.");
             }
             if (startTimeSeconds > duration) {
@@ -1576,16 +1574,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             }
 
             final StreamSegment segment = new StreamSegment(title, startTimeSeconds);
-            segment.setUrl(getUrl() + "?t=" + startTimeSeconds);
-            if (segmentJson.has(THUMBNAIL)) {
-                final JsonArray previewsArray = segmentJson.getObject(THUMBNAIL)
-                        .getArray(THUMBNAILS);
-                if (!previewsArray.isEmpty()) {
-                    // Assume that the thumbnail with the highest resolution is at the last position
-                    final String url = previewsArray
-                            .getObject(previewsArray.size() - 1)
-                            .getString("url");
-                    segment.setPreviewUrl(fixThumbnailUrl(url));
+            final int fragmentIndex = videoUrl.indexOf('#');
+            final String url = fragmentIndex < 0 ? videoUrl : videoUrl.substring(0, fragmentIndex);
+            final String fragment = fragmentIndex < 0 ? "" : videoUrl.substring(fragmentIndex);
+            final String separator = url.contains("?")
+                    ? (url.endsWith("?") || url.endsWith("&") ? "" : "&") : "?";
+            segment.setUrl(url + separator + "t=" + startTimeSeconds + fragment);
+            final JsonArray previews = segmentJson.getObject(THUMBNAIL).getArray(THUMBNAILS);
+            if (!previews.isEmpty()) {
+                final String previewUrl = previews.getObject(previews.size() - 1).getString("url");
+                if (previewUrl != null) {
+                    segment.setPreviewUrl(fixThumbnailUrl(previewUrl));
                 }
             }
             segments.add(segment);
