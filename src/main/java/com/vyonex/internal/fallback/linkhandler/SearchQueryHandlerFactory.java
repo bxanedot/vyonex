@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.linkhandler;
 
@@ -8,22 +10,13 @@ import java.util.List;
 
 public abstract class SearchQueryHandlerFactory extends ListLinkHandlerFactory {
 
-    ///////////////////////////////////
-    // To Override
-    ///////////////////////////////////
-
     @Override
     public abstract String getUrl(String query, List<String> contentFilter, String sortFilter)
             throws ParsingException, UnsupportedOperationException;
 
-    @SuppressWarnings("unused")
     public String getSearchString(final String url) {
         return "";
     }
-
-    ///////////////////////////////////
-    // Logic
-    ///////////////////////////////////
 
     @Override
     public String getId(final String url) throws ParsingException, UnsupportedOperationException {
@@ -41,9 +34,6 @@ public abstract class SearchQueryHandlerFactory extends ListLinkHandlerFactory {
         return fromQuery(query, Collections.emptyList(), "");
     }
 
-    /**
-     * It's not mandatory for VyonEx to handle the Url
-     */
     @Override
     public boolean onAcceptUrl(final String url) {
         return false;
