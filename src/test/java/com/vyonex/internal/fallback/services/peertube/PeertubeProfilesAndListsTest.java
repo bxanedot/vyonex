@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
+import com.vyonex.internal.fallback.channel.tabs.ChannelTabInfo;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
@@ -129,6 +130,10 @@ class PeertubeProfilesAndListsTest {
         assertEquals(1, tabPage.getItems().size());
         assertEquals("First video", tabPage.getItems().get(0).getName());
         assertNotNull(tabPage.getNextPage());
+
+        final ChannelTabInfo tabInfo = ChannelTabInfo.getInfo(tab);
+        assertEquals(ChannelTabs.VIDEOS, tabInfo.getName());
+        assertEquals(1, tabInfo.getRelatedItems().size());
     }
 
     private static final class StubDownloader extends Downloader {

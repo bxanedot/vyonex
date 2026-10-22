@@ -1,9 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.channel.tabs;
 
-/**
- * Constants of channel tabs supported by the extractor.
- */
 public final class ChannelTabs {
     public static final String VIDEOS = "videos";
     public static final String TRACKS = "tracks";
@@ -14,6 +13,5 @@ public final class ChannelTabs {
     public static final String ALBUMS = "albums";
     public static final String LIKES = "likes";
 
-    private ChannelTabs() {
-    }
+    private ChannelTabs() { }
 }
