@@ -4,9 +4,7 @@ package com.vyonex.internal.primary.cipher
 /**
  * Parser for extracting cipher functions from YouTube player JavaScript.
  *
- * Heuristic extraction similar in spirit to yt-dlp: find split/join transform
- * functions and the object helpers they use. N-transform and signature decipher
- * often share a similar shape; we disambiguate by order (second match) and body checks.
+ * Finds split/join transforms and the helper objects they call in player JavaScript.
  */
 internal object PlayerScriptParser {
     data class ParseResult(
@@ -20,7 +18,7 @@ internal object PlayerScriptParser {
     )
 
     private val functionPattern =
-        Regex("""(?:var\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(\s*a\s*\)\s*\{""")
+        Regex("""(?:(?:var|let|const)\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\)\s*\{""")
 
     /**
      * N-parameter transform: first split/join-style function in the player is often (not always) the n-function.
@@ -69,20 +67,15 @@ internal object PlayerScriptParser {
 
     fun extractHelperFunctions(playerCode: String): Map<String, String> {
         val helpers = mutableMapOf<String, String>()
-        val helperPatterns =
-            listOf(
-                Regex("""(?s)var\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\{\s*[^}]*reverse[^}]*\}"""),
-                Regex("""(?s)var\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\{\s*[^}]*slice[^}]*\}"""),
-                Regex("""(?s)var\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\{\s*[^}]*splice[^}]*\}"""),
-            )
-        for (pattern in helperPatterns) {
-            pattern.findAll(playerCode).forEach { match ->
-                val startIdx = match.range.first
-                val endIdx = findFunctionEnd(playerCode, startIdx)
-                if (endIdx > startIdx) {
-                    val fullFunc = playerCode.substring(startIdx, endIdx)
-                    val funcName = match.groupValues[1]
-                    helpers[funcName] = fullFunc
+        val helperPattern =
+            Regex("""(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\{""")
+        helperPattern.findAll(playerCode).forEach { match ->
+            val start = match.range.first
+            val end = findFunctionEnd(playerCode, start)
+            if (end > start) {
+                val helper = playerCode.substring(start, end)
+                if (Regex("""\b(reverse|slice|splice)\b""").containsMatchIn(helper)) {
+                    helpers[match.groupValues[1]] = helper
                 }
             }
         }
@@ -270,8 +263,12 @@ internal object PlayerScriptParser {
                 val end = findFunctionEnd(code, match.range.first)
                 if (end <= match.range.first) return@mapNotNull null
                 val body = code.substring(match.range.first, end)
-                if (Regex("""a\s*=\s*a\.split\s*\(\s*""\s*\)""").containsMatchIn(body) &&
-                    Regex("""return\s+a\.join\s*\(\s*""\s*\)""").containsMatchIn(body)
+                val parameter = match.groupValues[2]
+                val escapedParameter = Regex.escape(parameter)
+                if (Regex("""$escapedParameter\s*=\s*$escapedParameter\.split\s*\(\s*(?:""|'')\s*\)""")
+                        .containsMatchIn(body) &&
+                    Regex("""return\s+$escapedParameter\.join\s*\(\s*(?:""|'')\s*\)""")
+                        .containsMatchIn(body)
                 ) {
                     FunctionMatch(match.groupValues[1])
                 } else {
