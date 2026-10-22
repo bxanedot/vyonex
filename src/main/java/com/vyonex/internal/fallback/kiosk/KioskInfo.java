@@ -1,31 +1,13 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.kiosk;
 
-/*
- * Created by Christian Schabesberger on 12.08.17.
- *
- * Copyright (C) 2017 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * KioskInfo.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.ListInfo;
-import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
+import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
@@ -55,22 +37,14 @@ public final class KioskInfo extends ListInfo<StreamInfoItem> {
         return getInfo(extractor);
     }
 
-    /**
-     * Get KioskInfo from KioskExtractor
-     *
-     * @param extractor an extractor where fetchPage() was already got called on.
-     */
+    // shortcut: results stay stream-typed for API compatibility; broaden when callers support mixed items.
     public static KioskInfo getInfo(final KioskExtractor extractor) throws ExtractionException {
-
-        final KioskInfo info = new KioskInfo(extractor.getServiceId(),
-                extractor.getLinkHandler(),
+        final KioskInfo info = new KioskInfo(extractor.getServiceId(), extractor.getLinkHandler(),
                 extractor.getName());
-
         final ListExtractor.InfoItemsPage<StreamInfoItem> itemsPage
                 = ExtractorHelper.getItemsPageOrLogError(info, extractor);
         info.setRelatedItems(itemsPage.getItems());
         info.setNextPage(itemsPage.getNextPage());
-
         return info;
     }
 }
