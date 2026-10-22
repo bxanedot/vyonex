@@ -35,7 +35,11 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:4.35.0")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("org.mozilla:rhino-engine:1.8.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
 }
+
+tasks.test { useJUnitPlatform() }
 
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:4.35.0" }

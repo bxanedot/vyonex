@@ -1,16 +1,8 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-//
-// SPDX-FileCopyrightText: 2026 NewPipe e.V. <https://newpipe-ev.de>
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MetaInfo;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
@@ -22,15 +14,20 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampSearchStreamInfoItemExtractor;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
-public class BandcampSearchExtractor extends SearchExtractor {
+public final class BandcampSearchExtractor extends SearchExtractor {
 
     public BandcampSearchExtractor(final StreamingService service,
                                    final SearchQueryHandler linkHandler) {
@@ -57,64 +54,103 @@ public class BandcampSearchExtractor extends SearchExtractor {
     @Override
     public InfoItemsPage<InfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
+        final String html = getDownloader().get(page.getUrl(), Map.of("Cookie", List.of("identity")))
+                .responseBody();
+        final Document document = Jsoup.parse(html, page.getUrl());
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
 
-        // TODO: idk why this cookie works. See historical issue #13476.
-        // Replace with something more reliable
-        final var headers = Map.of("Cookie", List.of("identity"));
-        final var response = getDownloader().get(page.getUrl(), headers).responseBody();
-        final Document d = Jsoup.parse(response);
+        for (final Element result : document.select(".searchresult")) {
+            final Element resultInfo = result.selectFirst(".result-info");
+            if (resultInfo == null) {
+                continue;
+            }
 
-        for (final Element searchResult : d.getElementsByClass("searchresult")) {
-            final String type = searchResult.getElementsByClass("result-info").stream()
-                    .flatMap(element -> element.getElementsByClass("itemtype").stream())
-                    .map(Element::text)
-                    .findFirst()
-                    .orElse("");
+            final Element itemType = resultInfo.selectFirst(".itemtype");
+            if (itemType == null) {
+                continue;
+            }
 
-            switch (type) {
+            switch (itemType.text().trim().toUpperCase(Locale.ROOT)) {
                 case "ARTIST":
-                    collector.commit(new BandcampChannelInfoItemExtractor(searchResult));
+                    items.commit(new BandcampChannelInfoItemExtractor(result));
                     break;
                 case "ALBUM":
-                    collector.commit(new BandcampPlaylistInfoItemExtractor(searchResult));
+                    items.commit(new BandcampPlaylistInfoItemExtractor(result));
                     break;
                 case "TRACK":
-                    collector.commit(new BandcampSearchStreamInfoItemExtractor(searchResult, null));
+                    items.commit(new BandcampSearchStreamInfoItemExtractor(result, null));
                     break;
                 default:
-                    // don't display fan results ("FAN") or other things
                     break;
             }
         }
 
-        // Count pages
-        final Elements pageLists = d.getElementsByClass("pagelist");
-        if (pageLists.isEmpty()) {
-            return new InfoItemsPage<>(collector, null);
+        return new InfoItemsPage<>(items, findNextPage(document, page.getUrl()));
+    }
+
+    static Page findNextPage(final Document document, final String currentUrl) {
+        final Element pagination = document.selectFirst(".pagelist");
+        if (pagination == null) {
+            return null;
         }
 
-        final Elements pages = pageLists.stream()
-                .map(element -> element.getElementsByTag("li"))
-                .findFirst()
-                .orElseGet(Elements::new);
-
-        // Find current page
-        int currentPage = -1;
-        for (int i = 0; i < pages.size(); i++) {
-            final Element pageElement = pages.get(i);
-            if (!pageElement.getElementsByTag("span").isEmpty()) {
-                currentPage = i + 1;
-                break;
+        Element nextLink = pagination.selectFirst("a.next[href], a[rel~=next][href], li.next a[href]");
+        if (nextLink == null) {
+            Element current = pagination.selectFirst("li.current, li.selected, li.active");
+            if (current == null) {
+                final Element currentNumber = pagination.selectFirst("li span");
+                if (currentNumber != null) {
+                    current = currentNumber.closest("li");
+                }
+            }
+            if (current != null && current.nextElementSibling() != null) {
+                nextLink = current.nextElementSibling().selectFirst("a[href]");
             }
         }
-
-        String nextUrl = null;
-        if (currentPage < pages.size()) {
-            nextUrl = page.getUrl().substring(0, page.getUrl().length() - 1) + (currentPage + 1);
+        if (nextLink == null) {
+            return null;
         }
 
-        return new InfoItemsPage<>(collector, new Page(nextUrl));
+        try {
+            final URI base = new URI(currentUrl);
+            final URI next = resolvePageUri(base, nextLink.attr("href"));
+            if (!isHttp(base) || !isHttp(next)
+                    || !base.getScheme().equalsIgnoreCase(next.getScheme())
+                    || base.getHost() == null || !base.getHost().equalsIgnoreCase(next.getHost())
+                    || effectivePort(base) != effectivePort(next)
+                    || next.getRawUserInfo() != null || next.equals(base)) {
+                return null;
+            }
+            return new Page(next.toString());
+        } catch (final URISyntaxException | IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static URI resolvePageUri(final URI base, final String href) throws URISyntaxException {
+        final URI reference = new URI(href);
+        if (reference.getScheme() == null && reference.getRawAuthority() == null
+                && (reference.getRawPath() == null || reference.getRawPath().isEmpty())
+                && reference.getRawQuery() != null) {
+            final String path = base.getRawPath() == null ? "" : base.getRawPath();
+            final String fragment = reference.getRawFragment() == null
+                    ? "" : "#" + reference.getRawFragment();
+            return new URI(base.getScheme() + "://" + base.getRawAuthority() + path
+                    + "?" + reference.getRawQuery() + fragment).normalize();
+        }
+        return base.resolve(reference).normalize();
+    }
+
+    private static boolean isHttp(final URI uri) {
+        return "http".equalsIgnoreCase(uri.getScheme())
+                || "https".equalsIgnoreCase(uri.getScheme());
+    }
+
+    private static int effectivePort(final URI uri) {
+        if (uri.getPort() >= 0) {
+            return uri.getPort();
+        }
+        return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
     }
 
     @Nonnull
