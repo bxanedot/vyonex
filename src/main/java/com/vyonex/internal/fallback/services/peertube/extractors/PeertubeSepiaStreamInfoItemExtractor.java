@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -14,15 +13,15 @@ public final class PeertubeSepiaStreamInfoItemExtractor extends PeertubeStreamIn
     }
 
     @Override public String getUrl() throws ParsingException {
-        final String embedUrl = item.getString("embedUrl");
-        if (embedUrl != null) {
+        final String embed = item.getString("embedUrl");
+        if (embed != null) {
             try {
-                final URI uri = URI.create(embedUrl);
-                if (uri.getScheme() != null && uri.getRawAuthority() != null) {
-                    setBaseUrl(uri.getScheme() + "://" + uri.getRawAuthority());
+                final URI location = URI.create(embed);
+                if (location.getScheme() != null && location.getRawAuthority() != null) {
+                    setBaseUrl(location.getScheme() + "://" + location.getRawAuthority());
                 }
-            } catch (final IllegalArgumentException e) {
-                throw new ParsingException("Invalid Sepia video URL", e);
+            } catch (final IllegalArgumentException error) {
+                throw new ParsingException("Invalid Sepia video URL", error);
             }
         }
         return super.getUrl();

@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
@@ -23,23 +22,13 @@ public final class PeertubeChannelInfoItemExtractor implements ChannelInfoItemEx
         this.baseUrl = baseUrl;
     }
 
-    @Override public String getName() throws ParsingException {
-        return requiredString(item, "displayName");
-    }
-
-    @Override public String getUrl() throws ParsingException {
-        return requiredString(item, "url");
-    }
-
+    @Override public String getName() throws ParsingException { return requiredString(item, "displayName"); }
+    @Override public String getUrl() throws ParsingException { return requiredString(item, "url"); }
     @Override public List<Image> getThumbnails() {
         return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, item);
     }
-
     @Override public String getDescription() { return item.getString("description"); }
-
     @Override public long getSubscriberCount() { return item.getLong("followersCount", -1); }
-
     @Override public long getStreamCount() { return ListExtractor.ITEM_COUNT_UNKNOWN; }
-
     @Override public boolean isVerified() { return false; }
 }

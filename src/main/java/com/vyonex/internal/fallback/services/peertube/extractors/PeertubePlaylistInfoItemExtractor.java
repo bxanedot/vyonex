@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
@@ -23,34 +22,22 @@ public final class PeertubePlaylistInfoItemExtractor implements PlaylistInfoItem
         this.baseUrl = baseUrl;
     }
 
-    @Override public String getName() throws ParsingException {
-        return requiredString(item, "displayName");
-    }
-
-    @Override public String getUrl() throws ParsingException {
-        return requiredString(item, "url");
-    }
-
+    @Override public String getName() throws ParsingException { return requiredString(item, "displayName"); }
+    @Override public String getUrl() throws ParsingException { return requiredString(item, "url"); }
     @Override public List<Image> getThumbnails() {
         return getThumbnailsFromPlaylistOrVideoItem(baseUrl, item);
     }
-
     @Override public String getUploaderName() throws ParsingException {
         return requiredString(item, "uploader.displayName");
     }
-
     @Override public String getUploaderUrl() throws ParsingException {
         return requiredString(item, "uploader.url");
     }
-
     @Override public boolean isUploaderVerified() { return false; }
-
     @Override public long getStreamCount() { return item.getLong("videosLength", -1); }
-
     @Override public Description getDescription() {
-        final String description = item.getString("description");
-        return description == null || description.isEmpty()
-                ? Description.EMPTY_DESCRIPTION
-                : new Description(description, Description.PLAIN_TEXT);
+        final String text = item.getString("description");
+        return text == null || text.isEmpty()
+                ? Description.EMPTY_DESCRIPTION : new Description(text, Description.PLAIN_TEXT);
     }
 }
