@@ -100,6 +100,17 @@ class YoutubeParsingHelperTest {
     }
 
     @Test
+    void readsFirstCollaboratorAndHandlesMissingDialogData() throws Exception {
+        final var navigation = JsonParser.object().from("{\"showDialogCommand\":{"
+                + "\"panelLoadingStrategy\":{\"inlineContent\":{\"dialogViewModel\":{"
+                + "\"customContent\":{\"listViewModel\":{\"listItems\":[{"
+                + "\"listItemViewModel\":{\"title\":{\"simpleText\":\"Channel\"}}}]}}}}}}}");
+        final var collaborator = YoutubeParsingHelper.getFirstCollaborator(navigation);
+        assertEquals("Channel", collaborator.getObject("title").getString("simpleText"));
+        assertNull(YoutubeParsingHelper.getFirstCollaborator(JsonParser.object().from("{}")));
+    }
+
+    @Test
     void readsAudioTrackTypeFromEncodedTags() throws IOException {
         assertEquals(AudioTrackType.ORIGINAL,
                 YoutubeParsingHelper.extractAudioTrackType(audioTags("original")));

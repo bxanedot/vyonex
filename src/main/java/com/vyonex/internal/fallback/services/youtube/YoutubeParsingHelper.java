@@ -969,30 +969,25 @@ public final class YoutubeParsingHelper {
     public static JsonBuilder<JsonObject> prepareDesktopJsonBuilder(
             @Nonnull final Localization localization,
             @Nonnull final ContentCountry contentCountry) throws IOException, ExtractionException {
-        // @formatter:off
-        return JsonObject.builder()
-                .object("context")
-                    .object("client")
-                        .value("hl", localization.getLocalizationCode())
-                        .value("gl", contentCountry.getCountryCode())
-                        .value("clientName", WEB_CLIENT_NAME)
-                        .value("clientVersion", getClientVersion())
-                        .value("originalUrl", "https://www.youtube.com")
-                        .value("platform", DESKTOP_CLIENT_PLATFORM)
-                        .value("utcOffsetMinutes", 0)
-                    .end()
-                    .object("request")
-                        .array("internalExperimentFlags")
-                        .end()
-                        .value("useSsl", true)
-                    .end()
-                    .object("user")
-                        // TODO: provide a way to enable restricted mode with:
-                        //  .value("enableSafetyMode", boolean)
-                        .value("lockedSafetyMode", false)
-                    .end()
-                .end();
-        // @formatter:on
+        final JsonObject client = new JsonObject();
+        client.put("hl", localization.getLocalizationCode());
+        client.put("gl", contentCountry.getCountryCode());
+        client.put("clientName", WEB_CLIENT_NAME);
+        client.put("clientVersion", getClientVersion());
+        client.put("originalUrl", "https://www.youtube.com");
+        client.put("platform", DESKTOP_CLIENT_PLATFORM);
+        client.put("utcOffsetMinutes", 0);
+
+        final JsonObject request = new JsonObject();
+        request.put("internalExperimentFlags", new JsonArray());
+        request.put("useSsl", true);
+        final JsonObject user = new JsonObject();
+        user.put("lockedSafetyMode", false);
+        final JsonObject context = new JsonObject();
+        context.put("client", client);
+        context.put("request", request);
+        context.put("user", user);
+        return JsonObject.builder().value("context", context);
     }
 
     /**
@@ -1446,25 +1441,21 @@ public final class YoutubeParsingHelper {
             @Nonnull final String innertubeDomainAndVersionEndpoint,
             @Nullable final String embedUrl,
             final boolean useGuideEndpoint) throws IOException, ExtractionException {
-        final JsonBuilder<JsonObject> builder = prepareJsonBuilder(
-                localization, contentCountry, innertubeClientRequestInfo, embedUrl);
-
-        final byte[] body = JsonWriter.string(builder.done())
-                .getBytes(StandardCharsets.UTF_8);
-
-        final String visitorData = JsonUtils.toJsonObject(getValidJsonResponseBody(getDownloader()
-                .postWithContentTypeJson(
-                        innertubeDomainAndVersionEndpoint
-                                + (useGuideEndpoint ? "guide" : "visitor_id") + "?"
-                                + DISABLE_PRETTY_PRINT_PARAMETER,
-                        httpHeaders, body)))
-                .getObject("responseContext")
+        final JsonObject request = prepareJsonBuilder(localization, contentCountry,
+                innertubeClientRequestInfo, embedUrl).done();
+        final byte[] requestBody = JsonWriter.string(request).getBytes(StandardCharsets.UTF_8);
+        final String endpoint = innertubeDomainAndVersionEndpoint
+                + (useGuideEndpoint ? "guide" : "visitor_id")
+                + "?" + DISABLE_PRETTY_PRINT_PARAMETER;
+        final Response response = getDownloader().postWithContentTypeJson(
+                endpoint, httpHeaders, requestBody);
+        final JsonObject responseJson = JsonUtils.toJsonObject(
+                getValidJsonResponseBody(response));
+        final String visitorData = responseJson.getObject("responseContext")
                 .getString("visitorData");
-
         if (isNullOrEmpty(visitorData)) {
             throw new ParsingException("Could not get visitorData");
         }
-
         return visitorData;
     }
 
@@ -1474,65 +1465,44 @@ public final class YoutubeParsingHelper {
             @Nonnull final ContentCountry contentCountry,
             @Nonnull final InnertubeClientRequestInfo innertubeClientRequestInfo,
             @Nullable final String embedUrl) {
-        final JsonBuilder<JsonObject> builder = JsonObject.builder()
-                .object("context")
-                .object("client")
-                .value("clientName", innertubeClientRequestInfo.clientInfo.clientName)
-                .value("clientVersion", innertubeClientRequestInfo.clientInfo.clientVersion);
-
-        if (innertubeClientRequestInfo.clientInfo.clientScreen != null) {
-            builder.value("clientScreen", innertubeClientRequestInfo.clientInfo.clientScreen);
-        }
-
-        if (innertubeClientRequestInfo.deviceInfo.platform != null) {
-            builder.value("platform", innertubeClientRequestInfo.deviceInfo.platform);
-        }
-
-        if (innertubeClientRequestInfo.clientInfo.visitorData != null) {
-            builder.value("visitorData", innertubeClientRequestInfo.clientInfo.visitorData);
-        }
-
-        if (innertubeClientRequestInfo.deviceInfo.deviceMake != null) {
-            builder.value("deviceMake", innertubeClientRequestInfo.deviceInfo.deviceMake);
-        }
-        if (innertubeClientRequestInfo.deviceInfo.deviceModel != null) {
-            builder.value("deviceModel", innertubeClientRequestInfo.deviceInfo.deviceModel);
-        }
-        if (innertubeClientRequestInfo.deviceInfo.osName != null) {
-            builder.value("osName", innertubeClientRequestInfo.deviceInfo.osName);
-        }
-        if (innertubeClientRequestInfo.deviceInfo.osVersion != null) {
-            builder.value("osVersion", innertubeClientRequestInfo.deviceInfo.osVersion);
-        }
+        final JsonObject client = new JsonObject();
+        client.put("clientName", innertubeClientRequestInfo.clientInfo.clientName);
+        client.put("clientVersion", innertubeClientRequestInfo.clientInfo.clientVersion);
+        putIfPresent(client, "clientScreen", innertubeClientRequestInfo.clientInfo.clientScreen);
+        putIfPresent(client, "platform", innertubeClientRequestInfo.deviceInfo.platform);
+        putIfPresent(client, "visitorData", innertubeClientRequestInfo.clientInfo.visitorData);
+        putIfPresent(client, "deviceMake", innertubeClientRequestInfo.deviceInfo.deviceMake);
+        putIfPresent(client, "deviceModel", innertubeClientRequestInfo.deviceInfo.deviceModel);
+        putIfPresent(client, "osName", innertubeClientRequestInfo.deviceInfo.osName);
+        putIfPresent(client, "osVersion", innertubeClientRequestInfo.deviceInfo.osVersion);
         if (innertubeClientRequestInfo.deviceInfo.androidSdkVersion > 0) {
-            builder.value("androidSdkVersion",
-                    innertubeClientRequestInfo.deviceInfo.androidSdkVersion);
+            client.put("androidSdkVersion", innertubeClientRequestInfo.deviceInfo.androidSdkVersion);
         }
+        client.put("hl", localization.getLocalizationCode());
+        client.put("gl", contentCountry.getCountryCode());
+        client.put("utcOffsetMinutes", 0);
 
-        builder.value("hl", localization.getLocalizationCode())
-                .value("gl", contentCountry.getCountryCode())
-                .value("utcOffsetMinutes", 0)
-                .end();
-
+        final JsonObject context = new JsonObject();
+        context.put("client", client);
         if (embedUrl != null) {
-            builder.object("thirdParty")
-                    .value("embedUrl", embedUrl)
-                    .end();
+            final JsonObject thirdParty = new JsonObject();
+            thirdParty.put("embedUrl", embedUrl);
+            context.put("thirdParty", thirdParty);
         }
+        final JsonObject request = new JsonObject();
+        request.put("internalExperimentFlags", new JsonArray());
+        request.put("useSsl", true);
+        context.put("request", request);
+        final JsonObject user = new JsonObject();
+        user.put("lockedSafetyMode", false);
+        context.put("user", user);
 
-        builder.object("request")
-                .array("internalExperimentFlags")
-                .end()
-                .value("useSsl", true)
-                .end()
-                .object("user")
-                // TODO: provide a way to enable restricted mode with:
-                //  .value("enableSafetyMode", boolean)
-                .value("lockedSafetyMode", false)
-                .end()
-                .end();
+        return JsonObject.builder().value("context", context);
+    }
 
-        return builder;
+    private static void putIfPresent(final JsonObject target, final String key,
+                                     @Nullable final Object value) {
+        if (value != null) target.put(key, value);
     }
 
     /**
@@ -1545,13 +1515,12 @@ public final class YoutubeParsingHelper {
     @Nullable
     public static JsonObject getFirstCollaborator(final JsonObject navigationEndpoint)
             throws ParsingException {
-        try {
-            // CHECKSTYLE:OFF
-            final JsonArray listItems = JsonUtils.getArray(navigationEndpoint, "showDialogCommand.panelLoadingStrategy.inlineContent.dialogViewModel.customContent.listViewModel.listItems");
-            // CHECKSTYLE:ON
-            return listItems.getObject(0).getObject("listItemViewModel");
-        } catch (final ParsingException e) {
-            return null;
-        }
+        final JsonArray items = navigationEndpoint.getObject("showDialogCommand")
+                .getObject("panelLoadingStrategy").getObject("inlineContent")
+                .getObject("dialogViewModel").getObject("customContent")
+                .getObject("listViewModel").getArray("listItems");
+        if (items.isEmpty()) return null;
+        final JsonObject collaborator = items.getObject(0).getObject("listItemViewModel");
+        return collaborator.isEmpty() ? null : collaborator;
     }
 }
