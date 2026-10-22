@@ -10,6 +10,7 @@ import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.exceptions.UnsupportedContentInCountryException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.ContentCountry;
@@ -57,7 +58,7 @@ import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
  * {@code Request contains an invalid argument.}.
  * </p>
  */
-abstract class YoutubeChartsBaseKioskExtractor extends KioskExtractor<StreamInfoItem> {
+public class YoutubeChartsBaseKioskExtractor extends KioskExtractor<StreamInfoItem> {
 
     // Extracted from YouTube Charts' HTML, in the array named LAUNCHED_CHART_COUNTRIES
     protected static final Set<String> YT_CHARTS_SUPPORTED_COUNTRY_CODES = Set.of(
@@ -72,14 +73,20 @@ abstract class YoutubeChartsBaseKioskExtractor extends KioskExtractor<StreamInfo
                     + DISABLE_PRETTY_PRINT_PARAMETER;
 
     protected final String chartType;
+    private final String name;
+    private final boolean countryRestricted;
     protected JsonObject browseResponse;
 
-    protected YoutubeChartsBaseKioskExtractor(final StreamingService streamingService,
-                                              final ListLinkHandler linkHandler,
-                                              final String kioskId,
-                                              final String chartType) {
+    public YoutubeChartsBaseKioskExtractor(final StreamingService streamingService,
+                                           final ListLinkHandler linkHandler,
+                                           final String kioskId,
+                                           final String chartType,
+                                           final String name,
+                                           final boolean countryRestricted) {
         super(streamingService, linkHandler, kioskId);
         this.chartType = chartType;
+        this.name = name;
+        this.countryRestricted = countryRestricted;
     }
 
     @Override
@@ -87,6 +94,11 @@ abstract class YoutubeChartsBaseKioskExtractor extends KioskExtractor<StreamInfo
             throws IOException, ExtractionException {
         final Localization localization = getExtractorLocalization();
         final ContentCountry contentCountry = getExtractorContentCountry();
+        if (countryRestricted && !YT_CHARTS_SUPPORTED_COUNTRY_CODES.contains(
+                contentCountry.getCountryCode())) {
+            throw new UnsupportedContentInCountryException(
+                    "YouTube Charts doesn't support this country for trending music videos charts");
+        }
 
         final InnertubeClientRequestInfo innertubeClientRequestInfo =
                 InnertubeClientRequestInfo.ofWebMusicAnalyticsChartsClient();
@@ -111,7 +123,9 @@ abstract class YoutubeChartsBaseKioskExtractor extends KioskExtractor<StreamInfo
 
     @Nonnull
     @Override
-    public abstract String getName() throws ParsingException;
+    public String getName() throws ParsingException {
+        return name;
+    }
 
     @Nonnull
     @Override

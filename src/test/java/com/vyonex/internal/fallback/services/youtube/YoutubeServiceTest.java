@@ -4,11 +4,13 @@
 package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.exceptions.UnsupportedContentInCountryException;
 import com.vyonex.internal.fallback.localization.ContentCountry;
 import com.vyonex.internal.fallback.localization.Localization;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YoutubeServiceTest {
@@ -37,5 +39,20 @@ class YoutubeServiceTest {
         } finally {
             VyonEx.setupLocalization(previousLocalization, previousCountry);
         }
+    }
+
+    @Test
+    void chartKiosksKeepTheirNamesAndMusicCountryRestriction() throws Exception {
+        final YoutubeService service = new YoutubeService(11);
+        final var kiosks = service.getKioskList();
+
+        assertEquals("Trending Music Videos",
+                kiosks.getExtractorById("trending_music", null).getName());
+        assertEquals("Trending Movie Trailers",
+                kiosks.getExtractorById("trending_movies_and_shows", null).getName());
+
+        kiosks.forceContentCountry(new ContentCountry("MY"));
+        assertThrows(UnsupportedContentInCountryException.class,
+                () -> kiosks.getExtractorById("trending_music", null).onFetchPage(null));
     }
 }

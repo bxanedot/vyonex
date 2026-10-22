@@ -38,9 +38,8 @@ import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamExt
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSubscriptionExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSuggestionExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeDesktopBaseKioskExtractor;
+import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeChartsBaseKioskExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingExtractor;
-import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingMoviesAndShowsTrailersExtractor;
-import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingMusicExtractor;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeCommentsLinkHandlerFactory;
@@ -136,11 +135,13 @@ public final class YoutubeService extends StreamingService {
                     this, gaming.fromUrl(url), id, "UCOpNcN46UbXVtpKMrmU4Abg",
                     "Egh0cmVuZGluZw%3D%3D"), gaming,
                     YoutubeTrendingGamingVideosLinkHandlerFactory.KIOSK_ID);
-            kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingMoviesAndShowsTrailersExtractor(
-                    this, trailers.fromUrl(url), id), trailers,
+            kiosks.addKioskEntry((service, url, id) -> new YoutubeChartsBaseKioskExtractor(
+                    this, trailers.fromUrl(url), id, "TRENDING_MOVIES",
+                    "Trending Movie Trailers", false), trailers,
                     YoutubeTrendingMoviesAndShowsTrailersLinkHandlerFactory.KIOSK_ID);
-            kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingMusicExtractor(
-                    this, music.fromUrl(url), id), music,
+            kiosks.addKioskEntry((service, url, id) -> new YoutubeChartsBaseKioskExtractor(
+                    this, music.fromUrl(url), id, "TRENDING_VIDEOS",
+                    "Trending Music Videos", true), music,
                     YoutubeTrendingMusicLinkHandlerFactory.KIOSK_ID);
             kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingExtractor(
                     this, trending.fromUrl(url), id), trending, YoutubeTrendingExtractor.KIOSK_ID);
