@@ -22,7 +22,7 @@ The module is also included in Vyon's root Gradle build as `:vyonex` from `core/
 
 ## Dependency notices
 
-VyonEx source is licensed under GPL-3.0-only; see [LICENSE](LICENSE). Its upstream dependencies retain their own terms:
+VyonEx source is licensed under Apache-2.0; see [LICENSE](LICENSE). Its upstream dependencies retain their own terms:
 
 | Dependency | Version | Upstream | License |
 | --- | --- | --- | --- |
@@ -33,4 +33,4 @@ VyonEx source is licensed under GPL-3.0-only; see [LICENSE](LICENSE). Its upstre
 | kotlinx.coroutines | 1.10.2 | [Kotlin/kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) | Apache-2.0 |
 | kotlinx.serialization JSON | 1.11.0 | [Kotlin/kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Apache-2.0 |
 
-The application repositories retain their complete dependency notices and the GPL license text for redistributed source.
+The consuming Vyon applications retain dependency notices and the license texts required for their redistributed dependencies.
