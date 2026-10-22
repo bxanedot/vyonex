@@ -66,7 +66,6 @@ import com.vyonex.internal.fallback.services.youtube.protos.video.Xtags.KeyValue
 import com.vyonex.internal.fallback.stream.AudioTrackType;
 import com.vyonex.internal.fallback.utils.JsonUtils;
 import com.vyonex.internal.fallback.utils.Parser;
-import com.vyonex.internal.fallback.utils.RandomStringFromAlphabetGenerator;
 import com.vyonex.internal.fallback.utils.Utils;
 
 import java.io.IOException;
@@ -83,7 +82,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -184,13 +182,6 @@ public final class YoutubeParsingHelper {
     private static final String FEED_BASE_CHANNEL_ID =
             "https://www.youtube.com/feeds/videos.xml?channel_id=";
     private static final String FEED_BASE_USER = "https://www.youtube.com/feeds/videos.xml?user=";
-    private static final Pattern C_WEB_PATTERN = Pattern.compile("&c=WEB");
-    private static final Pattern C_WEB_EMBEDDED_PLAYER_PATTERN =
-            Pattern.compile("&c=WEB_EMBEDDED_PLAYER");
-    private static final Pattern C_ANDROID_PATTERN = Pattern.compile("&c=ANDROID");
-    private static final Pattern C_IOS_PATTERN = Pattern.compile("&c=IOS");
-    private static final Pattern C_VISIONOS_PATTERN = Pattern.compile("&c=VISIONOS");
-
     private static boolean consentAccepted = false;
 
     public static boolean isGoogleURL(final String url) {
@@ -891,26 +882,15 @@ public final class YoutubeParsingHelper {
 
     @Nullable
     public static String getTextAtKey(@Nonnull final JsonObject jsonObject, final String theKey) {
-        if (jsonObject.isString(theKey)) {
-            return jsonObject.getString(theKey);
-        } else {
-            return getTextFromObject(jsonObject.getObject(theKey));
-        }
+        return jsonObject.isString(theKey) ? jsonObject.getString(theKey)
+                : getTextFromObject(jsonObject.getObject(theKey));
     }
 
     public static String fixThumbnailUrl(@Nonnull final String thumbnailUrl) {
-        String result = thumbnailUrl;
-        if (result.startsWith("//")) {
-            result = result.substring(2);
-        }
-
-        if (result.startsWith(HTTP)) {
-            result = Utils.replaceHttpWithHttps(result);
-        } else if (!result.startsWith(HTTPS)) {
-            result = "https://" + result;
-        }
-
-        return result;
+        final String value = thumbnailUrl.startsWith("//")
+                ? thumbnailUrl.substring(2) : thumbnailUrl;
+        return value.startsWith(HTTP) ? Utils.replaceHttpWithHttps(value)
+                : value.startsWith(HTTPS) ? value : "https://" + value;
     }
 
     /**
@@ -932,12 +912,8 @@ public final class YoutubeParsingHelper {
     @Nonnull
     public static List<Image> getThumbnailsFromInfoItem(@Nonnull final JsonObject infoItem)
             throws ParsingException {
-        try {
-            return getImagesFromThumbnailsArray(infoItem.getObject("thumbnail")
-                    .getArray("thumbnails"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get thumbnails from InfoItem", e);
-        }
+        return getImagesFromThumbnailsArray(infoItem.getObject("thumbnail")
+                .getArray("thumbnails"));
     }
 
     /**
@@ -954,16 +930,16 @@ public final class YoutubeParsingHelper {
     @Nonnull
     public static List<Image> getImagesFromThumbnailsArray(
             @Nonnull final JsonArray thumbnails) {
-        return thumbnails.streamAsJsonObjects()
-                .filter(thumbnail -> !isNullOrEmpty(thumbnail.getString("url")))
-                .map(thumbnail -> {
-                    final int height = thumbnail.getInt("height", Image.HEIGHT_UNKNOWN);
-                    return new Image(fixThumbnailUrl(thumbnail.getString("url")),
-                            height,
-                            thumbnail.getInt("width", Image.WIDTH_UNKNOWN),
-                            ResolutionLevel.fromHeight(height));
-                })
-                .collect(Collectors.toUnmodifiableList());
+        final List<Image> images = new java.util.ArrayList<>(thumbnails.size());
+        for (final JsonObject thumbnail : thumbnails.streamAsJsonObjects().toList()) {
+            final String url = thumbnail.getString("url");
+            if (isNullOrEmpty(url)) continue;
+            final int height = thumbnail.getInt("height", Image.HEIGHT_UNKNOWN);
+            images.add(new Image(fixThumbnailUrl(url), height,
+                    thumbnail.getInt("width", Image.WIDTH_UNKNOWN),
+                    ResolutionLevel.fromHeight(height)));
+        }
+        return List.copyOf(images);
     }
 
     @Nonnull
@@ -1310,13 +1286,8 @@ public final class YoutubeParsingHelper {
     }
 
     public static boolean isVerified(final JsonArray badges) {
-        if (Utils.isNullOrEmpty(badges)) {
-            return false;
-        }
-
-        for (final Object badge : badges) {
-            final String style = ((JsonObject) badge).getObject("metadataBadgeRenderer")
-                    .getString("style");
+        for (final JsonObject badge : badges.streamAsJsonObjects().toList()) {
+            final String style = badge.getObject("metadataBadgeRenderer").getString("style");
             if (style != null && (style.equals("BADGE_STYLE_TYPE_VERIFIED")
                     || style.equals("BADGE_STYLE_TYPE_VERIFIED_ARTIST"))) {
                 return true;
@@ -1328,21 +1299,16 @@ public final class YoutubeParsingHelper {
 
     public static boolean hasArtistOrVerifiedIconBadgeAttachment(
             @Nonnull final JsonArray attachmentRuns) {
-        return attachmentRuns.streamAsJsonObjects()
-                .anyMatch(attachmentRun -> attachmentRun.getObject("element")
-                        .getObject("type")
-                        .getObject("imageType")
-                        .getObject("image")
-                        .getArray("sources")
-                        .streamAsJsonObjects()
-                        .anyMatch(source -> {
-                            final String imageName = source.getObject("clientResource")
-                                    .getString("imageName");
-                            return "CHECK_CIRCLE_FILLED".equals(imageName)
-                                    || "AUDIO_BADGE".equals(imageName)
-                                    || "MUSIC_FILLED".equals(imageName);
-                        }));
-
+        for (final JsonObject run : attachmentRuns.streamAsJsonObjects().toList()) {
+            final JsonArray sources = run.getObject("element").getObject("type")
+                    .getObject("imageType").getObject("image").getArray("sources");
+            for (final JsonObject source : sources.streamAsJsonObjects().toList()) {
+                final String name = source.getObject("clientResource").getString("imageName");
+                if ("CHECK_CIRCLE_FILLED".equals(name) || "AUDIO_BADGE".equals(name)
+                        || "MUSIC_FILLED".equals(name)) return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1353,8 +1319,7 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static String generateContentPlaybackNonce() {
-        return RandomStringFromAlphabetGenerator.generate(
-                CONTENT_PLAYBACK_NONCE_ALPHABET, 16, numberGenerator);
+        return randomClientToken(16);
     }
 
     /**
@@ -1370,8 +1335,7 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static String generateTParameter() {
-        return RandomStringFromAlphabetGenerator.generate(
-                CONTENT_PLAYBACK_NONCE_ALPHABET, 12, numberGenerator);
+        return randomClientToken(12);
     }
 
     /**
@@ -1381,7 +1345,7 @@ public final class YoutubeParsingHelper {
      * @return true if it's a {@code WEB} streaming URL, false otherwise
      */
     public static boolean isWebStreamingUrl(@Nonnull final String url) {
-        return Parser.isMatch(C_WEB_PATTERN, url);
+        return hasClientParameter(url, "WEB");
     }
 
     /**
@@ -1391,7 +1355,7 @@ public final class YoutubeParsingHelper {
      * @return true if it's a {@code WEB_EMBEDDED_PLAYER} streaming URL, false otherwise
      */
     public static boolean isWebEmbeddedPlayerStreamingUrl(@Nonnull final String url) {
-        return Parser.isMatch(C_WEB_EMBEDDED_PLAYER_PATTERN, url);
+        return hasClientParameter(url, "WEB_EMBEDDED_PLAYER");
     }
 
     /**
@@ -1401,7 +1365,7 @@ public final class YoutubeParsingHelper {
      * @return true if it's a {@code ANDROID} streaming URL, false otherwise
      */
     public static boolean isAndroidStreamingUrl(@Nonnull final String url) {
-        return Parser.isMatch(C_ANDROID_PATTERN, url);
+        return hasClientParameter(url, "ANDROID");
     }
 
     /**
@@ -1411,7 +1375,7 @@ public final class YoutubeParsingHelper {
      * @return true if it's a {@code IOS} streaming URL, false otherwise
      */
     public static boolean isIosStreamingUrl(@Nonnull final String url) {
-        return Parser.isMatch(C_IOS_PATTERN, url);
+        return hasClientParameter(url, "IOS");
     }
 
     /**
@@ -1421,7 +1385,35 @@ public final class YoutubeParsingHelper {
      * @return true if it's a {@code VISIONOS} streaming URL, false otherwise
      */
     public static boolean isVisionOsStreamingUrl(@Nonnull final String url) {
-        return Parser.isMatch(C_VISIONOS_PATTERN, url);
+        return hasClientParameter(url, "VISIONOS");
+    }
+
+    private static String randomClientToken(final int length) {
+        final StringBuilder token = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            token.append(CONTENT_PLAYBACK_NONCE_ALPHABET.charAt(
+                    numberGenerator.nextInt(CONTENT_PLAYBACK_NONCE_ALPHABET.length())));
+        }
+        return token.toString();
+    }
+
+    private static boolean hasClientParameter(final String url, final String clientName) {
+        if (url == null) return false;
+        try {
+            final String query = new URI(url).getRawQuery();
+            if (query == null) return false;
+            for (final String parameter : query.split("&")) {
+                final int separator = parameter.indexOf('=');
+                if (separator < 0) continue;
+                if ("c".equals(URLDecoder.decode(parameter.substring(0, separator),
+                        StandardCharsets.UTF_8))
+                        && clientName.equals(URLDecoder.decode(parameter.substring(separator + 1),
+                        StandardCharsets.UTF_8))) return true;
+            }
+        } catch (final URISyntaxException | IllegalArgumentException e) {
+            return false;
+        }
+        return false;
     }
 
     /**
