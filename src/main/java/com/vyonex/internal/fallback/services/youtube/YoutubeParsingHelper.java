@@ -584,43 +584,35 @@ public final class YoutubeParsingHelper {
 
     public static boolean isHardcodedYoutubeMusicClientVersionValid() throws IOException,
             ReCaptchaException {
-        final String url =
-                "https://music.youtube.com/youtubei/v1/music/get_search_suggestions?"
-                        + DISABLE_PRETTY_PRINT_PARAMETER;
+        final JsonObject client = new JsonObject();
+        client.put("clientName", WEB_REMIX_CLIENT_NAME);
+        client.put("clientVersion", WEB_REMIX_HARDCODED_CLIENT_VERSION);
+        client.put("hl", "en-GB");
+        client.put("gl", "GB");
+        client.put("platform", DESKTOP_CLIENT_PLATFORM);
+        client.put("utcOffsetMinutes", 0);
+        final JsonObject request = new JsonObject();
+        request.put("internalExperimentFlags", new JsonArray());
+        request.put("useSsl", true);
+        final JsonObject user = new JsonObject();
+        user.put("lockedSafetyMode", false);
+        final JsonObject context = new JsonObject();
+        context.put("client", client);
+        context.put("request", request);
+        context.put("user", user);
+        final JsonObject payload = new JsonObject();
+        payload.put("context", context);
+        payload.put("input", "");
 
-        // @formatter:off
-        final byte[] json = JsonWriter.string()
-            .object()
-                .object("context")
-                    .object("client")
-                        .value("clientName", WEB_REMIX_CLIENT_NAME)
-                        .value("clientVersion", WEB_REMIX_HARDCODED_CLIENT_VERSION)
-                        .value("hl", "en-GB")
-                        .value("gl", "GB")
-                        .value("platform", DESKTOP_CLIENT_PLATFORM)
-                        .value("utcOffsetMinutes", 0)
-                    .end()
-                    .object("request")
-                        .array("internalExperimentFlags")
-                        .end()
-                        .value("useSsl", true)
-                    .end()
-                    .object("user")
-                        // TODO: provide a way to enable restricted mode with:
-                        //  .value("enableSafetyMode", boolean)
-                        .value("lockedSafetyMode", false)
-                    .end()
-                .end()
-                .value("input", "")
-            .end().done().getBytes(StandardCharsets.UTF_8);
-        // @formatter:on
-
-        final var headers = new HashMap<>(getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
+        final Map<String, List<String>> headers = new HashMap<>(
+                getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
         headers.putAll(getClientHeaders(WEB_REMIX_CLIENT_ID, WEB_HARDCODED_CLIENT_VERSION));
-
-        final Response response = getDownloader().postWithContentTypeJson(url, headers, json);
-        // Ensure to have a valid response
-        return response.responseBody().length() > 500 && response.responseCode() == 200;
+        final String endpoint = YOUTUBE_MUSIC_URL
+                + "/youtubei/v1/music/get_search_suggestions?"
+                + DISABLE_PRETTY_PRINT_PARAMETER;
+        final Response response = getDownloader().postWithContentTypeJson(endpoint, headers,
+                JsonWriter.string(payload).getBytes(StandardCharsets.UTF_8));
+        return response.responseCode() == 200 && response.responseBody().length() > 500;
     }
 
     public static String getYoutubeMusicClientVersion()
@@ -634,21 +626,20 @@ public final class YoutubeParsingHelper {
         }
 
         try {
-            final String url = "https://music.youtube.com/sw.js";
-            final var headers = getOriginReferrerHeaders(YOUTUBE_MUSIC_URL);
-            final String response = getDownloader().get(url, headers).responseBody();
-
-            youtubeMusicClientVersion = getStringResultFromRegexArray(response,
-                    INNERTUBE_CONTEXT_CLIENT_VERSION_REGEXES, 1);
-        } catch (final Exception e) {
-            final String url = "https://music.youtube.com/?ucbcb=1";
-            final String html = getDownloader().get(url, getCookieHeader()).responseBody();
-
-            youtubeMusicClientVersion = getStringResultFromRegexArray(html,
-                    INNERTUBE_CONTEXT_CLIENT_VERSION_REGEXES, 1);
+            youtubeMusicClientVersion = getMusicClientVersion(
+                    YOUTUBE_MUSIC_URL + "/sw.js", getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
+        } catch (final IOException | ReCaptchaException | Parser.RegexException ignored) {
+            youtubeMusicClientVersion = getMusicClientVersion(
+                    YOUTUBE_MUSIC_URL + "/?ucbcb=1", getCookieHeader());
         }
-
         return youtubeMusicClientVersion;
+    }
+
+    private static String getMusicClientVersion(final String url,
+            final Map<String, List<String>> headers)
+            throws IOException, ReCaptchaException, Parser.RegexException {
+        final String response = getDownloader().get(url, headers).responseBody();
+        return getStringResultFromRegexArray(response, INNERTUBE_CONTEXT_CLIENT_VERSION_REGEXES, 1);
     }
 
     @Nullable

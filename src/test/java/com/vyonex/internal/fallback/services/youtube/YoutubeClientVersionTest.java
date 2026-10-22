@@ -59,6 +59,32 @@ class YoutubeClientVersionTest {
                 downloader.urls);
     }
 
+    @Test
+    void usesValidatedHardcodedMusicVersion() throws Exception {
+        final StubDownloader downloader = new StubDownloader();
+        downloader.guideBody = "x".repeat(501);
+
+        assertEquals(ClientsConstants.WEB_REMIX_HARDCODED_CLIENT_VERSION,
+                withDownloader(downloader, YoutubeParsingHelper::getYoutubeMusicClientVersion));
+        assertEquals(List.of("https://music.youtube.com/youtubei/v1/music/"
+                        + "get_search_suggestions?prettyPrint=false"), downloader.urls);
+    }
+
+    @Test
+    void triesMusicHomePageAfterWorkerScriptCannotSupplyAVersion() throws Exception {
+        final StubDownloader downloader = new StubDownloader();
+        downloader.guideBody = "{}";
+        downloader.workerBody = "worker has no version";
+        downloader.htmlBody = "INNERTUBE_CONTEXT_CLIENT_VERSION\":\"2.20261022.11.00\"";
+
+        assertEquals("2.20261022.11.00",
+                withDownloader(downloader, YoutubeParsingHelper::getYoutubeMusicClientVersion));
+        assertEquals(List.of("https://music.youtube.com/youtubei/v1/music/"
+                        + "get_search_suggestions?prettyPrint=false",
+                        "https://music.youtube.com/sw.js", "https://music.youtube.com/?ucbcb=1"),
+                downloader.urls);
+    }
+
     private static <T> T withDownloader(final StubDownloader downloader,
             final Callable<T> task) throws Exception {
         final Downloader previous = VyonEx.getDownloader();
@@ -84,7 +110,7 @@ class YoutubeClientVersionTest {
             if (request.url().endsWith("/sw.js")) {
                 return response(request.url(), workerBody);
             }
-            if (request.url().contains("/results?")) {
+            if (request.url().contains("ucbcb=1")) {
                 return response(request.url(), htmlBody);
             }
             return response(request.url(), guideBody);
