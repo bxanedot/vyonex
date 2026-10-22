@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube;
 
 import com.vyonex.internal.fallback.VyonEx;
@@ -31,15 +30,17 @@ public class PeertubeInstance {
     }
 
     public String getUrl() { return url; }
+    public String getName() { return name; }
 
     public void fetchInstanceMetaData() throws Exception {
         final Downloader downloader = VyonEx.getDownloader();
         if (downloader == null) throw new Exception("VyonEx has not been initialized");
+
         final Response response;
         try {
             response = downloader.get(url + "/api/v1/config");
-        } catch (final ReCaptchaException | IOException e) {
-            throw new Exception("Unable to load PeerTube instance metadata from " + url, e);
+        } catch (final ReCaptchaException | IOException error) {
+            throw new Exception("Unable to load PeerTube instance metadata from " + url, error);
         }
         if (response == null || response.responseBody().isBlank()) {
             throw new Exception("PeerTube instance returned an empty configuration");
@@ -47,15 +48,13 @@ public class PeertubeInstance {
 
         try {
             final JsonObject config = JsonParser.object().from(response.responseBody());
-            final String discovered = config.getObject("instance").getString("name");
-            if (discovered == null || discovered.isBlank()) {
+            final String discoveredName = config.getObject("instance").getString("name");
+            if (discoveredName == null || discoveredName.isBlank()) {
                 throw new ParsingException("PeerTube configuration has no instance name");
             }
-            name = discovered;
-        } catch (final JsonParserException | ParsingException e) {
-            throw new Exception("Unable to parse PeerTube instance metadata", e);
+            name = discoveredName;
+        } catch (final JsonParserException | ParsingException error) {
+            throw new Exception("Unable to parse PeerTube instance metadata", error);
         }
     }
-
-    public String getName() { return name; }
 }
