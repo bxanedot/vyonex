@@ -7,6 +7,7 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
+import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
@@ -164,5 +165,32 @@ class YoutubeStreamMetadataTest {
         assertFalse(YoutubeStreamExtractor.isUploaderVerified(JsonParser.object().from(
                 "{\"badges\":[{\"metadataBadgeRenderer\":{"
                         + "\"style\":\"BADGE_STYLE_TYPE_LIVE_NOW\"}}]}")));
+    }
+
+    @Test
+    void readsLikeCountFromCurrentAndLegacyButtons() throws Exception {
+        final JsonArray viewModel = JsonParser.array().from("[{"
+                + "\"segmentedLikeDislikeButtonViewModel\":{\"likeButtonViewModel\":{"
+                + "\"likeButtonViewModel\":{\"toggleButtonViewModel\":{"
+                + "\"toggleButtonViewModel\":{\"defaultButtonViewModel\":{"
+                + "\"buttonViewModel\":{\"accessibilityText\":\"1,234 likes\"}}}}}}}}]");
+        assertEquals(1234, YoutubeStreamExtractor.parseLikeCount(true, viewModel));
+
+        final JsonArray renderer = JsonParser.array().from("[{"
+                + "\"segmentedLikeDislikeButtonRenderer\":{\"likeButton\":{"
+                + "\"toggleButtonRenderer\":{\"accessibilityData\":{"
+                + "\"accessibilityData\":{\"label\":\"No likes\"}}}}}}]");
+        assertEquals(0, YoutubeStreamExtractor.parseLikeCount(true, renderer));
+        final var malformedViewModel = viewModel.getObject(0);
+        malformedViewModel.getObject("segmentedLikeDislikeButtonViewModel")
+                .getObject("likeButtonViewModel").getObject("likeButtonViewModel")
+                .getObject("toggleButtonViewModel").getObject("toggleButtonViewModel")
+                .getObject("defaultButtonViewModel").getObject("buttonViewModel")
+                .put("accessibilityText", "likes");
+        assertEquals(0, YoutubeStreamExtractor.parseLikeCount(true,
+                JsonArray.from(malformedViewModel, renderer.getObject(0))));
+        assertEquals(-1, YoutubeStreamExtractor.parseLikeCount(false, JsonParser.array().from("[]")));
+        assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.parseLikeCount(
+                true, JsonParser.array().from("[]")));
     }
 }

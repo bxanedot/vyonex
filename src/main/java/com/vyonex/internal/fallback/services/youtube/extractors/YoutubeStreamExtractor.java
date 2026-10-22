@@ -391,116 +391,58 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Override
     public long getLikeCount() throws ParsingException {
         assertPageFetched();
-
-        // If ratings are not allowed, there is no like count available
-        if (!playerResponse.getObject(VIDEO_DETAILS)
-                .getBoolean("allowRatings")) {
-            return -1L;
-        }
-
-        final JsonArray topLevelButtons = getVideoPrimaryInfoRenderer()
+        final JsonArray buttons = getVideoPrimaryInfoRenderer()
                 .getObject("videoActions")
                 .getObject("menuRenderer")
                 .getArray("topLevelButtons");
-
-        try {
-            return parseLikeCountFromLikeButtonViewModel(topLevelButtons);
-        } catch (final ParsingException ignored) {
-            // A segmentedLikeDislikeButtonRenderer could be returned instead of a
-            // segmentedLikeDislikeButtonViewModel, so ignore extraction errors relative to
-            // segmentedLikeDislikeButtonViewModel object
-        }
-
-        try {
-            return parseLikeCountFromLikeButtonRenderer(topLevelButtons);
-        } catch (final ParsingException e) {
-            throw new ParsingException("Could not get like count", e);
-        }
+        return parseLikeCount(playerResponse.getObject(VIDEO_DETAILS).getBoolean("allowRatings"),
+                buttons);
     }
 
-    private static long parseLikeCountFromLikeButtonRenderer(
-            @Nonnull final JsonArray topLevelButtons) throws ParsingException {
-        String likesString = null;
-        final JsonObject likeToggleButtonRenderer = topLevelButtons.streamAsJsonObjects()
-                .map(button -> button.getObject("segmentedLikeDislikeButtonRenderer")
-                        .getObject("likeButton")
-                        .getObject("toggleButtonRenderer"))
-                .filter(toggleButtonRenderer -> !isNullOrEmpty(toggleButtonRenderer))
-                .findFirst()
-                .orElse(null);
-
-        if (likeToggleButtonRenderer != null) {
-            // Use one of the accessibility strings available (this one has the same path as the
-            // one used for comments' like count extraction)
-            likesString = likeToggleButtonRenderer.getObject("accessibilityData")
-                    .getObject("accessibilityData")
-                    .getString("label");
-
-            // Use the other accessibility string available which contains the exact like count
-            if (likesString == null) {
-                likesString = likeToggleButtonRenderer.getObject("accessibility")
-                        .getString("label");
-            }
-
-            // Last method: use the defaultText's accessibility data, which contains the exact like
-            // count too, except when it is equal to 0, where a localized string is returned instead
-            if (likesString == null) {
-                likesString = likeToggleButtonRenderer.getObject("defaultText")
-                        .getObject("accessibility")
-                        .getObject("accessibilityData")
-                        .getString("label");
-            }
-
-            // This check only works with English localizations!
-            if (likesString != null && likesString.toLowerCase().contains("no likes")) {
-                return 0;
+    static long parseLikeCount(final boolean allowRatings, @Nonnull final JsonArray buttons)
+            throws ParsingException {
+        if (!allowRatings) return -1;
+        for (final JsonObject button : buttons.streamAsJsonObjects().toList()) {
+            final String count = button.getObject("segmentedLikeDislikeButtonViewModel")
+                    .getObject("likeButtonViewModel").getObject("likeButtonViewModel")
+                    .getObject("toggleButtonViewModel").getObject("toggleButtonViewModel")
+                    .getObject("defaultButtonViewModel").getObject("buttonViewModel")
+                    .getString("accessibilityText");
+            if (!isNullOrEmpty(count)) {
+                try {
+                    return parseLikeCountText(count);
+                } catch (final ParsingException ignored) {
+                    // Older button data can still provide a usable accessibility label.
+                }
             }
         }
-
-        // If ratings are allowed and the likes string is null, it means that we couldn't extract
-        // the full like count from accessibility data
-        if (likesString == null) {
-            throw new ParsingException("Could not get like count from accessibility data");
+        for (final JsonObject button : buttons.streamAsJsonObjects().toList()) {
+            final JsonObject renderer = button.getObject("segmentedLikeDislikeButtonRenderer")
+                    .getObject("likeButton").getObject("toggleButtonRenderer");
+            String count = renderer.getObject("accessibilityData")
+                    .getObject("accessibilityData").getString("label");
+            if (count == null) count = renderer.getObject("accessibility").getString("label");
+            if (count == null) {
+                count = renderer.getObject("defaultText").getObject("accessibility")
+                        .getObject("accessibilityData").getString("label");
+            }
+            if (!isNullOrEmpty(count)) {
+                if (count.toLowerCase(Locale.ROOT).contains("no likes")) return 0;
+                try {
+                    return parseLikeCountText(count);
+                } catch (final ParsingException ignored) {
+                    // Continue through the available button variants.
+                }
+            }
         }
-
-        try {
-            return Long.parseLong(Utils.removeNonDigitCharacters(likesString));
-        } catch (final NumberFormatException e) {
-            throw new ParsingException("Could not parse \"" + likesString + "\" as a long", e);
-        }
+        throw new ParsingException("Could not get like count");
     }
 
-    private static long parseLikeCountFromLikeButtonViewModel(
-            @Nonnull final JsonArray topLevelButtons) throws ParsingException {
-        // Try first with the current video actions buttons data structure
-        final JsonObject likeToggleButtonViewModel = topLevelButtons.streamAsJsonObjects()
-                .map(button -> button.getObject("segmentedLikeDislikeButtonViewModel")
-                        .getObject("likeButtonViewModel")
-                        .getObject("likeButtonViewModel")
-                        .getObject("toggleButtonViewModel")
-                        .getObject("toggleButtonViewModel")
-                        .getObject("defaultButtonViewModel")
-                        .getObject("buttonViewModel"))
-                .filter(buttonViewModel -> !isNullOrEmpty(buttonViewModel))
-                .findFirst()
-                .orElse(null);
-
-        if (likeToggleButtonViewModel == null) {
-            throw new ParsingException("Could not find buttonViewModel object");
-        }
-
-        final String accessibilityText = likeToggleButtonViewModel.getString("accessibilityText");
-        if (accessibilityText == null) {
-            throw new ParsingException("Could not find buttonViewModel's accessibilityText string");
-        }
-
-        // The like count is always returned as a number in this element, even for videos with no
-        // likes
+    private static long parseLikeCountText(final String text) throws ParsingException {
         try {
-            return Long.parseLong(Utils.removeNonDigitCharacters(accessibilityText));
+            return Long.parseLong(Utils.removeNonDigitCharacters(text));
         } catch (final NumberFormatException e) {
-            throw new ParsingException(
-                    "Could not parse \"" + accessibilityText + "\" as a long", e);
+            throw new ParsingException("Could not parse like count: " + text, e);
         }
     }
 
