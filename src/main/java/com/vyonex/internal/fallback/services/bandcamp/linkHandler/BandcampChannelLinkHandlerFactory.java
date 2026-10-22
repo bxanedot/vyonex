@@ -1,98 +1,54 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler;
 
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParserException;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper;
-import com.vyonex.internal.fallback.utils.JsonUtils;
-import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
+import org.jsoup.Jsoup;
 
 import java.io.IOException;
 import java.util.List;
 
-/**
- * Artist do have IDs that are useful
- */
 public final class BandcampChannelLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final BandcampChannelLinkHandlerFactory INSTANCE =
+            new BandcampChannelLinkHandlerFactory();
 
-    private static final BandcampChannelLinkHandlerFactory INSTANCE
-            = new BandcampChannelLinkHandlerFactory();
+    private BandcampChannelLinkHandlerFactory() { }
 
-    private BandcampChannelLinkHandlerFactory() {
-    }
-
-    public static BandcampChannelLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
+    public static BandcampChannelLinkHandlerFactory getInstance() { return INSTANCE; }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
+    public String getId(final String url) throws ParsingException {
         try {
-            final String response = VyonEx.getDownloader().get(Utils.replaceHttpWithHttps(url))
-                    .responseBody();
-
-            // Use band data embedded in website to extract ID
-            final JsonObject bandData = JsonUtils.getJsonData(response, "data-band");
-
-            return String.valueOf(bandData.getLong("id"));
-
-        } catch (final IOException | ReCaptchaException | ArrayIndexOutOfBoundsException
-                | JsonParserException e) {
-            throw new ParsingException("Download failed", e);
+            final String html = VyonEx.getDownloader().get(BandcampUrl.https(url)).responseBody();
+            final String embeddedData = Jsoup.parse(html).getElementsByAttribute("data-band")
+                    .attr("data-band");
+            final JsonObject band = JsonParser.object().from(embeddedData);
+            return String.valueOf(band.getLong("id"));
+        } catch (IOException | ReCaptchaException | JsonParserException e) {
+            throw new ParsingException("Could not read artist data", e);
         }
     }
 
-    /**
-     * Uses the mobile endpoint as a "translator" from id to url
-     */
     @Override
-    public String getUrl(final String id, final List<String> contentFilter, final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
-        final JsonObject artistDetails = BandcampExtractorHelper.getArtistDetails(id);
-        if (artistDetails.getBoolean("error")) {
-            throw new ParsingException(
-                    "JSON does not contain a channel URL (invalid id?) or is otherwise invalid");
+    public String getUrl(final String id, final List<String> contentFilter,
+                         final String sortFilter) throws ParsingException {
+        final JsonObject details = BandcampExtractorHelper.getArtistDetails(id);
+        if (details.getBoolean("error")) {
+            throw new ParsingException("Artist ID has no Bandcamp profile");
         }
-        return Utils.replaceHttpWithHttps(artistDetails.getString("bandcamp_url"));
+        return BandcampUrl.https(details.getString("bandcamp_url"));
     }
 
-    /**
-     * Accepts only pages that lead to the root of an artist profile. Supports external pages.
-     */
     @Override
     public boolean onAcceptUrl(final String url) throws ParsingException {
-
-        final String lowercaseUrl = url.toLowerCase();
-
-        // https: | | artist.bandcamp.com | releases - music - album - track ( | name)
-        //  0      1           2                           3                    (4)
-        final String[] splitUrl = lowercaseUrl.split("/");
-
-        // URL is too short
-        if (splitUrl.length != 3 && splitUrl.length != 4) {
-            return false;
-        }
-
-        // Must have "releases", "music", "album" or "track" as segment after URL or none at all
-        if (splitUrl.length == 4 && !(splitUrl[3].equals("releases")
-                || splitUrl[3].equals("music")
-                || splitUrl[3].equals("album")
-                || splitUrl[3].equals("track"))) {
-            return false;
-        } else {
-            if (splitUrl[2].equals("daily.bandcamp.com")) {
-                // Refuse links to daily.bandcamp.com as that is not an artist
-                return false;
-            }
-
-            // Test whether domain is supported
-            return BandcampExtractorHelper.isArtistDomain(lowercaseUrl);
-        }
+        return BandcampUrl.isArtistPage(url);
     }
 }
