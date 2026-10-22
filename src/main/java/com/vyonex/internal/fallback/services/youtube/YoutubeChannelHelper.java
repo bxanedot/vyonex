@@ -9,6 +9,7 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
 import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
@@ -20,7 +21,6 @@ import com.vyonex.internal.fallback.localization.Localization;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -57,74 +57,43 @@ public final class YoutubeChannelHelper {
     @Nonnull
     public static String resolveChannelId(@Nonnull final String idOrPath)
             throws ExtractionException, IOException {
-        final String[] channelId = idOrPath.split("/");
-
-        if (channelId[0].startsWith("UC")) {
-            return channelId[0];
+        final String[] path = idOrPath.split("/");
+        if (path[0].startsWith("UC")) return path[0];
+        if ("channel".equals(path[0])) {
+            if (path.length < 2 || path[1].isEmpty()) {
+                throw new ExtractionException("Channel path has no id: " + idOrPath);
+            }
+            return path[1];
         }
 
-        // If the URL is not a /channel URL, we need to use the navigation/resolve_url endpoint of
-        // the InnerTube API to get the channel id. If this fails or if the URL is not a /channel
-        // URL, then no information about the channel associated with this URL was found,
-        // so the unresolved url will be returned.
-        if (!channelId[0].equals("channel")) {
-            String urlToResolve = "https://www.youtube.com/" + idOrPath;
-
-            JsonObject endpoint = new JsonObject();
-            String webPageType = "";
-            // Try to resolve YT channel redirects
-            // It works like that:
-            // @TheDailyShow
-            // -> resolves to thedailyshow
-            // -> resolves to the id: UCwWhs_6x42TyRM4Wstoq8HA
-            // Please note that this is not always the case, some handles
-            // e.g. @google or @Gronkh directly resolve the id
-            for (int tries = 0;
-                 urlToResolve != null && tries < 3;
-                 tries++) {
-                final byte[] body = JsonWriter.string(
-                        prepareDesktopJsonBuilder(Localization.DEFAULT, ContentCountry.DEFAULT)
-                            .value("url", urlToResolve)
-                            .done())
-                    .getBytes(StandardCharsets.UTF_8);
-
-                final JsonObject jsonResponse = getJsonPostResponse(
-                    "navigation/resolve_url", body, Localization.DEFAULT);
-
-                checkIfChannelResponseIsValid(jsonResponse);
-
-                endpoint = jsonResponse.getObject("endpoint");
-
-                webPageType = endpoint.getObject("commandMetadata")
-                    .getObject("webCommandMetadata")
-                    .getString("webPageType");
-
-                urlToResolve = "WEB_PAGE_TYPE_UNKNOWN".equals(webPageType)
-                    ? endpoint.getObject("urlEndpoint").getString("url")
-                    : null;
-            }
-
-            final String browseId = endpoint.getObject(BROWSE_ENDPOINT)
-                .getString(BROWSE_ID, "");
-
-            if (("WEB_PAGE_TYPE_BROWSE".equalsIgnoreCase(webPageType)
-                    || "WEB_PAGE_TYPE_CHANNEL".equalsIgnoreCase(webPageType))
-                    && !browseId.isEmpty()) {
-                if (!browseId.startsWith("UC")) {
-                    throw new ExtractionException("Redirected id is not pointing to a channel");
-                }
-
-                return browseId;
-            }
-
-            // Otherwise, the code after that will run into an IndexOutOfBoundsException
-            if (channelId.length < 2) {
-                throw new ExtractionException("Failed to resolve channelId for " + idOrPath);
-            }
+        String url = idOrPath.startsWith("http://") || idOrPath.startsWith("https://")
+                ? idOrPath : "https://www.youtube.com/" + idOrPath.replaceFirst("^/+", "");
+        JsonObject endpoint = new JsonObject();
+        String pageType = "";
+        for (int attempt = 0; attempt < 3 && url != null; attempt++) {
+            final JsonObject request = prepareDesktopJsonBuilder(
+                    Localization.DEFAULT, ContentCountry.DEFAULT).value("url", url).done();
+            final JsonObject response = getJsonPostResponse("navigation/resolve_url",
+                    JsonWriter.string(request).getBytes(StandardCharsets.UTF_8), Localization.DEFAULT);
+            checkIfChannelResponseIsValid(response);
+            endpoint = response.getObject("endpoint");
+            pageType = endpoint.getObject("commandMetadata")
+                    .getObject("webCommandMetadata").getString("webPageType", "");
+            url = "WEB_PAGE_TYPE_UNKNOWN".equals(pageType)
+                    ? endpoint.getObject("urlEndpoint").getString("url") : null;
         }
 
-        // return the unresolved URL
-        return channelId[1];
+        final String browseId = endpoint.getObject(BROWSE_ENDPOINT).getString(BROWSE_ID, "");
+        if (("WEB_PAGE_TYPE_BROWSE".equalsIgnoreCase(pageType)
+                || "WEB_PAGE_TYPE_CHANNEL".equalsIgnoreCase(pageType))
+                && !browseId.isEmpty()) {
+            if (!browseId.startsWith("UC")) {
+                throw new ExtractionException("Resolved destination is not a channel");
+            }
+            return browseId;
+        }
+        if (path.length > 1 && !path[1].isEmpty()) return path[1];
+        throw new ExtractionException("Could not resolve channel id for " + idOrPath);
     }
 
     /**
@@ -179,10 +148,7 @@ public final class YoutubeChannelHelper {
                                                          @Nonnull final ContentCountry country)
             throws ExtractionException, IOException {
         String id = channelId;
-        JsonObject ajaxJson = null;
-
-        int level = 0;
-        while (level < 3) {
+        for (int attempt = 0; attempt < 3; attempt++) {
             final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(
                                     localization, country)
                             .value(BROWSE_ID, id)
@@ -192,43 +158,28 @@ public final class YoutubeChannelHelper {
 
             final JsonObject jsonResponse = getJsonPostResponse(
                     "browse", body, localization);
-
             checkIfChannelResponseIsValid(jsonResponse);
-
-            final JsonObject endpoint = jsonResponse.getArray("onResponseReceivedActions")
-                    .getObject(0)
-                    .getObject("navigateAction")
-                    .getObject("endpoint");
-
+            final JsonArray actions = jsonResponse.getArray("onResponseReceivedActions");
+            final JsonObject endpoint = actions.isEmpty() ? new JsonObject()
+                    : actions.getObject(0).getObject("navigateAction").getObject("endpoint");
             final String webPageType = endpoint.getObject("commandMetadata")
                     .getObject("webCommandMetadata")
                     .getString("webPageType");
-
             final String browseId = endpoint.getObject(BROWSE_ENDPOINT)
                     .getString(BROWSE_ID, "");
-
             if (("WEB_PAGE_TYPE_BROWSE".equalsIgnoreCase(webPageType)
                     || "WEB_PAGE_TYPE_CHANNEL".equalsIgnoreCase(webPageType))
                     && !browseId.isEmpty()) {
                 if (!browseId.startsWith("UC")) {
-                    throw new ExtractionException("Redirected id is not pointing to a channel");
+                    throw new ExtractionException("Redirect destination is not a channel");
                 }
-
                 id = browseId;
-                level++;
             } else {
-                ajaxJson = jsonResponse;
-                break;
+                defaultAlertsCheck(jsonResponse);
+                return new ChannelResponseData(jsonResponse, id);
             }
         }
-
-        if (ajaxJson == null) {
-            throw new ExtractionException("Got no channel response after 3 redirects");
-        }
-
-        defaultAlertsCheck(ajaxJson);
-
-        return new ChannelResponseData(ajaxJson, id);
+        throw new ExtractionException("Channel redirects exceeded the limit of three requests");
     }
 
     /**
@@ -239,17 +190,13 @@ public final class YoutubeChannelHelper {
      */
     private static void checkIfChannelResponseIsValid(@Nonnull final JsonObject jsonResponse)
             throws ContentNotAvailableException {
-        if (!isNullOrEmpty(jsonResponse.getObject("error"))) {
-            final JsonObject errorJsonObject = jsonResponse.getObject("error");
-            final int errorCode = errorJsonObject.getInt("code");
-            if (errorCode == 404) {
-                throw new ContentNotAvailableException("This channel doesn't exist.");
-            } else {
-                throw new ContentNotAvailableException("Got error:\""
-                        + errorJsonObject.getString("status") + "\": "
-                        + errorJsonObject.getString("message"));
-            }
+        final JsonObject error = jsonResponse.getObject("error");
+        if (error.isEmpty()) return;
+        if (error.getInt("code") == 404) {
+            throw new ContentNotAvailableException("Channel not found");
         }
+        throw new ContentNotAvailableException("Channel request failed: "
+                + error.getString("status", "") + " " + error.getString("message", ""));
     }
 
     /**
@@ -339,30 +286,27 @@ public final class YoutubeChannelHelper {
     public static ChannelHeader getChannelHeader(
             @Nonnull final JsonObject channelResponse) {
         final JsonObject header = channelResponse.getObject(HEADER);
-
         if (header.has(C4_TABBED_HEADER_RENDERER)) {
-            return Optional.of(header.getObject(C4_TABBED_HEADER_RENDERER))
-                    .map(json -> new ChannelHeader(json, ChannelHeader.HeaderType.C4_TABBED))
-                    .orElse(null);
-        } else if (header.has(CAROUSEL_HEADER_RENDERER)) {
-            return header.getObject(CAROUSEL_HEADER_RENDERER).getArray(CONTENTS)
-                    .streamAsJsonObjects()
-                    .filter(item -> item.has(TOPIC_CHANNEL_DETAILS_RENDERER))
-                    .findFirst()
-                    .map(item -> item.getObject(TOPIC_CHANNEL_DETAILS_RENDERER))
-                    .map(json -> new ChannelHeader(json, ChannelHeader.HeaderType.CAROUSEL))
-                    .orElse(null);
-        } else if (header.has("pageHeaderRenderer")) {
-            return Optional.of(header.getObject("pageHeaderRenderer"))
-                    .map(json -> new ChannelHeader(json, ChannelHeader.HeaderType.PAGE))
-                    .orElse(null);
-        } else if (header.has("interactiveTabbedHeaderRenderer")) {
-            return Optional.of(header.getObject("interactiveTabbedHeaderRenderer"))
-                    .map(json -> new ChannelHeader(json,
-                            ChannelHeader.HeaderType.INTERACTIVE_TABBED))
-                    .orElse(null);
+            return new ChannelHeader(header.getObject(C4_TABBED_HEADER_RENDERER),
+                    ChannelHeader.HeaderType.C4_TABBED);
         }
-
+        if (header.has(CAROUSEL_HEADER_RENDERER)) {
+            for (final JsonObject item : header.getObject(CAROUSEL_HEADER_RENDERER)
+                    .getArray(CONTENTS).streamAsJsonObjects().toList()) {
+                if (item.has(TOPIC_CHANNEL_DETAILS_RENDERER)) {
+                    return new ChannelHeader(item.getObject(TOPIC_CHANNEL_DETAILS_RENDERER),
+                            ChannelHeader.HeaderType.CAROUSEL);
+                }
+            }
+        }
+        if (header.has("pageHeaderRenderer")) {
+            return new ChannelHeader(header.getObject("pageHeaderRenderer"),
+                    ChannelHeader.HeaderType.PAGE);
+        }
+        if (header.has("interactiveTabbedHeaderRenderer")) {
+            return new ChannelHeader(header.getObject("interactiveTabbedHeaderRenderer"),
+                    ChannelHeader.HeaderType.INTERACTIVE_TABBED);
+        }
         return null;
     }
 
@@ -379,34 +323,18 @@ public final class YoutubeChannelHelper {
      */
     public static boolean isChannelVerified(@Nonnull final ChannelHeader channelHeader) {
         switch (channelHeader.headerType) {
-            // carouselHeaderRenderers do not contain any verification badges
-            // Since they are only shown on YouTube internal channels or on channels of large
-            // organizations broadcasting live events, we can assume the channel to be verified
             case CAROUSEL:
                 return true;
             case PAGE:
-                final JsonObject pageHeaderViewModel = channelHeader.json.getObject(CONTENT)
+                final JsonObject page = channelHeader.json.getObject(CONTENT)
                         .getObject(PAGE_HEADER_VIEW_MODEL);
-
-                final boolean hasCircleOrMusicIcon = hasArtistOrVerifiedIconBadgeAttachment(
-                        pageHeaderViewModel.getObject(TITLE)
+                final boolean hasBadge = hasArtistOrVerifiedIconBadgeAttachment(
+                        page.getObject(TITLE)
                                 .getObject("dynamicTextViewModel")
                                 .getObject("text")
                                 .getArray("attachmentRuns"));
-                if (!hasCircleOrMusicIcon && pageHeaderViewModel.getObject("image")
-                        .has("contentPreviewImageViewModel")) {
-                    // If a pageHeaderRenderer has no object in which a check verified may be
-                    // contained and if it has a contentPreviewImageViewModel, it should mean
-                    // that the header is coming from a system channel, which we can assume to
-                    // be verified
-                    return true;
-                }
-
-                return hasCircleOrMusicIcon;
+                return hasBadge || page.getObject("image").has("contentPreviewImageViewModel");
             case INTERACTIVE_TABBED:
-                // If the header has an autoGenerated property, it should mean that the channel has
-                // been auto generated by YouTube: we can assume the channel to be verified in this
-                // case
                 return channelHeader.json.has("autoGenerated");
             default:
                 return YoutubeParsingHelper.isVerified(channelHeader.json.getArray("badges"));
@@ -445,35 +373,15 @@ public final class YoutubeChannelHelper {
         if (channelHeader != null) {
             switch (channelHeader.headerType) {
                 case C4_TABBED:
-                    final String channelId = channelHeader.json.getObject(HEADER)
-                            .getObject(C4_TABBED_HEADER_RENDERER)
-                            .getString("channelId", "");
-                    if (!isNullOrEmpty(channelId)) {
-                        return channelId;
-                    }
-                    final String navigationC4TabChannelId = channelHeader.json
-                            .getObject("navigationEndpoint")
-                            .getObject(BROWSE_ENDPOINT)
-                            .getString(BROWSE_ID);
-                    if (!isNullOrEmpty(navigationC4TabChannelId)) {
-                        return navigationC4TabChannelId;
-                    }
-                    break;
                 case CAROUSEL:
-                    final String navigationCarouselChannelId = channelHeader.json.getObject(HEADER)
-                            .getObject(CAROUSEL_HEADER_RENDERER)
-                            .getArray(CONTENTS)
-                            .streamAsJsonObjects()
-                            .filter(item -> item.has(TOPIC_CHANNEL_DETAILS_RENDERER))
-                            .findFirst()
-                            .orElse(new JsonObject())
-                            .getObject(TOPIC_CHANNEL_DETAILS_RENDERER)
-                            .getObject("navigationEndpoint")
-                            .getObject(BROWSE_ENDPOINT)
-                            .getString(BROWSE_ID);
-                    if (!isNullOrEmpty(navigationCarouselChannelId)) {
-                        return navigationCarouselChannelId;
+                    String channelId = channelHeader.headerType
+                            == ChannelHeader.HeaderType.C4_TABBED
+                            ? channelHeader.json.getString("channelId") : null;
+                    if (channelId == null || channelId.isEmpty()) {
+                        channelId = channelHeader.json.getObject("navigationEndpoint")
+                                .getObject(BROWSE_ENDPOINT).getString(BROWSE_ID);
                     }
+                    if (channelId != null && !channelId.isEmpty()) return channelId;
                     break;
                 default:
                     break;
@@ -483,15 +391,9 @@ public final class YoutubeChannelHelper {
         final String externalChannelId = jsonResponse.getObject("metadata")
                 .getObject("channelMetadataRenderer")
                 .getString("externalChannelId");
-        if (!isNullOrEmpty(externalChannelId)) {
-            return externalChannelId;
-        }
-
-        if (!isNullOrEmpty(fallbackChannelId)) {
-            return fallbackChannelId;
-        } else {
-            throw new ParsingException("Could not get channel ID");
-        }
+        if (externalChannelId != null && !externalChannelId.isEmpty()) return externalChannelId;
+        if (fallbackChannelId != null && !fallbackChannelId.isEmpty()) return fallbackChannelId;
+        throw new ParsingException("Could not get channel ID");
     }
 
     @Nonnull
@@ -501,61 +403,58 @@ public final class YoutubeChannelHelper {
             throws ParsingException {
         if (channelAgeGateRenderer != null) {
             final String title = channelAgeGateRenderer.getString("channelTitle");
-            if (isNullOrEmpty(title)) {
+            if (title == null || title.isEmpty()) {
                 throw new ParsingException("Could not get channel name");
             }
             return title;
         }
 
-        final String metadataRendererTitle = jsonResponse.getObject("metadata")
+        final String metadataTitle = jsonResponse.getObject("metadata")
                 .getObject("channelMetadataRenderer")
                 .getString(TITLE);
-        if (!isNullOrEmpty(metadataRendererTitle)) {
-            return metadataRendererTitle;
-        }
+        if (metadataTitle != null && !metadataTitle.isEmpty()) return metadataTitle;
 
-        return Optional.ofNullable(channelHeader)
-                .map(header -> {
-                    final JsonObject channelJson = header.json;
-                    switch (header.headerType) {
-                        case PAGE:
-                            return channelJson.getObject(CONTENT)
-                                    .getObject(PAGE_HEADER_VIEW_MODEL)
-                                    .getObject(TITLE)
-                                    .getObject("dynamicTextViewModel")
-                                    .getObject("text")
-                                    .getString(CONTENT, channelJson.getString("pageTitle"));
-                        case CAROUSEL:
-                        case INTERACTIVE_TABBED:
-                            return getTextFromObject(channelJson.getObject(TITLE));
-                        case C4_TABBED:
-                        default:
-                            return channelJson.getString(TITLE);
-                    }
-                })
-                // The channel name from a microformatDataRenderer may be different from the one
-                // displayed, especially for auto-generated channels, depending on the language
-                // requested for the interface (hl parameter of InnerTube requests' payload)
-                .or(() -> Optional.ofNullable(jsonResponse.getObject("microformat")
-                        .getObject("microformatDataRenderer")
-                        .getString(TITLE)))
-                .orElseThrow(() -> new ParsingException("Could not get channel name"));
+        String name = null;
+        if (channelHeader != null) {
+            final JsonObject header = channelHeader.json;
+            switch (channelHeader.headerType) {
+                case PAGE:
+                    name = header.getObject(CONTENT).getObject(PAGE_HEADER_VIEW_MODEL)
+                            .getObject(TITLE).getObject("dynamicTextViewModel")
+                            .getObject("text").getString(CONTENT, header.getString("pageTitle"));
+                    break;
+                case CAROUSEL:
+                case INTERACTIVE_TABBED:
+                    name = getTextFromObject(header.getObject(TITLE));
+                    break;
+                case C4_TABBED:
+                    name = header.getString(TITLE);
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (name != null && !name.isEmpty()) return name;
+        final String microformatTitle = jsonResponse.getObject("microformat")
+                .getObject("microformatDataRenderer").getString(TITLE);
+        if (microformatTitle != null && !microformatTitle.isEmpty()) return microformatTitle;
+        throw new ParsingException("Could not get channel name");
     }
 
     @Nullable
     public static JsonObject getChannelAgeGateRenderer(@Nonnull final JsonObject jsonResponse) {
-        return jsonResponse.getObject(CONTENTS)
+        final JsonArray tabs = jsonResponse.getObject(CONTENTS)
                 .getObject("twoColumnBrowseResultsRenderer")
-                .getArray("tabs")
-                .streamAsJsonObjects()
-                .flatMap(tab -> tab.getObject(TAB_RENDERER)
-                        .getObject(CONTENT)
-                        .getObject("sectionListRenderer")
-                        .getArray(CONTENTS)
-                        .streamAsJsonObjects())
-                .filter(content -> content.has("channelAgeGateRenderer"))
-                .map(content -> content.getObject("channelAgeGateRenderer"))
-                .findFirst()
-                .orElse(null);
+                .getArray("tabs");
+        for (final JsonObject tab : tabs.streamAsJsonObjects().toList()) {
+            final JsonArray contents = tab.getObject(TAB_RENDERER).getObject(CONTENT)
+                    .getObject("sectionListRenderer").getArray(CONTENTS);
+            for (final JsonObject item : contents.streamAsJsonObjects().toList()) {
+                if (item.has("channelAgeGateRenderer")) {
+                    return item.getObject("channelAgeGateRenderer");
+                }
+            }
+        }
+        return null;
     }
 }
