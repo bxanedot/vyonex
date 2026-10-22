@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.primary.models
 
@@ -6,9 +8,7 @@ import kotlinx.serialization.Serializable
 private val RUN_SEPARATOR_REGEX = Regex("[&,]")
 
 @Serializable
-data class Runs(
-    val runs: List<Run>? = null,
-)
+data class Runs(val runs: List<Run>? = null)
 
 @Serializable
 data class Run(
@@ -46,30 +46,27 @@ data class WatchPlaylistEndpoint(
 )
 
 fun List<Run>.splitBySeparator(): List<List<Run>> {
-    val res = mutableListOf<List<Run>>()
-    var tmp = mutableListOf<Run>()
-    forEach { run ->
+    val result = mutableListOf<List<Run>>()
+    var group = mutableListOf<Run>()
+    for (run in this) {
         if (run.text == " • ") {
-            res.add(tmp)
-            tmp = mutableListOf()
+            result.add(group)
+            group = mutableListOf()
         } else {
-            tmp.add(run)
+            group.add(run)
         }
     }
-    res.add(tmp)
-    return res
+    result.add(group)
+    return result
 }
 
-fun List<List<Run>>.clean(): List<List<Run>> =
-    if (getOrNull(0)?.getOrNull(0)?.navigationEndpoint != null ||
-        (getOrNull(0)?.getOrNull(0)?.text?.contains(RUN_SEPARATOR_REGEX)) == true
-    ) {
+fun List<List<Run>>.clean(): List<List<Run>> {
+    val first = firstOrNull()?.firstOrNull()
+    return if (first?.navigationEndpoint != null || first?.text?.contains(RUN_SEPARATOR_REGEX) == true) {
         this
     } else {
-        this.drop(1)
+        drop(1)
     }
+}
 
-fun List<Run>.oddElements() =
-    filterIndexed { index, _ ->
-        index % 2 == 0
-    }
+fun List<Run>.oddElements(): List<Run> = filterIndexed { index, _ -> index % 2 == 0 }
