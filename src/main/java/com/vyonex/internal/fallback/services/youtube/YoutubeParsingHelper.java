@@ -407,45 +407,32 @@ public final class YoutubeParsingHelper {
         if (hardcodedClientVersionValid.isPresent()) {
             return hardcodedClientVersionValid.get();
         }
-        // @formatter:off
-        final byte[] body = JsonWriter.string()
-            .object()
-                .object("context")
-                    .object("client")
-                        .value("hl", "en-GB")
-                        .value("gl", "GB")
-                        .value("clientName", WEB_CLIENT_NAME)
-                        .value("clientVersion", WEB_HARDCODED_CLIENT_VERSION)
-                        .value("platform", DESKTOP_CLIENT_PLATFORM)
-                        .value("utcOffsetMinutes", 0)
-                    .end()
-                    .object("request")
-                        .array("internalExperimentFlags")
-                        .end()
-                        .value("useSsl", true)
-                    .end()
-                    .object("user")
-                        // TODO: provide a way to enable restricted mode with:
-                        //  .value("enableSafetyMode", boolean)
-                        .value("lockedSafetyMode", false)
-                    .end()
-                .end()
-                .value("fetchLiveState", true)
-            .end().done().getBytes(StandardCharsets.UTF_8);
-        // @formatter:on
+        final JsonObject client = new JsonObject();
+        client.put("hl", "en-GB");
+        client.put("gl", "GB");
+        client.put("clientName", WEB_CLIENT_NAME);
+        client.put("clientVersion", WEB_HARDCODED_CLIENT_VERSION);
+        client.put("platform", DESKTOP_CLIENT_PLATFORM);
+        client.put("utcOffsetMinutes", 0);
+        final JsonObject request = new JsonObject();
+        request.put("internalExperimentFlags", new JsonArray());
+        request.put("useSsl", true);
+        final JsonObject user = new JsonObject();
+        user.put("lockedSafetyMode", false);
+        final JsonObject context = new JsonObject();
+        context.put("client", client);
+        context.put("request", request);
+        context.put("user", user);
+        final JsonObject payload = new JsonObject();
+        payload.put("context", context);
+        payload.put("fetchLiveState", true);
 
-        final var headers = getClientHeaders(WEB_CLIENT_ID, WEB_HARDCODED_CLIENT_VERSION);
-
-        // This endpoint is fetched by the YouTube website to get the items of its main menu and is
-        // pretty lightweight (around 30kB)
         final Response response = getDownloader().postWithContentTypeJson(
                 YOUTUBEI_V1_URL + "guide?" + DISABLE_PRETTY_PRINT_PARAMETER,
-                headers, body);
-        final String responseBody = response.responseBody();
-        final int responseCode = response.responseCode();
-
-        hardcodedClientVersionValid = Optional.of(responseBody.length() > 5000
-                && responseCode == 200); // Ensure to have a valid response
+                getClientHeaders(WEB_CLIENT_ID, WEB_HARDCODED_CLIENT_VERSION),
+                JsonWriter.string(payload).getBytes(StandardCharsets.UTF_8));
+        hardcodedClientVersionValid = Optional.of(response.responseCode() == 200
+                && response.responseBody().length() > 5000);
         return hardcodedClientVersionValid.get();
     }
 
