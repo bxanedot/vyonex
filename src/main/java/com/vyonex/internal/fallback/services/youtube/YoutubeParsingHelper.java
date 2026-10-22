@@ -946,31 +946,29 @@ public final class YoutubeParsingHelper {
     public static String getValidJsonResponseBody(@Nonnull final Response response)
             throws ParsingException, MalformedURLException {
         if (response.responseCode() == 404) {
-            throw new ContentNotAvailableException("Not found"
-                    + " (\"" + response.responseCode() + " " + response.responseMessage() + "\")");
+            throw new ContentNotAvailableException("YouTube returned "
+                    + response.responseCode() + " " + response.responseMessage());
         }
 
         final String responseBody = response.responseBody();
-        if (responseBody.length() < 50) { // Ensure to have a valid response
-            throw new ParsingException("JSON response is too short");
+        if (responseBody.length() < 50) {
+            throw new ParsingException("YouTube JSON response is too short");
         }
 
-        // Check if the request was redirected to the error page.
-        final URL latestUrl = new URL(response.latestUrl());
-        if (latestUrl.getHost().equalsIgnoreCase("www.youtube.com")) {
-            final String path = latestUrl.getPath();
+        final URL finalUrl = new URL(response.latestUrl());
+        if ("www.youtube.com".equalsIgnoreCase(finalUrl.getHost())) {
+            final String path = finalUrl.getPath();
             if (path.equalsIgnoreCase("/oops") || path.equalsIgnoreCase("/error")) {
-                throw new ContentNotAvailableException("Content unavailable");
+                throw new ContentNotAvailableException("YouTube redirected to an error page");
             }
         }
 
-        final String responseContentType = response.getHeader("Content-Type");
-        if (responseContentType != null
-                && responseContentType.toLowerCase().contains("text/html")) {
-            throw new ParsingException("Got HTML document, expected JSON response"
-                    + " (latest url was: \"" + response.latestUrl() + "\")");
+        final String contentType = response.getHeader("Content-Type");
+        if (contentType != null
+                && contentType.toLowerCase(Locale.ROOT).contains("text/html")) {
+            throw new ParsingException("YouTube returned HTML instead of JSON at "
+                    + response.latestUrl());
         }
-
         return responseBody;
     }
 
@@ -978,11 +976,7 @@ public final class YoutubeParsingHelper {
                                                  final byte[] body,
                                                  @Nonnull final Localization localization)
             throws IOException, ExtractionException {
-        final var headers = getYouTubeHeaders();
-
-        return JsonUtils.toJsonObject(getValidJsonResponseBody(
-                getDownloader().postWithContentTypeJson(YOUTUBEI_V1_URL + endpoint + "?"
-                        + DISABLE_PRETTY_PRINT_PARAMETER, headers, body, localization)));
+        return postJson(endpoint, "", body, localization);
     }
 
     public static JsonObject getJsonPostResponse(@Nonnull final String endpoint,
@@ -990,19 +984,19 @@ public final class YoutubeParsingHelper {
                                                  final byte[] body,
                                                  @Nonnull final Localization localization)
             throws IOException, ExtractionException {
-        final var headers = getYouTubeHeaders();
+        final String query = queryParameters.isEmpty() ? ""
+                : String.join("&", queryParameters) + "&";
+        return postJson(endpoint, query, body, localization);
+    }
 
-        final String queryParametersString;
-        if (queryParameters.isEmpty()) {
-            queryParametersString = "?" + DISABLE_PRETTY_PRINT_PARAMETER;
-        } else {
-            queryParametersString = "?" + String.join("&", queryParameters)
-                    + "&" + DISABLE_PRETTY_PRINT_PARAMETER;
-        }
-
+    private static JsonObject postJson(final String endpoint, final String query,
+                                       final byte[] body, final Localization localization)
+            throws IOException, ExtractionException {
+        final String url = YOUTUBEI_V1_URL + endpoint + "?" + query
+                + DISABLE_PRETTY_PRINT_PARAMETER;
         return JsonUtils.toJsonObject(getValidJsonResponseBody(
-                getDownloader().postWithContentTypeJson(YOUTUBEI_V1_URL + endpoint
-                        + queryParametersString, headers, body, localization)));
+                getDownloader().postWithContentTypeJson(url, getYouTubeHeaders(), body,
+                        localization)));
     }
 
     @Nonnull
