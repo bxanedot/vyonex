@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.comments;
 
@@ -10,29 +12,15 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import javax.annotation.Nonnull;
 
 public abstract class CommentsExtractor extends ListExtractor<CommentsInfoItem> {
-
-    public CommentsExtractor(final StreamingService service, final ListLinkHandler uiHandler) {
-        super(service, uiHandler);
+    public CommentsExtractor(final StreamingService service,
+                             final ListLinkHandler linkHandler) {
+        super(service, linkHandler);
     }
 
-    /**
-     * @apiNote Warning: This method is experimental and may get removed in a future release.
-     * @return <code>true</code> if the comments are disabled otherwise <code>false</code> (default)
-     */
-    public boolean isCommentsDisabled() throws ExtractionException {
-        return false;
-    }
-
-    /**
-     * @return the total number of comments
-     */
-    public int getCommentsCount() throws ExtractionException {
-        return -1;
-    }
+    public boolean isCommentsDisabled() throws ExtractionException { return false; }
+    public int getCommentsCount() throws ExtractionException { return -1; }
 
     @Nonnull
     @Override
-    public String getName() throws ParsingException {
-        return "Comments";
-    }
+    public String getName() throws ParsingException { return "Comments"; }
 }
