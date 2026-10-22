@@ -9,8 +9,8 @@ import static com.vyonex.internal.fallback.services.bandcamp.extractors.Bandcamp
 import static com.vyonex.internal.fallback.utils.Utils.HTTPS;
 import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParserException;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;

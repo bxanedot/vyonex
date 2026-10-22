@@ -9,8 +9,8 @@ import static com.vyonex.internal.fallback.services.bandcamp.extractors.Bandcamp
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.getImagesFromImageId;
 import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import org.jsoup.Jsoup;
 import com.vyonex.internal.fallback.Image;

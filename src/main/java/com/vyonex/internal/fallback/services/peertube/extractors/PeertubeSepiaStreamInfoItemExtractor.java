@@ -1,7 +1,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 
 /**
  * A StreamInfoItem collected from SepiaSearch

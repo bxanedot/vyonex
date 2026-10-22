@@ -3,9 +3,9 @@ package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_API_URL;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;

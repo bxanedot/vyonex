@@ -3,7 +3,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;

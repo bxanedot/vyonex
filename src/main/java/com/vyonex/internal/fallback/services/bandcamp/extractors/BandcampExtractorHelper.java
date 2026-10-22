@@ -3,10 +3,10 @@
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.json.JsonWriter;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;

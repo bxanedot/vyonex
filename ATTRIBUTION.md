@@ -6,7 +6,6 @@ VyonEx combines and modifies code and data from the projects below. Project name
 | --- | --- | --- |
 | [InnerTubeX](https://github.com/MetrolistGroup/innertubex) | GPL-3.0 | YouTube InnerTube and stream extraction code adapted into VyonEx. |
 | [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) | GPL-3.0-or-later | Fallback extractors and service code adapted into VyonEx. Original copyright notices remain with the applicable source files. |
-| [nanojson](https://github.com/mmastrac/nanojson) | Apache-2.0 | Source files in `com.grack.nanojson`; see [LICENSE-APACHE](LICENSE-APACHE). |
 | [yt-dlp EJS](https://github.com/yt-dlp/ejs) | Unlicense | JavaScript solver resources in `src/main/resources/yt_ejs`. |
 | [YouTube player configuration data](https://github.com/ZemerTeam/zemer-cipher) | GPL-3.0 | VyonEx fetches the public player configuration table at runtime; it is not bundled. |
 

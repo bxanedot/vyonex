@@ -24,9 +24,9 @@ package com.vyonex.internal.fallback.services.youtube.extractors;
 import static com.vyonex.internal.fallback.utils.Utils.isBlank;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.StreamingService;

@@ -5,10 +5,10 @@ import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaC
 import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory.CONFERENCES;
 import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory.EVENTS;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.InfoItem;

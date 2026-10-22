@@ -276,7 +276,7 @@ public final class Utils {
      * Checks if a collection is null or empty.
      *
      * <p>
-     * This method can be also used for {@link com.grack.nanojson.JsonArray JsonArray}s.
+     * This method also accepts JSON arrays.
      * </p>
      *
      * @param collection the collection on which check if it's null or empty
@@ -290,7 +290,7 @@ public final class Utils {
      * Checks if a {@link Map map} is null or empty.
      *
      * <p>
-     * This method can be also used for {@link com.grack.nanojson.JsonObject JsonObject}s.
+     * This method also accepts JSON objects.
      * </p>
      *
      * @param map the {@link Map map} on which check if it's null or empty

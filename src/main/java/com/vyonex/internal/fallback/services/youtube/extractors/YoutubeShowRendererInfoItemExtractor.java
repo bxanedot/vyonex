@@ -1,7 +1,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 
 import javax.annotation.Nonnull;

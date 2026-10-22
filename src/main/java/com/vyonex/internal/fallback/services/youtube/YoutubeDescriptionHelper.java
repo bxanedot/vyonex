@@ -6,7 +6,7 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isYoutubeURL;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 
 import org.jsoup.nodes.Entities;
 

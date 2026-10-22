@@ -1,9 +1,9 @@
 // bxane
 package com.vyonex.internal.fallback.services.peertube;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Response;

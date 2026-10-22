@@ -44,7 +44,7 @@ dependencies {
 tasks.test { useJUnitPlatform() }
 
 tasks.jar {
-    from(files("LICENSE", "LICENSE-APACHE", "ATTRIBUTION.md")) { into("META-INF") }
+    from(files("LICENSE", "ATTRIBUTION.md")) { into("META-INF") }
 }
 
 publishing {

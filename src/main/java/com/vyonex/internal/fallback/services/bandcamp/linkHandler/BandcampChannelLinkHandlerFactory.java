@@ -3,8 +3,8 @@
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParserException;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;

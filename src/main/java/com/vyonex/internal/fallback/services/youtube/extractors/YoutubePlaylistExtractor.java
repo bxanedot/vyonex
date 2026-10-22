@@ -13,9 +13,9 @@ import static com.vyonex.internal.fallback.services.youtube.protos.playlist.Play
 import static com.vyonex.internal.fallback.services.youtube.protos.playlist.PlaylistProtobufContinuation.PlaylistContinuation;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Page;

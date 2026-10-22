@@ -25,8 +25,8 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeChannelHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeChannelHelper.resolveChannelId;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.StreamingService;

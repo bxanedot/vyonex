@@ -8,9 +8,9 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareJsonBuilder;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;

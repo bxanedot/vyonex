@@ -1,7 +1,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.ListExtractor;

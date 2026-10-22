@@ -1,9 +1,9 @@
 // bxane
 package com.vyonex.internal.fallback.services.youtube;
 
-import com.grack.nanojson.JsonBuilder;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonBuilder;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.localization.ContentCountry;
 import com.vyonex.internal.fallback.localization.Localization;

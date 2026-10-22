@@ -1,8 +1,8 @@
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.Page;

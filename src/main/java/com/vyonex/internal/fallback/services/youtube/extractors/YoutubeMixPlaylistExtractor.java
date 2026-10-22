@@ -12,10 +12,10 @@ import static com.vyonex.internal.fallback.utils.Utils.getQueryValue;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 import static com.vyonex.internal.fallback.utils.Utils.stringToURL;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonBuilder;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonBuilder;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;

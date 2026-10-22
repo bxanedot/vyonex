@@ -3,9 +3,9 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.StreamingService;

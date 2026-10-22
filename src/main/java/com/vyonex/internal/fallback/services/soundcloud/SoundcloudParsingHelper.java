@@ -7,10 +7,10 @@ import static com.vyonex.internal.fallback.ServiceList.SoundCloud;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;

@@ -1,7 +1,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonObject;
 
 public class SoundcloudLikesInfoItemExtractor extends SoundcloudStreamInfoItemExtractor {
 

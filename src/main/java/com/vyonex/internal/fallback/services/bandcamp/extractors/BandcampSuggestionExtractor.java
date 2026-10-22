@@ -5,10 +5,10 @@ package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_API_URL;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.StreamingService;

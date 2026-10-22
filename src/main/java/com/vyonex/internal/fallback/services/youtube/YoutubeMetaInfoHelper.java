@@ -9,8 +9,8 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.MetaInfo;
 import com.vyonex.internal.fallback.exceptions.ParsingException;

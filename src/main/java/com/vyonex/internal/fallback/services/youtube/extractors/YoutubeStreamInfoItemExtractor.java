@@ -25,8 +25,8 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;

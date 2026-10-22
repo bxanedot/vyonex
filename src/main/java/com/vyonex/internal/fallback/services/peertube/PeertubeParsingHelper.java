@@ -1,8 +1,8 @@
 // bxane
 package com.vyonex.internal.fallback.services.peertube;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;

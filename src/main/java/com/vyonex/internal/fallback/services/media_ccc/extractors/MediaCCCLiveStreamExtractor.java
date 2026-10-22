@@ -5,8 +5,8 @@ import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCC
 import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
 import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;

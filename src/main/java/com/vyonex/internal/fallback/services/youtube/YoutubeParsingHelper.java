@@ -42,12 +42,12 @@ import static com.vyonex.internal.fallback.utils.Utils.getStringResultFromRegexA
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonBuilder;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
-import com.grack.nanojson.JsonWriter;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonBuilder;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.json.JsonWriter;
 
 import org.jsoup.nodes.Entities;
 import com.vyonex.internal.fallback.Image;
