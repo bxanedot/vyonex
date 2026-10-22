@@ -1022,10 +1022,10 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static String getAndroidUserAgent(@Nullable final Localization localization) {
+        final Localization language = localization == null ? Localization.DEFAULT : localization;
         return "com.google.android.youtube/" + ANDROID_CLIENT_VERSION
                 + " (Linux; U; Android 15; "
-                + (localization != null ? localization : Localization.DEFAULT).getCountryCode()
-                + ") gzip";
+                + language.getCountryCode() + ") gzip";
     }
 
     /**
@@ -1043,10 +1043,10 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static String getIosUserAgent(@Nullable final Localization localization) {
+        final Localization language = localization == null ? Localization.DEFAULT : localization;
         return "com.google.ios.youtube/" + IOS_CLIENT_VERSION + "(" + IOS_DEVICE_MODEL
                 + "; U; CPU iOS " + IOS_USER_AGENT_VERSION + " like Mac OS X; "
-                + (localization != null ? localization : Localization.DEFAULT).getCountryCode()
-                + ")";
+                + language.getCountryCode() + ")";
     }
 
     /**
@@ -1064,11 +1064,10 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static String getVisionOsUserAgent(@Nullable final Localization localization) {
+        final Localization language = localization == null ? Localization.DEFAULT : localization;
         return "com.google.visionos.youtube/" + VISIONOS_CLIENT_VERSION + "("
                 + VISIONOS_DEVICE_MODEL + "; U; CPU visionOS " + VISIONOS_USER_AGENT_VERSION
-                + " like Mac OS X; "
-                + (localization != null ? localization : Localization.DEFAULT).getCountryCode()
-                + ")";
+                + " like Mac OS X; " + language.getCountryCode() + ")";
     }
 
     /**
@@ -1076,7 +1075,8 @@ public final class YoutubeParsingHelper {
      */
     @Nonnull
     public static Map<String, List<String>> getYoutubeMusicHeaders() {
-        final var headers = new HashMap<>(getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
+        final Map<String, List<String>> headers = new HashMap<>(
+                getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
         headers.putAll(getClientHeaders(WEB_REMIX_CLIENT_ID, youtubeMusicClientVersion));
         return headers;
     }
@@ -1087,7 +1087,7 @@ public final class YoutubeParsingHelper {
      */
     public static Map<String, List<String>> getYouTubeHeaders()
             throws ExtractionException, IOException {
-        final var headers = getClientInfoHeaders();
+        final Map<String, List<String>> headers = getClientInfoHeaders();
         headers.put("Cookie", List.of(generateConsentCookie()));
         return headers;
     }
@@ -1098,7 +1098,8 @@ public final class YoutubeParsingHelper {
      */
     public static Map<String, List<String>> getClientInfoHeaders()
             throws ExtractionException, IOException {
-        final var headers = new HashMap<>(getOriginReferrerHeaders("https://www.youtube.com"));
+        final Map<String, List<String>> headers = new HashMap<>(
+                getOriginReferrerHeaders("https://www.youtube.com"));
         headers.putAll(getClientHeaders(WEB_CLIENT_ID, getClientVersion()));
         return headers;
     }
@@ -1110,8 +1111,8 @@ public final class YoutubeParsingHelper {
      * @param url The URL to be set as the origin and referrer.
      */
     public static Map<String, List<String>> getOriginReferrerHeaders(@Nonnull final String url) {
-        final var urlList = List.of(url);
-        return Map.of("Origin", urlList, "Referer", urlList);
+        final List<String> value = List.of(url);
+        return Map.of("Origin", value, "Referer", value);
     }
 
     /**
@@ -1137,30 +1138,22 @@ public final class YoutubeParsingHelper {
 
     @Nonnull
     public static String generateConsentCookie() {
-        return "SOCS=" + (isConsentAccepted()
-                // CAISAiAD means that the user configured manually cookies YouTube, regardless of
-                // the consent values
-                // This value surprisingly allows to extract mixes and some YouTube Music playlists
-                // in the same way when a user allows all cookies
-                ? "CAISAiAD"
-                // CAE= means that the user rejected all non-necessary cookies with the "Reject
-                // all" button on the consent page
-                : "CAE=");
+        return "SOCS=" + (consentAccepted ? "CAISAiAD" : "CAE=");
     }
 
     public static String extractCookieValue(final String cookieName,
                                             @Nonnull final Response response) {
-        final List<String> cookies = response.responseHeaders().get("set-cookie");
-        if (cookies == null) {
-            return "";
-        }
-
         String result = "";
-        for (final String cookie : cookies) {
-            final int startIndex = cookie.indexOf(cookieName);
-            if (startIndex != -1) {
-                result = cookie.substring(startIndex + cookieName.length() + "=".length(),
-                        cookie.indexOf(";", startIndex));
+        for (final Map.Entry<String, List<String>> header : response.responseHeaders().entrySet()) {
+            if (header.getKey() == null || !header.getKey().equalsIgnoreCase("Set-Cookie")) {
+                continue;
+            }
+            for (final String cookie : header.getValue()) {
+                final int equals = cookie.indexOf('=');
+                if (equals < 0 || !cookieName.equals(cookie.substring(0, equals).trim())) continue;
+                final int end = cookie.indexOf(';', equals + 1);
+                result = cookie.substring(equals + 1,
+                        end < 0 ? cookie.length() : end).trim();
             }
         }
         return result;

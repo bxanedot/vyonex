@@ -4,13 +4,17 @@
 package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 import java.util.Random;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -129,6 +133,34 @@ class YoutubeParsingHelperTest {
                 + "\"navigationEndpoint\":{\"urlEndpoint\":{\"url\":\"javascript:alert(1)\"}}}]}");
         assertEquals("go", Jsoup.parseBodyFragment(
                 YoutubeParsingHelper.getTextFromObject(unsafeLink, true)).body().text());
+    }
+
+    @Test
+    void buildsClientHeadersAndReadsNamedCookies() {
+        assertEquals(Map.of("Origin", List.of("https://music.youtube.com"),
+                        "Referer", List.of("https://music.youtube.com")),
+                YoutubeParsingHelper.getOriginReferrerHeaders("https://music.youtube.com"));
+        assertEquals(Map.of("X-YouTube-Client-Name", List.of("WEB"),
+                        "X-YouTube-Client-Version", List.of("2.test")),
+                YoutubeParsingHelper.getClientHeaders("WEB", "2.test"));
+        assertTrue(YoutubeParsingHelper.getAndroidUserAgent(new Localization("fr", "CA"))
+                .endsWith("; CA) gzip"));
+        assertTrue(YoutubeParsingHelper.getIosUserAgent(null).contains("CPU iOS"));
+        assertTrue(YoutubeParsingHelper.getVisionOsUserAgent(null).contains("CPU visionOS"));
+
+        final Response response = new Response(200, "OK",
+                Map.of("Set-Cookie", List.of("XSOCS=wrong; path=/", "SOCS=right; path=/",
+                        "SOCS=ignored; path=/")), "", "https://www.youtube.com/");
+        assertEquals("ignored", YoutubeParsingHelper.extractCookieValue("SOCS", response));
+        assertEquals("", YoutubeParsingHelper.extractCookieValue("MISSING", response));
+
+        YoutubeParsingHelper.setConsentAccepted(false);
+        assertEquals("SOCS=CAE=", YoutubeParsingHelper.generateConsentCookie());
+        assertEquals(Map.of("Cookie", List.of("SOCS=CAE=")),
+                YoutubeParsingHelper.getCookieHeader());
+        YoutubeParsingHelper.setConsentAccepted(true);
+        assertEquals("SOCS=CAISAiAD", YoutubeParsingHelper.generateConsentCookie());
+        YoutubeParsingHelper.setConsentAccepted(false);
     }
 
     private static String navigation(final String json) throws JsonParserException {
