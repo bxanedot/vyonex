@@ -7,6 +7,7 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
+import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 import java.util.Random;
@@ -84,5 +85,53 @@ class YoutubeParsingHelperTest {
                 "https://video.example/play?c=WEB_EMBEDDED_PLAYER"));
         assertFalse(YoutubeParsingHelper.isWebStreamingUrl(
                 "https://video.example/play?other=c%3DWEB"));
+    }
+
+    @Test
+    void resolvesCommonNavigationEndpointKinds() throws JsonParserException {
+        assertEquals("https://video.example/watch?v=abcdefghijk",
+                navigation("{\"urlEndpoint\":{\"url\":\"https://video.example/watch?v=abcdefghijk\"}}"));
+        assertEquals("https://video.example/watch?v=abcdefghijk",
+                navigation("{\"urlEndpoint\":{\"url\":\"https://www.youtube.com/redirect?q=https%3A%2F%2Fvideo.example%2Fwatch%3Fv%3Dabcdefghijk\"}}"));
+        assertEquals("https://www.youtube.com/watch?v=abcdefghijk&list=PL123&t=42",
+                navigation("{\"watchEndpoint\":{\"videoId\":\"abcdefghijk\","
+                        + "\"playlistId\":\"PL123\",\"startTimeSeconds\":42}}"));
+        assertEquals("https://www.youtube.com/channel/UC123",
+                navigation("{\"browseEndpoint\":{\"browseId\":\"UC123\"}}"));
+        assertEquals("https://www.youtube.com/playlist?list=PL123",
+                navigation("{\"browseEndpoint\":{\"browseId\":\"VLPL123\"}}"));
+        assertEquals("https://www.youtube.com/@artist",
+                navigation("{\"browseEndpoint\":{\"canonicalBaseUrl\":\"/@artist\"}}"));
+        assertEquals("https://www.youtube.com/playlist?list=PL123",
+                navigation("{\"watchPlaylistEndpoint\":{\"playlistId\":\"PL123\"}}"));
+        assertEquals("https://www.youtube.com/@artist",
+                navigation("{\"commandMetadata\":{\"webCommandMetadata\":{\"url\":\"/@artist\"}}}"));
+    }
+
+    @Test
+    void escapesTextAndAllowsOnlySafeLinksInHtmlMode() throws JsonParserException {
+        final var plain = JsonParser.object().from("{\"simpleText\":\"<b>plain</b>\"}");
+        assertEquals("<b>plain</b>", YoutubeParsingHelper.getTextFromObject(plain));
+        assertEquals("&lt;b&gt;plain&lt;/b&gt;",
+                YoutubeParsingHelper.getTextFromObject(plain, true));
+
+        final var linked = JsonParser.object().from("{\"runs\":["
+                + "{\"text\":\"<tag>\",\"bold\":true,\"navigationEndpoint\":{"
+                + "\"urlEndpoint\":{\"url\":\"https://example.org/?a=1&b=2\"}}},"
+                + "{\"text\":\"tail\",\"italics\":true}]}");
+        final String html = YoutubeParsingHelper.getTextFromObject(linked, true);
+        final var body = Jsoup.parseBodyFragment(html).body();
+        assertEquals("<tag>tail", body.text());
+        assertEquals("https://example.org/?a=1&b=2", body.selectFirst("a").attr("href"));
+        assertEquals(1, body.select("b").size());
+
+        final var unsafeLink = JsonParser.object().from("{\"runs\":[{\"text\":\"go\","
+                + "\"navigationEndpoint\":{\"urlEndpoint\":{\"url\":\"javascript:alert(1)\"}}}]}");
+        assertEquals("go", Jsoup.parseBodyFragment(
+                YoutubeParsingHelper.getTextFromObject(unsafeLink, true)).body().text());
+    }
+
+    private static String navigation(final String json) throws JsonParserException {
+        return YoutubeParsingHelper.getUrlFromNavigationEndpoint(JsonParser.object().from(json));
     }
 }

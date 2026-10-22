@@ -667,27 +667,22 @@ public final class YoutubeParsingHelper {
     public static String getUrlFromNavigationEndpoint(
             @Nonnull final JsonObject navigationEndpoint) {
         if (navigationEndpoint.has("urlEndpoint")) {
-            String internUrl = navigationEndpoint.getObject("urlEndpoint")
-                    .getString("url");
-            if (internUrl.startsWith("https://www.youtube.com/redirect?")) {
-                // remove https://www.youtube.com part to fall in the next if block
-                internUrl = internUrl.substring(23);
-            }
-
-            if (internUrl.startsWith("/redirect?")) {
-                // q parameter can be the first parameter
-                internUrl = internUrl.substring(10);
-                final String[] params = internUrl.split("&");
-                for (final String param : params) {
-                    if (param.split("=")[0].equals("q")) {
-                        return Utils.decodeUrlUtf8(param.split("=")[1]);
+            final String value = navigationEndpoint.getObject("urlEndpoint").getString("url");
+            if (value != null) {
+                try {
+                    final URI uri = new URI(value);
+                    if ("/redirect".equals(uri.getPath())) {
+                        final String target = queryParameter(uri.getRawQuery(), "q");
+                        if (target != null) return target;
+                    } else if (isHttpUrl(uri)) {
+                        return uri.toASCIIString();
+                    } else if (value.startsWith("/channel") || value.startsWith("/user")
+                            || value.startsWith("/watch")) {
+                        return "https://www.youtube.com" + value;
                     }
+                } catch (final URISyntaxException ignored) {
+                    return null;
                 }
-            } else if (internUrl.startsWith("http")) {
-                return internUrl;
-            } else if (internUrl.startsWith("/channel") || internUrl.startsWith("/user")
-                    || internUrl.startsWith("/watch")) {
-                return "https://www.youtube.com" + internUrl;
             }
         }
 
@@ -695,70 +690,84 @@ public final class YoutubeParsingHelper {
             final JsonObject browseEndpoint = navigationEndpoint.getObject("browseEndpoint");
             final String canonicalBaseUrl = browseEndpoint.getString("canonicalBaseUrl");
             final String browseId = browseEndpoint.getString("browseId");
-
             if (browseId != null) {
                 if (browseId.startsWith("UC")) {
-                    // All channel IDs are prefixed with UC
                     return "https://www.youtube.com/channel/" + browseId;
-                } else if (browseId.startsWith("VL")) {
-                    // All playlist IDs are prefixed with VL, which needs to be removed from the
-                    // playlist ID
+                }
+                if (browseId.startsWith("VL")) {
                     return "https://www.youtube.com/playlist?list=" + browseId.substring(2);
                 }
             }
-
-            if (!isNullOrEmpty(canonicalBaseUrl)) {
-                return "https://www.youtube.com" + canonicalBaseUrl;
+            if (canonicalBaseUrl != null && !canonicalBaseUrl.isEmpty()) {
+                return canonicalBaseUrl.startsWith("http") ? canonicalBaseUrl
+                        : canonicalBaseUrl.startsWith("/")
+                        ? "https://www.youtube.com" + canonicalBaseUrl : null;
             }
         }
 
         if (navigationEndpoint.has("watchEndpoint")) {
-            final StringBuilder url = new StringBuilder();
-            url.append("https://www.youtube.com/watch?v=")
-                    .append(navigationEndpoint.getObject("watchEndpoint")
-                            .getString(VIDEO_ID));
-            if (navigationEndpoint.getObject("watchEndpoint").has("playlistId")) {
-                url.append("&list=").append(navigationEndpoint.getObject("watchEndpoint")
-                        .getString("playlistId"));
+            final JsonObject watch = navigationEndpoint.getObject("watchEndpoint");
+            final String videoId = watch.getString(VIDEO_ID);
+            if (videoId == null || videoId.isEmpty()) return null;
+            final StringBuilder result = new StringBuilder(
+                    "https://www.youtube.com/watch?v=").append(videoId);
+            final String playlistId = watch.getString("playlistId");
+            if (playlistId != null) result.append("&list=").append(playlistId);
+            if (watch.has("startTimeSeconds")) {
+                result.append("&t=").append(watch.getInt("startTimeSeconds"));
             }
-            if (navigationEndpoint.getObject("watchEndpoint").has("startTimeSeconds")) {
-                url.append("&t=")
-                        .append(navigationEndpoint.getObject("watchEndpoint")
-                        .getInt("startTimeSeconds"));
-            }
-            return url.toString();
+            return result.toString();
         }
 
         if (navigationEndpoint.has("watchPlaylistEndpoint")) {
-            return "https://www.youtube.com/playlist?list="
-                    + navigationEndpoint.getObject("watchPlaylistEndpoint")
+            final String playlistId = navigationEndpoint.getObject("watchPlaylistEndpoint")
                     .getString("playlistId");
+            return playlistId == null ? null
+                    : "https://www.youtube.com/playlist?list=" + playlistId;
         }
 
         if (navigationEndpoint.has("showDialogCommand")) {
-            try {
-                final JsonArray listItems = JsonUtils.getArray(navigationEndpoint,
-                    "showDialogCommand.panelLoadingStrategy.inlineContent.dialogViewModel"
-                    + ".customContent.listViewModel.listItems");
-
-                // the first item seems to always be the channel that actually uploaded the video,
-                // i.e. it appears in their video feed
-                final JsonObject command = JsonUtils.getObject(listItems.getObject(0),
-                    "listItemViewModel.rendererContext.commandContext.onTap.innertubeCommand");
-                return getUrlFromNavigationEndpoint(command);
-            } catch (final ParsingException p) {
+            final JsonArray items = navigationEndpoint.getObject("showDialogCommand")
+                    .getObject("panelLoadingStrategy").getObject("inlineContent")
+                    .getObject("dialogViewModel").getObject("customContent")
+                    .getObject("listViewModel").getArray("listItems");
+            if (!items.isEmpty()) {
+                final JsonObject command = items.getObject(0).getObject("listItemViewModel")
+                        .getObject("rendererContext").getObject("commandContext")
+                        .getObject("onTap").getObject("innertubeCommand");
+                final String url = getUrlFromNavigationEndpoint(command);
+                if (url != null) return url;
             }
         }
-
 
         if (navigationEndpoint.has("commandMetadata")) {
             final JsonObject metadata = navigationEndpoint.getObject("commandMetadata")
                     .getObject("webCommandMetadata");
-            if (metadata.has("url")) {
-                return "https://www.youtube.com" + metadata.getString("url");
+            final String value = metadata.getString("url");
+            if (value != null) {
+                if (value.startsWith("http://") || value.startsWith("https://")) return value;
+                if (value.startsWith("/")) return "https://www.youtube.com" + value;
             }
         }
+        return null;
+    }
 
+    private static boolean isHttpUrl(final URI uri) {
+        final String scheme = uri.getScheme();
+        return uri.getHost() != null && scheme != null
+                && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"));
+    }
+
+    private static String queryParameter(final String query, final String key) {
+        if (query == null) return null;
+        for (final String parameter : query.split("&")) {
+            final int separator = parameter.indexOf('=');
+            if (separator >= 0 && key.equals(URLDecoder.decode(
+                    parameter.substring(0, separator), StandardCharsets.UTF_8))) {
+                return URLDecoder.decode(parameter.substring(separator + 1),
+                        StandardCharsets.UTF_8);
+            }
+        }
         return null;
     }
 
@@ -772,75 +781,38 @@ public final class YoutubeParsingHelper {
      */
     @Nullable
     public static String getTextFromObject(final JsonObject textObject, final boolean html) {
-        if (isNullOrEmpty(textObject)) {
-            return null;
-        }
-
+        if (textObject == null || textObject.isEmpty()) return null;
         if (textObject.has("simpleText")) {
-            return textObject.getString("simpleText");
+            final String text = textObject.getString("simpleText");
+            return text == null || !html ? text : htmlText(text);
         }
 
         final JsonArray runs = textObject.getArray("runs");
-        if (runs.isEmpty()) {
-            return null;
-        }
-
-        final StringBuilder textBuilder = new StringBuilder();
-        for (final Object o : runs) {
-            final JsonObject run = (JsonObject) o;
-            String text = run.getString("text");
-
-            if (html) {
-                if (run.has("navigationEndpoint")) {
-                    final String url = getUrlFromNavigationEndpoint(
-                            run.getObject("navigationEndpoint"));
-                    if (!isNullOrEmpty(url)) {
-                        text = "<a href=\"" + Entities.escape(url) + "\">" + Entities.escape(text)
-                                + "</a>";
-                    }
-                }
-
-                final boolean bold = run.has("bold")
-                        && run.getBoolean("bold");
-                final boolean italic = run.has("italics")
-                        && run.getBoolean("italics");
-                final boolean strikethrough = run.has("strikethrough")
-                        && run.getBoolean("strikethrough");
-
-                if (bold) {
-                    textBuilder.append("<b>");
-                }
-                if (italic) {
-                    textBuilder.append("<i>");
-                }
-                if (strikethrough) {
-                    textBuilder.append("<s>");
-                }
-
-                textBuilder.append(text);
-
-                if (strikethrough) {
-                    textBuilder.append("</s>");
-                }
-                if (italic) {
-                    textBuilder.append("</i>");
-                }
-                if (bold) {
-                    textBuilder.append("</b>");
-                }
-            } else {
-                textBuilder.append(text);
+        if (runs.isEmpty()) return null;
+        final StringBuilder result = new StringBuilder();
+        for (final JsonObject run : runs.streamAsJsonObjects().toList()) {
+            final String text = run.getString("text");
+            if (text == null) continue;
+            if (!html) {
+                result.append(text);
+                continue;
             }
+
+            final String url = run.has("navigationEndpoint")
+                    ? safeHtmlUrl(getUrlFromNavigationEndpoint(
+                    run.getObject("navigationEndpoint"))) : null;
+            if (url != null) result.append("<a href=\"").append(Entities.escape(url)).append("\">");
+            if (run.getBoolean("bold", false)) result.append("<b>");
+            if (run.getBoolean("italics", false)) result.append("<i>");
+            if (run.getBoolean("strikethrough", false)) result.append("<s>");
+            result.append(Entities.escape(text));
+            if (run.getBoolean("strikethrough", false)) result.append("</s>");
+            if (run.getBoolean("italics", false)) result.append("</i>");
+            if (run.getBoolean("bold", false)) result.append("</b>");
+            if (url != null) result.append("</a>");
         }
-
-        String text = textBuilder.toString();
-
-        if (html) {
-            text = text.replaceAll("\\n", "<br>");
-            text = text.replaceAll(" {2}", " &nbsp;");
-        }
-
-        return text;
+        final String text = result.toString();
+        return html ? htmlSpacing(text) : text;
     }
 
     @Nonnull
@@ -860,24 +832,30 @@ public final class YoutubeParsingHelper {
 
     @Nullable
     public static String getUrlFromObject(final JsonObject textObject) {
-        if (isNullOrEmpty(textObject)) {
-            return null;
+        if (textObject == null) return null;
+        for (final JsonObject textPart : textObject.getArray("runs").streamAsJsonObjects().toList()) {
+            final String url = getUrlFromNavigationEndpoint(textPart.getObject("navigationEndpoint"));
+            if (url != null && !url.isEmpty()) return url;
         }
-
-        final JsonArray runs = textObject.getArray("runs");
-        if (runs.isEmpty()) {
-            return null;
-        }
-
-        for (final Object textPart : runs) {
-            final String url = getUrlFromNavigationEndpoint(((JsonObject) textPart)
-                    .getObject("navigationEndpoint"));
-            if (!isNullOrEmpty(url)) {
-                return url;
-            }
-        }
-
         return null;
+    }
+
+    private static String safeHtmlUrl(final String value) {
+        if (value == null) return null;
+        try {
+            final URI uri = new URI(value);
+            return isHttpUrl(uri) ? uri.toASCIIString() : null;
+        } catch (final URISyntaxException e) {
+            return null;
+        }
+    }
+
+    private static String htmlText(final String value) {
+        return htmlSpacing(Entities.escape(value));
+    }
+
+    private static String htmlSpacing(final String value) {
+        return value.replace("\n", "<br>").replace("  ", " &nbsp;");
     }
 
     @Nullable
