@@ -1,166 +1,86 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
 
-import static com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudSearchQueryHandlerFactory.ITEMS_PER_PAGE;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
-
 import com.vyonex.internal.fallback.InfoItem;
-import com.vyonex.internal.fallback.InfoItemExtractor;
-import com.vyonex.internal.fallback.InfoItemsCollector;
 import com.vyonex.internal.fallback.MetaInfo;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
-import com.vyonex.internal.fallback.utils.Parser;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntUnaryOperator;
 
-import javax.annotation.Nonnull;
+public final class SoundcloudSearchExtractor extends SearchExtractor {
+    private JsonObject results;
 
-public class SoundcloudSearchExtractor extends SearchExtractor {
-    private JsonObject initialSearchObject;
-    private static final String COLLECTION = "collection";
-    private static final String TOTAL_RESULTS = "total_results";
-
-    public SoundcloudSearchExtractor(final StreamingService service,
-                                     final SearchQueryHandler linkHandler) {
-        super(service, linkHandler);
+    public SoundcloudSearchExtractor(final StreamingService service, final SearchQueryHandler handler) {
+        super(service, handler);
     }
 
-    @Nonnull
-    @Override
-    public String getSearchSuggestion() {
-        return "";
-    }
+    @Override public String getSearchSuggestion() { return ""; }
+    @Override public boolean isCorrectedSearch() { return false; }
+    @Override public List<MetaInfo> getMetaInfo() { return List.of(); }
 
-    @Override
-    public boolean isCorrectedSearch() {
-        return false;
-    }
-
-    @Nonnull
-    @Override
-    public List<MetaInfo> getMetaInfo() {
-        return Collections.emptyList();
-    }
-
-    @Nonnull
-    @Override
-    public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        if (initialSearchObject.getInt(TOTAL_RESULTS) > ITEMS_PER_PAGE) {
-            return new InfoItemsPage<>(
-                    collectItems(initialSearchObject.getArray(COLLECTION)),
-                    getNextPageFromCurrentUrl(getUrl(), currentOffset -> ITEMS_PER_PAGE));
-        } else {
-            return new InfoItemsPage<>(
-                    collectItems(initialSearchObject.getArray(COLLECTION)), null);
+    @Override public void onFetchPage(final Downloader downloader)
+            throws IOException, ExtractionException {
+        results = fetch(downloader, getUrl());
+        if (results.getArray("collection").isEmpty()) {
+            throw new SearchExtractor.NothingFoundException("No SoundCloud results");
         }
-
     }
 
-    @Override
-    public InfoItemsPage<InfoItem> getPage(final Page page) throws IOException,
-            ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
-        }
+    @Override public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
+        return page(results);
+    }
 
-        final Downloader dl = getDownloader();
-        final JsonArray searchCollection;
-        final int totalResults;
+    @Override public InfoItemsPage<InfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
+        if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
+            throw new IllegalArgumentException("Search page URL is required");
+        }
+        return page(fetch(getDownloader(), page.getUrl()));
+    }
+
+    private JsonObject fetch(final Downloader downloader, final String url)
+            throws IOException, ExtractionException {
+        final Response response = downloader.get(url, getExtractorLocalization());
+        if (response.responseCode() >= 400) {
+            throw new IOException("SoundCloud search failed with HTTP " + response.responseCode());
+        }
         try {
-            final String response = dl.get(page.getUrl(), getExtractorLocalization())
-                    .responseBody();
-            final JsonObject result = JsonParser.object().from(response);
-            searchCollection = result.getArray(COLLECTION);
-            totalResults = result.getInt(TOTAL_RESULTS);
+            return JsonParser.object().from(response.responseBody());
         } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
-        }
-
-        if (getOffsetFromUrl(page.getUrl()) + ITEMS_PER_PAGE < totalResults) {
-            return new InfoItemsPage<>(collectItems(searchCollection),
-                    getNextPageFromCurrentUrl(page.getUrl(),
-                            currentOffset -> currentOffset + ITEMS_PER_PAGE));
-        }
-        return new InfoItemsPage<>(collectItems(searchCollection), null);
-    }
-
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws IOException,
-            ExtractionException {
-        final Downloader dl = getDownloader();
-        final String url = getUrl();
-        try {
-            final String response = dl.get(url, getExtractorLocalization()).responseBody();
-            initialSearchObject = JsonParser.object().from(response);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
-        }
-
-        if (initialSearchObject.getArray(COLLECTION).isEmpty()) {
-            throw new SearchExtractor.NothingFoundException("Nothing found");
+            throw new ParsingException("Invalid SoundCloud search response", e);
         }
     }
 
-    private InfoItemsCollector<InfoItem, InfoItemExtractor> collectItems(
-            final JsonArray searchCollection) {
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-
-        for (final Object result : searchCollection) {
-            if (!(result instanceof JsonObject)) {
-                continue;
-            }
-
-            final JsonObject searchResult = (JsonObject) result;
-            final String kind = searchResult.getString("kind", "");
-            switch (kind) {
-                case "user":
-                    collector.commit(new SoundcloudChannelInfoItemExtractor(searchResult));
-                    break;
-                case "track":
-                    collector.commit(new SoundcloudStreamInfoItemExtractor(searchResult));
-                    break;
-                case "playlist":
-                    collector.commit(new SoundcloudPlaylistInfoItemExtractor(searchResult));
-                    break;
+    private InfoItemsPage<InfoItem> page(final JsonObject data) {
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        final JsonArray collection = data.getArray("collection");
+        for (final Object value : collection) {
+            if (!(value instanceof JsonObject)) continue;
+            final JsonObject result = (JsonObject) value;
+            switch (result.getString("kind", "")) {
+                case "user" -> items.commit(new SoundcloudChannelInfoItemExtractor(result));
+                case "track" -> items.commit(new SoundcloudStreamInfoItemExtractor(result));
+                case "playlist" -> items.commit(new SoundcloudPlaylistInfoItemExtractor(result));
+                default -> { }
             }
         }
-
-        return collector;
-    }
-
-    private Page getNextPageFromCurrentUrl(final String currentUrl,
-                                           final IntUnaryOperator newPageOffsetCalculator)
-            throws ParsingException {
-        final int currentPageOffset = getOffsetFromUrl(currentUrl);
-
-        return new Page(
-                currentUrl.replace(
-                        "&offset=" + currentPageOffset,
-                        "&offset=" + newPageOffsetCalculator.applyAsInt(currentPageOffset)));
-    }
-
-    private int getOffsetFromUrl(final String url) throws ParsingException {
-        try {
-            return Integer.parseInt(Parser.compatParseMap(new URL(url).getQuery()).get("offset"));
-        } catch (final MalformedURLException e) {
-            throw new ParsingException("Could not get offset from page URL", e);
-        }
+        final String next = data.getString("next_href");
+        return new InfoItemsPage<>(items, next == null || next.isBlank() ? null : new Page(next));
     }
 }

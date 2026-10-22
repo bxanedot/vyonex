@@ -1,141 +1,87 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
-
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL;
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl;
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.getAllImagesFromVisualUrl;
-
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudChannelTabLinkHandlerFactory;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
-import javax.annotation.Nonnull;
-
-public class SoundcloudChannelExtractor extends ChannelExtractor {
+public final class SoundcloudChannelExtractor extends ChannelExtractor {
     private String userId;
     private JsonObject user;
-    private static final String USERS_ENDPOINT = SOUNDCLOUD_API_V2_URL + "users/";
 
-    public SoundcloudChannelExtractor(final StreamingService service,
-                                      final ListLinkHandler linkHandler) {
-        super(service, linkHandler);
+    public SoundcloudChannelExtractor(final StreamingService service, final ListLinkHandler handler) {
+        super(service, handler);
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws IOException,
-            ExtractionException {
-
+    @Override public void onFetchPage(final Downloader downloader)
+            throws IOException, ExtractionException {
         userId = getLinkHandler().getId();
-        final String apiUrl = USERS_ENDPOINT + userId + "?client_id="
-                + SoundcloudParsingHelper.clientId();
-
-        final String response = downloader.get(apiUrl, getExtractorLocalization()).responseBody();
+        final String url = SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL + "users/" + userId
+                + "?client_id=" + SoundcloudParsingHelper.clientId();
+        final Response response = downloader.get(url, getExtractorLocalization());
+        if (response.responseCode() >= 400) {
+            throw new IOException("SoundCloud user request failed with HTTP " + response.responseCode());
+        }
         try {
-            user = JsonParser.object().from(response);
+            user = JsonParser.object().from(response.responseBody());
         } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
+            throw new ParsingException("Invalid SoundCloud user response", e);
         }
     }
 
-    @Nonnull
-    @Override
-    public String getId() {
-        return userId;
+    @Override public String getId() { return userId; }
+    @Override public String getName() { return user.getString("username", ""); }
+    @Override public List<Image> getAvatars() {
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(user.getString("avatar_url"));
     }
-
-    @Nonnull
-    @Override
-    public String getName() {
-        return user.getString("username");
+    @Override public List<Image> getBanners() {
+        final List<Image> images = new ArrayList<>();
+        for (final Object item : user.getObject("visuals").getArray("visuals")) {
+            if (!(item instanceof JsonObject)) continue;
+            final String url = ((JsonObject) item).getString("visual_url");
+            images.addAll(SoundcloudParsingHelper.getAllImagesFromVisualUrl(url));
+        }
+        return images;
     }
+    @Override public String getFeedUrl() { return null; }
+    @Override public long getSubscriberCount() { return user.getLong("followers_count"); }
+    @Override public String getDescription() { return user.getString("description", ""); }
+    @Override public String getParentChannelName() { return ""; }
+    @Override public String getParentChannelUrl() { return ""; }
+    @Override public List<Image> getParentChannelAvatars() { return List.of(); }
+    @Override public boolean isVerified() { return user.getBoolean("verified"); }
 
-    @Nonnull
-    @Override
-    public List<Image> getAvatars() {
-        return getAllImagesFromArtworkOrAvatarUrl(user.getString("avatar_url"));
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getBanners() {
-        return getAllImagesFromVisualUrl(user.getObject("visuals")
-                .getArray("visuals")
-                .getObject(0)
-                .getString("visual_url"));
-    }
-
-    @Override
-    public String getFeedUrl() {
-        return null;
-    }
-
-    @Override
-    public long getSubscriberCount() {
-        return user.getLong("followers_count", 0);
-    }
-
-    @Override
-    public String getDescription() {
-        return user.getString("description", "");
-    }
-
-    @Override
-    public String getParentChannelName() {
-        return "";
-    }
-
-    @Override
-    public String getParentChannelUrl() {
-        return "";
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getParentChannelAvatars() {
-        return List.of();
-    }
-
-    @Override
-    public boolean isVerified() throws ParsingException {
-        return user.getBoolean("verified");
-    }
-
-    @Nonnull
-    @Override
-    public List<ListLinkHandler> getTabs() throws ParsingException {
-        final String url = getUrl();
-        final String urlTracks = url
-                + SoundcloudChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.TRACKS);
-        final String urlPlaylists = url
-                + SoundcloudChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.PLAYLISTS);
-        final String urlAlbums = url
-                + SoundcloudChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.ALBUMS);
-        final String urlLikes = url
-                + SoundcloudChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.LIKES);
+    @Override public List<ListLinkHandler> getTabs() throws ParsingException {
+        final String base = getUrl();
         final String id = getId();
+        final SoundcloudChannelTabLinkHandlerFactory tabs =
+                SoundcloudChannelTabLinkHandlerFactory.getInstance();
+        return List.of(tab(tabs, base, id, ChannelTabs.TRACKS),
+                tab(tabs, base, id, ChannelTabs.PLAYLISTS),
+                tab(tabs, base, id, ChannelTabs.ALBUMS),
+                tab(tabs, base, id, ChannelTabs.LIKES));
+    }
 
-        return List.of(
-                new ListLinkHandler(urlTracks, urlTracks, id,
-                        List.of(ChannelTabs.TRACKS), ""),
-                new ListLinkHandler(urlPlaylists, urlPlaylists, id,
-                        List.of(ChannelTabs.PLAYLISTS), ""),
-                new ListLinkHandler(urlAlbums, urlAlbums, id,
-                        List.of(ChannelTabs.ALBUMS), ""),
-                new ListLinkHandler(urlLikes, urlLikes, id,
-                        List.of(ChannelTabs.LIKES), ""));
+    private static ListLinkHandler tab(final SoundcloudChannelTabLinkHandlerFactory factory,
+                                       final String base, final String id, final String tab) {
+        final String url = base + SoundcloudChannelTabLinkHandlerFactory.getUrlSuffix(tab);
+        return new ListLinkHandler(url, url, id, List.of(tab), "");
     }
 }
