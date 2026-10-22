@@ -6,6 +6,7 @@ import com.vyonex.internal.primary.InnerTubeLogLevel
 import com.vyonex.internal.primary.InnerTubeLogger
 import com.vyonex.internal.primary.cipher.PlayerConfigRepository
 import com.vyonex.internal.primary.cipher.RemotePlayerConfigStore
+import com.vyonex.internal.primary.cipher.DEFAULT_PLAYER_CONFIG_URL
 import com.vyonex.internal.primary.cipher.YouTubeCipherService
 import com.vyonex.internal.primary.extraction.AudioQuality
 import com.vyonex.internal.primary.extraction.ContentHints
@@ -121,7 +122,6 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
     private val repository = object : PlayerConfigRepository {
         override val enabled: Boolean get() = host.configStore.enabled
         override val sourceUrl: String = PLAYER_CONFIG_URL
-        override val defaultSourceUrl: String = PLAYER_CONFIG_URL
         override var cachedJson: String
             get() = host.configStore.getString("json").orEmpty()
             set(value) { host.configStore.putString("json", value) }
@@ -222,8 +222,7 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
     }
 
     private companion object {
-        const val PLAYER_CONFIG_URL =
-            "https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json"
+        const val PLAYER_CONFIG_URL = DEFAULT_PLAYER_CONFIG_URL
         const val LOW_KBPS = 64
         const val EXCLUDE_MS = 10 * 60 * 1000L
         const val MAX_REMEMBERED = 64

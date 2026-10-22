@@ -4,7 +4,6 @@ package com.vyonex.internal.primary.cipher
 interface PlayerConfigRepository {
     val enabled: Boolean
     val sourceUrl: String
-    val defaultSourceUrl: String
 
     var cachedJson: String
     var cachedAtMs: Long
@@ -17,7 +16,6 @@ interface PlayerConfigRepository {
             object : PlayerConfigRepository {
                 override val enabled: Boolean = false
                 override val sourceUrl: String = ""
-                override val defaultSourceUrl: String = ""
                 override var cachedJson: String = ""
                 override var cachedAtMs: Long = 0L
                 override var cachedSourceUrl: String = ""

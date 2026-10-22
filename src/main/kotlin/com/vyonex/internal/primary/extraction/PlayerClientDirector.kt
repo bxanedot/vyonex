@@ -617,7 +617,7 @@ internal class PlayerClientDirector(
                     observedResponse = initialResponse,
                 )
             }
-            // Zemer-style recovery: restricted and uploaded media can return a non-OK
+            // Remote-config recovery: restricted and uploaded media can return a non-OK
             // response until the same client is retried with a fresh PO token. Keep the
             // historical fast path for ordinary media, but do not stop this client early
             // for the content classes that commonly require authenticated attestation.

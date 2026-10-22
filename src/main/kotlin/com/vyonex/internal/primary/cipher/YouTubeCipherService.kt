@@ -26,7 +26,7 @@ import kotlin.time.Clock
  * - N-parameter challenges (throttling prevention)
  * - Signature cipher challenges (URL decryption)
  *
- * Uses Faraday's validated zemer-style player configs first, then yt-dlp EJS
+ * Uses validated remote player configs first, then yt-dlp EJS
  * and regex-based [PlayerScriptParser] fallbacks.
  */
 class YouTubeCipherService(
@@ -52,12 +52,8 @@ class YouTubeCipherService(
 
     private val engine = QuickJsEngine()
     private val ejs = EjsChallengeSolver(engine, logger)
-    private val githubPreprocessedPlayer =
-        remotePlayerConfigStore?.let { store ->
-            GitHubPlayerConfigClient(httpClient, ejs, store.repository, store::validatedSourceUrlOrNull, logger)
-        }
     private val cache = LinkedHashMap<String, CachedSolver>()
-    private val zemerCache = LinkedHashMap<String, CachedZemerSolver>()
+    private val playerConfigCipherCache = LinkedHashMap<String, CachedPlayerConfigSolver>()
     private val playerCodeCache = LinkedHashMap<String, String>()
     private val playerCodeDownloads = mutableMapOf<String, CompletableDeferred<String>>()
     private val cacheMutex = Mutex()
@@ -77,10 +73,10 @@ class YouTubeCipherService(
         val sigSolver: suspend (String) -> String?,
     )
 
-    private data class CachedZemerSolver(
+    private data class CachedPlayerConfigSolver(
         val config: RemotePlayerConfigParser.HardcodedPlayerConfig,
         val configEpoch: Long,
-        val solver: ZemerCipherSolver,
+        val solver: PlayerConfigCipherSolver,
     )
 
     private data class RemoteSolveResult(
@@ -110,7 +106,7 @@ class YouTubeCipherService(
 
     /**
      * Notify the remote config workflow that a deciphered stream was rejected by
-     * the CDN. Zemer treats this as a distinct signal from an unknown player hash
+     * the CDN. This is distinct from an unknown player hash
      * because a stale solver can return a syntactically valid but wrong signature.
      */
     suspend fun refreshAfterStreamRejection(): Boolean = remotePlayerConfigStore?.refreshAfterStreamRejection() ?: false
@@ -238,10 +234,10 @@ class YouTubeCipherService(
                 val directNChallenges = working.mapNotNull { it.url?.extractNParameter() }.distinct()
                 val initialNChallenges = (nChallengesFromCipherUrls + directNChallenges).distinct()
                 var remoteNRequested = initialNChallenges.toSet()
-                val zemerSolved =
+                val remoteConfigSolved =
                     if (sigChallenges.isNotEmpty() || initialNChallenges.isNotEmpty()) {
-                        val faradayStartMs = Clock.System.now().toEpochMilliseconds()
-                        solveWithZemerConfig(
+                        val remoteConfigStartMs = Clock.System.now().toEpochMilliseconds()
+                        solveWithPlayerConfig(
                             playerUrl = playerUrl,
                             sigValues = sigChallenges,
                             nValues = initialNChallenges,
@@ -249,7 +245,7 @@ class YouTubeCipherService(
                             if (solved.sigByChallenge.isNotEmpty() || solved.nByChallenge.isNotEmpty()) {
                                 logger.d(
                                     TAG,
-                                    "Faraday zemer config done sigRequested=${sigChallenges.size} sigSolved=${solved.sigByChallenge.size} nRequested=${initialNChallenges.size} nSolved=${solved.nByChallenge.size} elapsed=${Clock.System.now().toEpochMilliseconds() - faradayStartMs}ms player=${playerUrl.logId()}",
+                                    "Remote player config done sigRequested=${sigChallenges.size} sigSolved=${solved.sigByChallenge.size} nRequested=${initialNChallenges.size} nSolved=${solved.nByChallenge.size} elapsed=${Clock.System.now().toEpochMilliseconds() - remoteConfigStartMs}ms player=${playerUrl.logId()}",
                                 )
                             }
                         }
@@ -257,17 +253,7 @@ class YouTubeCipherService(
                         RemoteSolveResult(emptyMap(), emptyMap())
                     }
 
-                val legacyRemoteSolved =
-                    solveWithGitHubConfig(
-                        playerUrl = playerUrl,
-                        sigValues = sigChallenges.filterNot { it in zemerSolved.sigByChallenge },
-                        nValues = initialNChallenges.filterNot { it in zemerSolved.nByChallenge },
-                    )
-                val remoteSolved =
-                    RemoteSolveResult(
-                        sigByChallenge = zemerSolved.sigByChallenge + legacyRemoteSolved.sigByChallenge,
-                        nByChallenge = zemerSolved.nByChallenge + legacyRemoteSolved.nByChallenge,
-                    )
+                val remoteSolved = remoteConfigSolved
 
                 val solvedNFromSignaturePass = remoteSolved.nByChallenge.toMutableMap()
                 val preferLocalPreprocessed = remoteSolved.sigByChallenge.isEmpty() && remoteSolved.nByChallenge.isEmpty()
@@ -357,25 +343,19 @@ class YouTubeCipherService(
                     val solvedN = solvedNFromSignaturePass.toMutableMap()
                     val missingRemoteChallenges = nChallenges.filterNot { it in solvedN || it in remoteNRequested }
                     if (missingRemoteChallenges.isNotEmpty()) {
-                        val faradayStartMs = Clock.System.now().toEpochMilliseconds()
-                        val zemerSolvedN =
-                            solveWithZemerConfig(
+                        val remoteConfigStartMs = Clock.System.now().toEpochMilliseconds()
+                        val remoteConfigSolvedN =
+                            solveWithPlayerConfig(
                                 playerUrl = playerUrl,
                                 sigValues = emptyList(),
                                 nValues = missingRemoteChallenges,
                             ).nByChallenge
-                        val legacySolvedN =
-                            solveWithGitHubConfig(
-                                playerUrl = playerUrl,
-                                sigValues = emptyList(),
-                                nValues = missingRemoteChallenges.filterNot { it in zemerSolvedN },
-                            ).nByChallenge
-                        val remoteSolvedN = zemerSolvedN + legacySolvedN
+                        val remoteSolvedN = remoteConfigSolvedN
                         solvedN += remoteSolvedN
                         if (remoteSolvedN.isNotEmpty()) {
                             logger.d(
                                 TAG,
-                                "n remote config done tasks=${nTasks.size} requested=${missingRemoteChallenges.size} solved=${remoteSolvedN.size} elapsed=${Clock.System.now().toEpochMilliseconds() - faradayStartMs}ms player=${playerUrl.logId()}",
+                                "n remote config done tasks=${nTasks.size} requested=${missingRemoteChallenges.size} solved=${remoteSolvedN.size} elapsed=${Clock.System.now().toEpochMilliseconds() - remoteConfigStartMs}ms player=${playerUrl.logId()}",
                             )
                         }
                     }
@@ -549,7 +529,7 @@ class YouTubeCipherService(
                     val params = parseCipherParams(cipher)
                     val url = params["url"] ?: return@operation null
                     val signature = params["s"] ?: return@operation null
-                    solveWithZemerConfig(
+                    solveWithPlayerConfig(
                         playerUrl = playerUrl,
                         sigValues = listOf(signature),
                         nValues = emptyList(),
@@ -557,15 +537,6 @@ class YouTubeCipherService(
                         val sigParam = params["sp"] ?: "signature"
                         return@operation appendQueryParameter(url, sigParam, solvedSig)
                     }
-                    solveWithGitHubConfig(
-                        playerUrl = playerUrl,
-                        sigValues = listOf(signature),
-                        nValues = emptyList(),
-                    ).sigByChallenge[signature]
-                        ?.let { solvedSig ->
-                            val sigParam = params["sp"] ?: "signature"
-                            return@operation appendQueryParameter(url, sigParam, solvedSig)
-                        }
                     val solver = getOrCreateSolver(playerUrl)
                     val solvedSig =
                         solver.sigSolver(signature).takeUnless { it.isNullOrBlank() }
@@ -610,21 +581,13 @@ class YouTubeCipherService(
                 try {
                     val nMatch = url.findNParameter() ?: return@operation null
                     val nValue = nMatch.groupValues[1]
-                    solveWithZemerConfig(
+                    solveWithPlayerConfig(
                         playerUrl = playerUrl,
                         sigValues = emptyList(),
                         nValues = listOf(nValue),
                     ).nByChallenge[nValue]?.let { solvedN ->
                         return@operation replaceQueryParameter(url, nMatch, solvedN)
                     }
-                    solveWithGitHubConfig(
-                        playerUrl = playerUrl,
-                        sigValues = emptyList(),
-                        nValues = listOf(nValue),
-                    ).nByChallenge[nValue]
-                        ?.let { solvedN ->
-                            return@operation replaceQueryParameter(url, nMatch, solvedN)
-                        }
                     val solver = getOrCreateSolver(playerUrl)
                     val solvedN =
                         solver.nSolver(nValue).takeUnless { it.isNullOrBlank() }
@@ -651,7 +614,7 @@ class YouTubeCipherService(
             }
         }
 
-    private suspend fun solveWithZemerConfig(
+    private suspend fun solveWithPlayerConfig(
         playerUrl: String,
         sigValues: List<String>,
         nValues: List<String>,
@@ -666,11 +629,11 @@ class YouTubeCipherService(
             config = configStore.getConfig(playerUrl)
         }
         val activeConfig = config ?: return RemoteSolveResult(emptyMap(), emptyMap())
-        val faradayPlayerUrl = faradayCipherPlayerUrl(playerUrl) ?: return RemoteSolveResult(emptyMap(), emptyMap())
+        val configuredPlayerUrl = configuredCipherPlayerUrl(playerUrl) ?: return RemoteSolveResult(emptyMap(), emptyMap())
 
         return try {
-            val playerCode = getOrDownloadPlayerCode(faradayPlayerUrl, cached = null).code
-            val solver = getOrCreateZemerSolver(faradayPlayerUrl, playerCode, activeConfig, configStore.configEpoch)
+            val playerCode = getOrDownloadPlayerCode(configuredPlayerUrl, cached = null).code
+            val solver = getOrCreateConfigCipherSolver(configuredPlayerUrl, playerCode, activeConfig, configStore.configEpoch)
             RemoteSolveResult(
                 sigByChallenge =
                     sigValues
@@ -688,47 +651,37 @@ class YouTubeCipherService(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logger.d(TAG, "Faraday zemer config failed player=${playerUrl.logId()} type=${e.logType()}")
+            logger.d(TAG, "Remote player config failed player=${playerUrl.logId()} type=${e.logType()}")
             RemoteSolveResult(emptyMap(), emptyMap())
         }
     }
 
-    private suspend fun solveWithGitHubConfig(
-        playerUrl: String,
-        sigValues: List<String>,
-        nValues: List<String>,
-    ): RemoteSolveResult {
-        val client = githubPreprocessedPlayer ?: return RemoteSolveResult(emptyMap(), emptyMap())
-        val result = client.solve(playerUrl, sigValues, nValues)
-        return RemoteSolveResult(result.sigByChallenge, result.nByChallenge)
-    }
-
-    private suspend fun getOrCreateZemerSolver(
+    private suspend fun getOrCreateConfigCipherSolver(
         playerUrl: String,
         playerCode: String,
         config: RemotePlayerConfigParser.HardcodedPlayerConfig,
         configEpoch: Long,
-    ): ZemerCipherSolver {
-        var evicted = emptyList<CachedZemerSolver>()
-        var replaced: CachedZemerSolver? = null
+    ): PlayerConfigCipherSolver {
+        var evicted = emptyList<CachedPlayerConfigSolver>()
+        var replaced: CachedPlayerConfigSolver? = null
         val solver =
             cacheMutex.withLock {
-                zemerCache[playerUrl]?.let { cached ->
+                playerConfigCipherCache[playerUrl]?.let { cached ->
                     if (cached.config == config && cached.configEpoch == configEpoch) {
-                        zemerCache.remove(playerUrl)
-                        zemerCache[playerUrl] = cached
+                        playerConfigCipherCache.remove(playerUrl)
+                        playerConfigCipherCache[playerUrl] = cached
                         return@withLock cached.solver
                     }
                 }
-                ZemerCipherSolver.create(playerCode, config).also { created ->
-                    replaced = zemerCache.remove(playerUrl)
-                    zemerCache[playerUrl] =
-                        CachedZemerSolver(
+                PlayerConfigCipherSolver.create(playerCode, config).also { created ->
+                    replaced = playerConfigCipherCache.remove(playerUrl)
+                    playerConfigCipherCache[playerUrl] =
+                        CachedPlayerConfigSolver(
                             config = config,
                             configEpoch = configEpoch,
                             solver = created,
                         )
-                    evicted = trimZemerCacheLocked()
+                    evicted = trimPlayerConfigCipherCacheLocked()
                 }
             }
         replaced?.solver?.dispose()
@@ -911,11 +864,11 @@ class YouTubeCipherService(
         return evicted
     }
 
-    private fun trimZemerCacheLocked(): List<CachedZemerSolver> {
-        val evicted = mutableListOf<CachedZemerSolver>()
-        while (zemerCache.size > MAX_PLAYER_CACHE_ENTRIES) {
-            val oldestKey = zemerCache.keys.firstOrNull() ?: break
-            zemerCache.remove(oldestKey)?.let(evicted::add)
+    private fun trimPlayerConfigCipherCacheLocked(): List<CachedPlayerConfigSolver> {
+        val evicted = mutableListOf<CachedPlayerConfigSolver>()
+        while (playerConfigCipherCache.size > MAX_PLAYER_CACHE_ENTRIES) {
+            val oldestKey = playerConfigCipherCache.keys.firstOrNull() ?: break
+            playerConfigCipherCache.remove(oldestKey)?.let(evicted::add)
         }
         return evicted
     }
@@ -1036,18 +989,18 @@ class YouTubeCipherService(
      */
     suspend fun dispose() =
         operationMutex.withLock {
-            val (cachedSolvers, cachedZemerSolvers) =
+            val (cachedSolvers, cachedConfigSolvers) =
                 cacheMutex.withLock {
                     val solvers = cache.values.toList()
-                    val zemerSolvers = zemerCache.values.toList()
+                    val configSolvers = playerConfigCipherCache.values.toList()
                     cache.clear()
-                    zemerCache.clear()
+                    playerConfigCipherCache.clear()
                     playerCodeCache.clear()
                     playerCodeDownloads.clear()
-                    solvers to zemerSolvers
+                    solvers to configSolvers
                 }
             cachedSolvers.forEach { it.engine.dispose() }
-            cachedZemerSolvers.forEach { it.solver.dispose() }
+            cachedConfigSolvers.forEach { it.solver.dispose() }
             engine.dispose()
         }
 

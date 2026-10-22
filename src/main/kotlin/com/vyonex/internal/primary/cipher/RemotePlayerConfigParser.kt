@@ -109,22 +109,6 @@ internal object RemotePlayerConfigParser {
         return null
     }
 
-    internal fun parseLegacySignatureTimestamp(
-        jsonText: String,
-        expectedPlayerHash: String,
-    ): Int? {
-        val root = runCatching { Json.parseToJsonElement(jsonText) as? JsonObject }.getOrNull() ?: return null
-        val playerHash = (root["playerHash"] as? JsonPrimitive)?.content
-        if (playerHash != null && playerHash != expectedPlayerHash) return null
-        val player = root["player"] as? JsonObject
-        return root.positiveInt("signatureTimestamp")
-            ?: root.positiveInt("sts")
-            ?: player?.positiveInt("signatureTimestamp")
-            ?: player?.positiveInt("sts")
-    }
-
-    private fun JsonObject.positiveInt(name: String): Int? = (get(name) as? JsonPrimitive)?.content?.toIntOrNull()?.takeIf { it > 0 }
-
     private fun parseEntry(
         hash: String,
         obj: JsonObject?,

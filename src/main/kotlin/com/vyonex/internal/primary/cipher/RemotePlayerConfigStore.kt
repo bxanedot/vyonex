@@ -17,13 +17,15 @@ import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 
+internal const val DEFAULT_PLAYER_CONFIG_URL =
+    "https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json"
+
 /**
- * Runtime store for Faraday/Zemer-style player configs.
+ * Runtime store for validated remote player configs.
  *
  * The store deliberately separates the normal six-hour refresh from the two
- * failure-triggered refreshes used by Zemer: an unknown player hash and a CDN
- * rejection. Both failure paths are single-flight and rate-limited so a bad
- * player rotation cannot create a request storm.
+ * failure-triggered refreshes: an unknown player hash and a CDN rejection.
+ * Both failure paths are single-flight and rate-limited.
  */
 class RemotePlayerConfigStore private constructor(
     private val httpClient: HttpClient,
@@ -49,17 +51,12 @@ class RemotePlayerConfigStore private constructor(
         private const val FAILURE_RETRY_MS = 60 * 1000L
         private const val FAILURE_REFRESH_COOLDOWN_MS = 5 * 60 * 1000L
         private const val REQUEST_TIMEOUT_MS = 5_000L
-        private const val MAX_LEGACY_TIMESTAMP_CACHE_ENTRIES = 16
         private const val MAX_CONFIG_RESPONSE_BYTES = 4 * 1024 * 1024
-        private const val LEGACY_FARADAY_CONFIG_URL =
-            "https://github.com/bxane/faraday/releases/download/{playerTag}/{playerHash}.json"
         private const val OKHTTP_USER_AGENT = "okhttp/5.4.0"
     }
 
     private val mutex = Mutex()
     private val refreshMutex = Mutex()
-    private val legacyTimestampCache = LinkedHashMap<String, CachedLegacyTimestamp>()
-
     @Volatile
     private var configs: Map<String, RemotePlayerConfigParser.HardcodedPlayerConfig> = emptyMap()
 
@@ -88,11 +85,6 @@ class RemotePlayerConfigStore private constructor(
 
     @Volatile
     private var lastStreamRejectionRefreshAtMs: Long = 0L
-
-    private data class CachedLegacyTimestamp(
-        val value: Int?,
-        val fetchedAtMs: Long,
-    )
 
     private data class RefreshResult(
         val changed: Boolean,
@@ -289,8 +281,7 @@ class RemotePlayerConfigStore private constructor(
             }
         }
 
-    suspend fun getSignatureTimestamp(playerUrl: String): Int? =
-        getConfig(playerUrl)?.signatureTimestamp ?: getLegacySignatureTimestamp(playerUrl)
+    suspend fun getSignatureTimestamp(playerUrl: String): Int? = getConfig(playerUrl)?.signatureTimestamp
 
     internal suspend fun getConfig(playerUrl: String): RemotePlayerConfigParser.HardcodedPlayerConfig? {
         if (!repository.enabled) return null
@@ -359,72 +350,12 @@ class RemotePlayerConfigStore private constructor(
         }
     }
 
-    private suspend fun getLegacySignatureTimestamp(playerUrl: String): Int? {
-        if (!repository.enabled) return null
-        val playerHash = RemotePlayerConfigParser.extractPlayerHash(playerUrl) ?: return null
-        val url = legacyConfigUrl(playerHash) ?: return null
-        val now = nowMs()
-        mutex.withLock {
-            legacyTimestampCache
-                .remove(url)
-                ?.takeIf { now - it.fetchedAtMs < REFRESH_TTL_MS }
-                ?.let { cached ->
-                    legacyTimestampCache[url] = cached
-                    return cached.value
-                }
-        }
-
-        val value =
-            try {
-                val response =
-                    httpClient.getTextWithoutRedirects(Url(url), MAX_CONFIG_RESPONSE_BYTES) {
-                        header(HttpHeaders.UserAgent, OKHTTP_USER_AGENT)
-                        header(HttpHeaders.Accept, "application/json")
-                        timeout {
-                            requestTimeoutMillis = REQUEST_TIMEOUT_MS
-                            connectTimeoutMillis = REQUEST_TIMEOUT_MS
-                            socketTimeoutMillis = REQUEST_TIMEOUT_MS
-                        }
-                    }
-                response.body?.let { body -> RemotePlayerConfigParser.parseLegacySignatureTimestamp(body, playerHash) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                logger.d(TAG, "Legacy player config timestamp unavailable hash=$playerHash type=${e.logType()}")
-                null
-            }
-
-        mutex.withLock {
-            legacyTimestampCache[url] = CachedLegacyTimestamp(value, now)
-            while (legacyTimestampCache.size > MAX_LEGACY_TIMESTAMP_CACHE_ENTRIES) {
-                legacyTimestampCache.remove(legacyTimestampCache.keys.firstOrNull() ?: break)
-            }
-        }
-        return value
-    }
-
-    private fun legacyConfigUrl(playerHash: String): String? {
-        val configured = repository.sourceUrl.trim()
-        if (
-            configured.isBlank() ||
-            configured == LEGACY_FARADAY_CONFIG_URL ||
-            configured.substringBefore('?').endsWith("/player_configs.json")
-        ) {
-            return null
-        }
-        return configured
-            .replace("{playerHash}", playerHash)
-            .replace("{playerTag}", "player-$playerHash")
-            .takeIf { validatedSourceUrlOrNull(it) != null }
-    }
-
     private fun configuredUrl(): String? =
         repository.sourceUrl
             .trim()
             .takeIf { it.isNotBlank() }
             ?.let { configured ->
                 when {
-                    configured == LEGACY_FARADAY_CONFIG_URL -> repository.defaultSourceUrl
                     configured.substringBefore('?').endsWith("/player_configs.json") -> configured
                     else -> null
                 }
@@ -435,12 +366,7 @@ class RemotePlayerConfigStore private constructor(
             .getOrNull()
             ?.takeIf { url ->
                 url.protocol.name == "https" &&
-                    when (url.host) {
-                        "raw.githubusercontent.com" -> url.encodedPath.startsWith("/bxane/faraday/")
-                        "cdn.jsdelivr.net" -> url.encodedPath.startsWith("/gh/bxane/faraday@")
-                        "github.com" -> url.encodedPath.startsWith("/bxane/faraday/releases/download/")
-                        else -> false
-                    }
+                    value == DEFAULT_PLAYER_CONFIG_URL
             }
 
     private fun Throwable.logType(): String = this::class.simpleName ?: "Exception"

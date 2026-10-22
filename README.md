@@ -1,11 +1,26 @@
 # VyonEx
 
-VyonEx is one Kotlin/JVM library for YouTube media extraction. One Gradle dependency under the com.vyonex namespace.
+VyonEx is one Kotlin/JVM library for media extraction under the `com.vyonex` namespace.
 
-## Coordinates
+## Install locally
+
+The artifact is not published to a public Maven repository yet. Build and install it into your local Maven cache:
+
+```text
+./gradlew publishToMavenLocal
+```
+
+Then add `mavenLocal()` to the consuming project's repositories:
 
 ```kotlin
-implementation("com.vyonex:vyonex:0.1.0")
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation("com.vyonex:vyonex:0.1.0")
+}
 ```
 
 ## Compatibility
@@ -17,12 +32,12 @@ implementation("com.vyonex:vyonex:0.1.0")
 ## Build
 
 ```text
-./gradlew compileKotlin jar
+./gradlew clean test jar publishToMavenLocal
 ```
 
 ## License
 
-VyonEx releases are distributed under GPL-3.0-only. The prior Apache-2.0 license text is retained in LICENSE-APACHE. Copyright and license notices remain in the relevant source files.
+VyonEx is distributed under GPL-3.0-only. Third-party code and data sources are listed in [ATTRIBUTION.md](ATTRIBUTION.md); the applicable GPL and Apache license texts are included in the repository and published jar.
 
 ## Contributors
 

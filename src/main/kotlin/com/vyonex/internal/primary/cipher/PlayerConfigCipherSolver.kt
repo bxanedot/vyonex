@@ -3,12 +3,12 @@ package com.vyonex.internal.primary.cipher
 
 import kotlinx.coroutines.CancellationException
 
-internal fun faradayCipherPlayerUrl(playerUrl: String): String? =
+internal fun configuredCipherPlayerUrl(playerUrl: String): String? =
     RemotePlayerConfigParser.extractPlayerHash(playerUrl)?.let { hash ->
         "https://www.youtube.com/s/player/$hash/player_ias.vflset/en_GB/base.js"
     }
 
-internal class ZemerCipherSolver private constructor(
+internal class PlayerConfigCipherSolver private constructor(
     private val engine: QuickJsEngine,
 ) {
     companion object {
@@ -19,7 +19,7 @@ internal class ZemerCipherSolver private constructor(
         suspend fun create(
             playerCode: String,
             config: RemotePlayerConfigParser.HardcodedPlayerConfig,
-        ): ZemerCipherSolver {
+        ): PlayerConfigCipherSolver {
             val engine = QuickJsEngine()
             try {
                 engine.initialize()
@@ -33,8 +33,8 @@ internal class ZemerCipherSolver private constructor(
                         probe != N_PROBE_INPUT &&
                         probe.length >= 5 &&
                         VALID_N_RESULT.matches(probe),
-                ) { "Faraday n-transform probe failed" }
-                return ZemerCipherSolver(engine)
+                ) { "n-transform probe failed" }
+                return PlayerConfigCipherSolver(engine)
             } catch (e: CancellationException) {
                 engine.dispose()
                 throw e
