@@ -73,6 +73,8 @@ public final class MediaCCCRecentKioskExtractor implements StreamInfoItemExtract
     @Nullable
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        return new DateWrapper(ZonedDateTime.parse(getTextualUploadDate(), DATE_FORMAT).toInstant());
+        final String date = getTextualUploadDate();
+        return date == null ? null
+                : new DateWrapper(ZonedDateTime.parse(date, DATE_FORMAT).toInstant());
     }
 }
