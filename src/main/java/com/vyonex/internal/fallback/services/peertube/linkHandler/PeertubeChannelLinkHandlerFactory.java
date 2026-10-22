@@ -1,89 +1,69 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.ServiceList;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Parser;
 
-import javax.annotation.Nonnull;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.List;
 
 public final class PeertubeChannelLinkHandlerFactory extends ListLinkHandlerFactory {
-
-    private static final PeertubeChannelLinkHandlerFactory INSTANCE
-            = new PeertubeChannelLinkHandlerFactory();
-    private static final String ID_PATTERN = "((accounts|a)|(video-channels|c))/([^/?&#]*)";
-    private static final String ID_URL_PATTERN = "/((accounts|a)|(video-channels|c))/([^/?&#]*)";
     public static final String API_ENDPOINT = "/api/v1/";
+    private static final PeertubeChannelLinkHandlerFactory INSTANCE =
+            new PeertubeChannelLinkHandlerFactory();
 
-    private PeertubeChannelLinkHandlerFactory() {
-    }
+    private PeertubeChannelLinkHandlerFactory() { }
 
-    public static PeertubeChannelLinkHandlerFactory getInstance() {
-        return INSTANCE;
+    public static PeertubeChannelLinkHandlerFactory getInstance() { return INSTANCE; }
+
+    @Override
+    public String getId(final String url) throws ParsingException {
+        final List<String> path = PeertubeUrl.segments(url);
+        final int index = path.size() > 2 && "api".equals(path.get(0))
+                && "v1".equals(path.get(1)) ? 2 : 0;
+        if (path.size() <= index + 1) throw new ParsingException("URL has no channel ID");
+        final String prefix = switch (path.get(index)) {
+            case "accounts", "a" -> "accounts";
+            case "video-channels", "c" -> "video-channels";
+            default -> throw new ParsingException("URL does not identify a PeerTube channel");
+        };
+        return prefix + "/" + path.get(index + 1);
     }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        return fixId(Parser.matchGroup(ID_URL_PATTERN, url, 0));
+    public String getUrl(final String id, final List<String> contentFilters,
+                         final String sortFilter) throws ParsingException {
+        return getUrl(id, contentFilters, sortFilter, ServiceList.PeerTube.getBaseUrl());
     }
 
     @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilters,
-                         final String searchFilter)
-            throws ParsingException, UnsupportedOperationException {
-        return getUrl(id, contentFilters, searchFilter, ServiceList.PeerTube.getBaseUrl());
-    }
-
-    @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilter,
-                         final String sortFilter,
-                         final String baseUrl)
-            throws ParsingException, UnsupportedOperationException {
-        if (id.matches(ID_PATTERN)) {
-            return baseUrl + "/" + fixId(id);
-        } else {
-            // This is needed for compatibility with older versions were we didn't support
-            // video channels yet
-            return baseUrl + "/accounts/" + id;
-        }
+    public String getUrl(final String id, final List<String> contentFilters,
+                         final String sortFilter, final String baseUrl) throws ParsingException {
+        return baseUrl + "/" + canonicalId(id);
     }
 
     @Override
     public boolean onAcceptUrl(final String url) {
         try {
-            new URL(url);
-            return url.contains("/accounts/") || url.contains("/a/")
-                    || url.contains("/video-channels/") || url.contains("/c/");
-        } catch (final MalformedURLException e) {
+            getId(url);
+            return true;
+        } catch (final ParsingException e) {
             return false;
         }
     }
 
-    /**
-     * Fix id
-     *
-     * <p>
-     * a/:accountName and c/:channelName ids are supported
-     * by the PeerTube web client (>= v3.3.0)
-     * but not by the API.
-     * </p>
-     *
-     * @param id the id to fix
-     * @return the fixed id
-     */
-    private String fixId(@Nonnull final String id) {
-        final String cleanedId = id.startsWith("/") ? id.substring(1) : id;
-        if (cleanedId.startsWith("a/")) {
-            return "accounts" + cleanedId.substring(1);
-        } else if (cleanedId.startsWith("c/")) {
-            return "video-channels" + cleanedId.substring(1);
+    private String canonicalId(final String id) throws ParsingException {
+        final String[] parts = id.split("/", -1);
+        if (parts.length == 2 && !parts[1].isBlank()) {
+            return switch (parts[0]) {
+                case "accounts", "a" -> "accounts/" + parts[1];
+                case "video-channels", "c" -> "video-channels/" + parts[1];
+                default -> throw new ParsingException("Unsupported PeerTube channel ID: " + id);
+            };
         }
-        return cleanedId;
+        if (parts.length == 1 && !id.isBlank()) return "accounts/" + id;
+        throw new ParsingException("Invalid PeerTube channel ID: " + id);
     }
 }

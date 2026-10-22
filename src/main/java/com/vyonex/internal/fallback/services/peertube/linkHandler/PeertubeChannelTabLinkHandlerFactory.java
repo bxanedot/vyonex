@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
@@ -10,63 +12,51 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public final class PeertubeChannelTabLinkHandlerFactory extends ListLinkHandlerFactory {
-    private static final PeertubeChannelTabLinkHandlerFactory INSTANCE
-            = new PeertubeChannelTabLinkHandlerFactory();
+    private static final PeertubeChannelTabLinkHandlerFactory INSTANCE =
+            new PeertubeChannelTabLinkHandlerFactory();
 
-    private PeertubeChannelTabLinkHandlerFactory() {
-    }
+    private PeertubeChannelTabLinkHandlerFactory() { }
 
-    public static PeertubeChannelTabLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
+    public static PeertubeChannelTabLinkHandlerFactory getInstance() { return INSTANCE; }
 
     @Nonnull
-    public static String getUrlSuffix(@Nonnull final String tab)
-            throws UnsupportedTabException {
-        switch (tab) {
-            case ChannelTabs.VIDEOS:
-                return "/videos";
-            case ChannelTabs.CHANNELS: // only available on accounts
-                return "/video-channels";
-            case ChannelTabs.PLAYLISTS: // only available on channels
-                return "/video-playlists";
-        }
-        throw new UnsupportedTabException(tab);
+    public static String getUrlSuffix(@Nonnull final String tab) throws UnsupportedTabException {
+        return switch (tab) {
+            case ChannelTabs.VIDEOS -> "/videos";
+            case ChannelTabs.CHANNELS -> "/video-channels";
+            case ChannelTabs.PLAYLISTS -> "/video-playlists";
+            default -> throw new UnsupportedTabException(tab);
+        };
     }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
+    public String getId(final String url) throws ParsingException {
         return PeertubeChannelLinkHandlerFactory.getInstance().getId(url);
     }
 
     @Override
-    public String getUrl(final String id, final List<String> contentFilter, final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
-        return PeertubeChannelLinkHandlerFactory.getInstance().getUrl(id)
-                + getUrlSuffix(contentFilter.get(0));
+    public String getUrl(final String id, final List<String> filters, final String sortFilter)
+            throws ParsingException {
+        return getUrl(id, filters, sortFilter, null);
     }
 
     @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilter,
-                         final String sortFilter,
-                         final String baseUrl)
-            throws ParsingException, UnsupportedOperationException {
-        return PeertubeChannelLinkHandlerFactory.getInstance().getUrl(id, null, null, baseUrl)
-                + getUrlSuffix(contentFilter.get(0));
+    public String getUrl(final String id, final List<String> filters, final String sortFilter,
+                         final String baseUrl) throws ParsingException {
+        if (filters.isEmpty()) throw new ParsingException("PeerTube channel tab is missing");
+        final var channels = PeertubeChannelLinkHandlerFactory.getInstance();
+        final String channelUrl = baseUrl == null
+                ? channels.getUrl(id) : channels.getUrl(id, filters, sortFilter, baseUrl);
+        return channelUrl + getUrlSuffix(filters.get(0));
     }
 
     @Override
-    public boolean onAcceptUrl(final String url) throws ParsingException {
+    public boolean onAcceptUrl(final String url) {
         return PeertubeChannelLinkHandlerFactory.getInstance().onAcceptUrl(url);
     }
 
     @Override
     public String[] getAvailableContentFilter() {
-        return new String[] {
-                ChannelTabs.VIDEOS,
-                ChannelTabs.CHANNELS,
-                ChannelTabs.PLAYLISTS,
-        };
+        return new String[] { ChannelTabs.VIDEOS, ChannelTabs.CHANNELS, ChannelTabs.PLAYLISTS };
     }
 }

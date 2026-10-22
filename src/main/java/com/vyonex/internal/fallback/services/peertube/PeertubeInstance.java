@@ -1,29 +1,28 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.peertube;
 
+import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 
-import com.vyonex.internal.fallback.VyonEx;
-import com.vyonex.internal.fallback.downloader.Response;
-import com.vyonex.internal.fallback.exceptions.ParsingException;
-import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
-import com.vyonex.internal.fallback.utils.JsonUtils;
-import com.vyonex.internal.fallback.utils.Utils;
-
 import java.io.IOException;
 
 public class PeertubeInstance {
+    public static final PeertubeInstance DEFAULT_INSTANCE =
+            new PeertubeInstance("https://framatube.org", "FramaTube");
 
     private final String url;
     private String name;
-    public static final PeertubeInstance DEFAULT_INSTANCE
-            = new PeertubeInstance("https://framatube.org", "FramaTube");
 
     public PeertubeInstance(final String url) {
-        this.url = url;
-        this.name = "PeerTube";
+        this(url, "PeerTube");
     }
 
     public PeertubeInstance(final String url, final String name) {
@@ -31,32 +30,32 @@ public class PeertubeInstance {
         this.name = name;
     }
 
-    public String getUrl() {
-        return url;
-    }
+    public String getUrl() { return url; }
 
     public void fetchInstanceMetaData() throws Exception {
+        final Downloader downloader = VyonEx.getDownloader();
+        if (downloader == null) throw new Exception("VyonEx has not been initialized");
         final Response response;
         try {
-            response = VyonEx.getDownloader().get(url + "/api/v1/config");
-        } catch (ReCaptchaException | IOException e) {
-            throw new Exception("unable to configure instance " + url, e);
+            response = downloader.get(url + "/api/v1/config");
+        } catch (final ReCaptchaException | IOException e) {
+            throw new Exception("Unable to load PeerTube instance metadata from " + url, e);
         }
-
-        if (response == null || Utils.isBlank(response.responseBody())) {
-            throw new Exception("unable to configure instance " + url);
+        if (response == null || response.responseBody().isBlank()) {
+            throw new Exception("PeerTube instance returned an empty configuration");
         }
 
         try {
-            final JsonObject json = JsonParser.object().from(response.responseBody());
-            this.name = JsonUtils.getString(json, "instance.name");
-        } catch (JsonParserException | ParsingException e) {
-            throw new Exception("unable to parse instance config", e);
+            final JsonObject config = JsonParser.object().from(response.responseBody());
+            final String discovered = config.getObject("instance").getString("name");
+            if (discovered == null || discovered.isBlank()) {
+                throw new ParsingException("PeerTube configuration has no instance name");
+            }
+            name = discovered;
+        } catch (final JsonParserException | ParsingException e) {
+            throw new Exception("Unable to parse PeerTube instance metadata", e);
         }
     }
 
-    public String getName() {
-        return name;
-    }
-
+    public String getName() { return name; }
 }
