@@ -315,15 +315,23 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Override
     public long getLength() throws ParsingException {
         assertPageFetched();
+        return extractVideoDuration(playerResponse.getObject(VIDEO_DETAILS), Arrays.asList(
+                androidStreamingData, iosStreamingData));
+    }
 
-        try {
-            final String duration = playerResponse.getObject(VIDEO_DETAILS)
-                    .getString("lengthSeconds");
-            return Long.parseLong(duration);
-        } catch (final Exception e) {
-            return getDurationFromFirstAdaptiveFormat(Arrays.asList(
-                    androidStreamingData, iosStreamingData));
+    static long extractVideoDuration(@Nonnull final JsonObject videoDetails,
+                                     @Nonnull final List<JsonObject> streamingDatas)
+            throws ParsingException {
+        final String duration = videoDetails.getString("lengthSeconds");
+        if (!isNullOrEmpty(duration)) {
+            try {
+                final long seconds = Long.parseLong(duration);
+                if (seconds >= 0) return seconds;
+            } catch (final NumberFormatException ignored) {
+                // Use a client format if the page duration is absent or invalid.
+            }
         }
+        return getDurationFromFirstAdaptiveFormat(streamingDatas);
     }
 
     static long getDurationFromFirstAdaptiveFormat(@Nonnull final List<JsonObject> streamingDatas)

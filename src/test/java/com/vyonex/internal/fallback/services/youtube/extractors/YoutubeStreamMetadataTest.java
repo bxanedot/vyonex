@@ -8,6 +8,8 @@ import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -58,5 +60,17 @@ class YoutubeStreamMetadataTest {
                 + "\"contents\":[{\"runs\":[{\"text\":\"Age-restricted\"}]}]}}]}}}");
         assertEquals(18, YoutubeStreamExtractor.parseAgeLimit(restricted));
         assertEquals(0, YoutubeStreamExtractor.parseAgeLimit(JsonParser.object().from("{}")));
+    }
+
+    @Test
+    void prefersDeclaredDurationAndFallsBackToClientFormats() throws Exception {
+        final var streamingData = JsonParser.object().from("{\"adaptiveFormats\":["
+                + "{\"approxDurationMs\":\"12678\"}]}");
+        assertEquals(45, YoutubeStreamExtractor.extractVideoDuration(
+                JsonParser.object().from("{\"lengthSeconds\":\"45\"}"),
+                Arrays.asList(streamingData)));
+        assertEquals(13, YoutubeStreamExtractor.extractVideoDuration(
+                JsonParser.object().from("{\"lengthSeconds\":\"invalid\"}"),
+                Arrays.asList(null, streamingData)));
     }
 }
