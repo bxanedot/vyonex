@@ -1,22 +1,24 @@
 // bxane
 package com.vyonex.internal.fallback.localization;
 
-import com.vyonex.internal.fallback.timeago.PatternsHolder;
-import com.vyonex.internal.fallback.timeago.PatternsManager;
+import com.ibm.icu.util.ULocale;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public final class TimeAgoPatternsManager {
-    private TimeAgoPatternsManager() {
-    }
+    private static final Set<String> SUPPORTED_LANGUAGES = Arrays.stream(ULocale.getAvailableLocales())
+            .map(ULocale::getLanguage)
+            .map(language -> language.toLowerCase(Locale.ROOT))
+            .collect(Collectors.toUnmodifiableSet());
 
-    @Nullable
-    private static PatternsHolder getPatternsFor(@Nonnull final Localization localization) {
-        return PatternsManager.getPatterns(localization.getLanguageCode(),
-                localization.getCountryCode());
+    private TimeAgoPatternsManager() {
     }
 
     @Nullable
@@ -27,7 +29,9 @@ public final class TimeAgoPatternsManager {
     @Nullable
     public static TimeAgoParser getTimeAgoParserFor(@Nonnull final Localization localization,
                                                     @Nonnull final LocalDateTime now) {
-        final PatternsHolder holder = getPatternsFor(localization);
-        return holder == null ? null : new TimeAgoParser(holder, now);
+        final ULocale locale = new ULocale(localization.getLocalizationCode().replace('-', '_'));
+        return SUPPORTED_LANGUAGES.contains(locale.getLanguage().toLowerCase(Locale.ROOT))
+                ? new TimeAgoParser(locale, now)
+                : null;
     }
 }

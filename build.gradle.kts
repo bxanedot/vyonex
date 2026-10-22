@@ -34,6 +34,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.22.2")
     implementation("com.google.code.findbugs:jsr305:3.0.2")
     implementation("com.google.protobuf:protobuf-javalite:4.35.0")
+    implementation("com.ibm.icu:icu4j:78.3")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("org.mozilla:rhino-engine:1.8.1")
     testImplementation("io.ktor:ktor-client-mock:3.5.2")
