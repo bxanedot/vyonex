@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -15,25 +14,27 @@ final class PeertubeUrl {
 
     static URI parse(final String value) throws ParsingException {
         try {
-            final URI uri = new URI(value);
-            if (uri.getHost() != null && uri.getUserInfo() == null
-                    && ("http".equalsIgnoreCase(uri.getScheme())
-                    || "https".equalsIgnoreCase(uri.getScheme()))) return uri;
+            final URI parsed = new URI(value);
+            final String scheme = parsed.getScheme();
+            if (parsed.getHost() != null && parsed.getUserInfo() == null
+                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                return parsed;
+            }
         } catch (final URISyntaxException | NullPointerException ignored) { }
         throw new ParsingException("Invalid PeerTube URL: " + value);
     }
 
     static List<String> segments(final String value) throws ParsingException {
         final String path = parse(value).getRawPath();
-        return path == null ? List.of() : Arrays.stream(path.split("/"))
-                .filter(segment -> !segment.isEmpty()).toList();
+        if (path == null) return List.of();
+        return Arrays.stream(path.split("/")).filter(part -> !part.isEmpty()).toList();
     }
 
     static boolean accepts(final String value) {
         try {
             parse(value);
             return true;
-        } catch (final ParsingException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
     }

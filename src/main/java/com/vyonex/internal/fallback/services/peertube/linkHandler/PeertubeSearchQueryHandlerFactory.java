@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.ServiceList;
@@ -24,22 +23,21 @@ public final class PeertubeSearchQueryHandlerFactory extends SearchQueryHandlerF
             new PeertubeSearchQueryHandlerFactory();
 
     private PeertubeSearchQueryHandlerFactory() { }
-
     public static PeertubeSearchQueryHandlerFactory getInstance() { return INSTANCE; }
 
     @Override
     public String getUrl(final String query, final List<String> filters, final String sortFilter)
             throws ParsingException {
-        final String base = !filters.isEmpty() && filters.get(0).startsWith("sepia_")
-                ? SEPIA_BASE_URL : ServiceList.PeerTube.getBaseUrl();
-        return getUrl(query, filters, sortFilter, base);
+        final boolean remoteSearch = !filters.isEmpty() && filters.get(0).startsWith("sepia_");
+        final String baseUrl = remoteSearch ? SEPIA_BASE_URL : ServiceList.PeerTube.getBaseUrl();
+        return getUrl(query, filters, sortFilter, baseUrl);
     }
 
     @Override
     public String getUrl(final String query, final List<String> filters, final String sortFilter,
                          final String baseUrl) {
-        final String filter = filters.isEmpty() ? VIDEOS : filters.get(0);
-        final String endpoint = switch (filter) {
+        final String kind = filters.isEmpty() ? VIDEOS : filters.get(0);
+        final String endpoint = switch (kind) {
             case VIDEOS, SEPIA_VIDEOS -> SEARCH_ENDPOINT_VIDEOS;
             case CHANNELS -> SEARCH_ENDPOINT_CHANNELS;
             case PLAYLISTS -> SEARCH_ENDPOINT_PLAYLISTS;
@@ -48,8 +46,7 @@ public final class PeertubeSearchQueryHandlerFactory extends SearchQueryHandlerF
         return baseUrl + endpoint + "?search=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
     }
 
-    @Override
-    public String[] getAvailableContentFilter() {
+    @Override public String[] getAvailableContentFilter() {
         return new String[] { VIDEOS, PLAYLISTS, CHANNELS, SEPIA_VIDEOS };
     }
 }

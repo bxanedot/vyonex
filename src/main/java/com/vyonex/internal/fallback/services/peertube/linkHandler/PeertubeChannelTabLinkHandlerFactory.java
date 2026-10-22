@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
@@ -16,7 +15,6 @@ public final class PeertubeChannelTabLinkHandlerFactory extends ListLinkHandlerF
             new PeertubeChannelTabLinkHandlerFactory();
 
     private PeertubeChannelTabLinkHandlerFactory() { }
-
     public static PeertubeChannelTabLinkHandlerFactory getInstance() { return INSTANCE; }
 
     @Nonnull
@@ -29,34 +27,27 @@ public final class PeertubeChannelTabLinkHandlerFactory extends ListLinkHandlerF
         };
     }
 
-    @Override
-    public String getId(final String url) throws ParsingException {
+    @Override public String getId(final String url) throws ParsingException {
         return PeertubeChannelLinkHandlerFactory.getInstance().getId(url);
     }
-
-    @Override
-    public String getUrl(final String id, final List<String> filters, final String sortFilter)
+    @Override public String getUrl(final String id, final List<String> filters, final String sort)
             throws ParsingException {
-        return getUrl(id, filters, sortFilter, null);
+        return getUrl(id, filters, sort, null);
     }
-
     @Override
-    public String getUrl(final String id, final List<String> filters, final String sortFilter,
+    public String getUrl(final String id, final List<String> filters, final String sort,
                          final String baseUrl) throws ParsingException {
         if (filters.isEmpty()) throw new ParsingException("PeerTube channel tab is missing");
-        final var channels = PeertubeChannelLinkHandlerFactory.getInstance();
-        final String channelUrl = baseUrl == null
-                ? channels.getUrl(id) : channels.getUrl(id, filters, sortFilter, baseUrl);
-        return channelUrl + getUrlSuffix(filters.get(0));
+        final PeertubeChannelLinkHandlerFactory channels =
+                PeertubeChannelLinkHandlerFactory.getInstance();
+        final String root = baseUrl == null ? channels.getUrl(id)
+                : channels.getUrl(id, filters, sort, baseUrl);
+        return root + getUrlSuffix(filters.get(0));
     }
-
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public boolean onAcceptUrl(final String url) {
         return PeertubeChannelLinkHandlerFactory.getInstance().onAcceptUrl(url);
     }
-
-    @Override
-    public String[] getAvailableContentFilter() {
+    @Override public String[] getAvailableContentFilter() {
         return new String[] { ChannelTabs.VIDEOS, ChannelTabs.CHANNELS, ChannelTabs.PLAYLISTS };
     }
 }

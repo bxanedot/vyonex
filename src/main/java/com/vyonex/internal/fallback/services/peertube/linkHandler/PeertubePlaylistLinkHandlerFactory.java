@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.ServiceList;
@@ -14,23 +13,16 @@ public final class PeertubePlaylistLinkHandlerFactory extends ListLinkHandlerFac
             new PeertubePlaylistLinkHandlerFactory();
 
     private PeertubePlaylistLinkHandlerFactory() { }
-
     public static PeertubePlaylistLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    @Override
-    public String getUrl(final String id, final List<String> contentFilters,
-                         final String sortFilter) {
-        return getUrl(id, contentFilters, sortFilter, ServiceList.PeerTube.getBaseUrl());
+    @Override public String getUrl(final String id, final List<String> filters, final String sort) {
+        return getUrl(id, filters, sort, ServiceList.PeerTube.getBaseUrl());
     }
-
-    @Override
-    public String getUrl(final String id, final List<String> contentFilters,
-                         final String sortFilter, final String baseUrl) {
+    @Override public String getUrl(final String id, final List<String> filters, final String sort,
+                                   final String baseUrl) {
         return baseUrl + "/api/v1/video-playlists/" + id;
     }
-
-    @Override
-    public String getId(final String url) throws ParsingException {
+    @Override public String getId(final String url) throws ParsingException {
         final List<String> path = PeertubeUrl.segments(url);
         if (path.size() == 3 && "w".equals(path.get(0)) && "p".equals(path.get(1))) {
             return path.get(2);
@@ -45,13 +37,11 @@ public final class PeertubePlaylistLinkHandlerFactory extends ListLinkHandlerFac
         }
         throw new ParsingException("URL does not identify a PeerTube playlist");
     }
-
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public boolean onAcceptUrl(final String url) {
         try {
             getId(url);
             return true;
-        } catch (final ParsingException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
     }

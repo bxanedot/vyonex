@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.ServiceList;
@@ -28,55 +27,52 @@ public final class PeertubeTrendingLinkHandlerFactory extends ListLinkHandlerFac
             new PeertubeTrendingLinkHandlerFactory();
 
     private PeertubeTrendingLinkHandlerFactory() { }
-
     public static PeertubeTrendingLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    @Override
-    public String getUrl(final String id, final List<String> filters, final String sortFilter)
-            throws ParsingException {
-        return getUrl(id, filters, sortFilter, ServiceList.PeerTube.getBaseUrl());
+    @Override public String getUrl(final String id, final List<String> filters,
+                                   final String sort) throws ParsingException {
+        return getUrl(id, filters, sort, ServiceList.PeerTube.getBaseUrl());
     }
-
-    @Override
-    public String getUrl(final String id, final List<String> filters, final String sortFilter,
-                         final String baseUrl) throws ParsingException {
+    @Override public String getUrl(final String id, final List<String> filters,
+                                   final String sort, final String baseUrl)
+            throws ParsingException {
         final String template = KIOSK_MAP.get(id);
         if (template == null) throw new ParsingException("Unknown PeerTube kiosk: " + id);
         return String.format(template, baseUrl);
     }
-
-    @Override
-    public String getId(final String url) throws ParsingException {
-        final URI uri = PeertubeUrl.parse(url);
-        final String path = uri.getRawPath() == null ? "" : uri.getRawPath();
-        if (path.endsWith("/videos/trending")) return KIOSK_TRENDING;
-        if (path.endsWith("/videos/most-liked")) return KIOSK_MOST_LIKED;
-        if (path.endsWith("/videos/recently-added")) return KIOSK_RECENT;
-        if (path.endsWith("/videos/local")) return KIOSK_LOCAL;
+    @Override public String getId(final String value) throws ParsingException {
+        final URI url = PeertubeUrl.parse(value);
+        final String path = url.getRawPath() == null ? "" : url.getRawPath();
+        final String alias = aliasFor(path);
+        if (alias != null) return alias;
         if (!path.endsWith("/api/v1/videos")) {
             throw new ParsingException("URL does not identify a PeerTube kiosk");
         }
-        final Map<String, String> query = query(uri.getRawQuery());
+        final Map<String, String> query = parseQuery(url.getRawQuery());
         if (query.equals(Map.of("sort", "-trending"))) return KIOSK_TRENDING;
         if (query.equals(Map.of("sort", "-likes"))) return KIOSK_MOST_LIKED;
         if (query.equals(Map.of("sort", "-publishedAt"))) return KIOSK_RECENT;
-        if (query.equals(Map.of("sort", "-publishedAt", "isLocal", "true"))) {
-            return KIOSK_LOCAL;
-        }
+        if (query.equals(Map.of("sort", "-publishedAt", "isLocal", "true"))) return KIOSK_LOCAL;
         throw new ParsingException("URL does not identify a PeerTube kiosk");
     }
-
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public boolean onAcceptUrl(final String url) {
         try {
             getId(url);
             return true;
-        } catch (final ParsingException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
     }
 
-    private static Map<String, String> query(final String query) throws ParsingException {
+    private static String aliasFor(final String path) {
+        if (path.endsWith("/videos/trending")) return KIOSK_TRENDING;
+        if (path.endsWith("/videos/most-liked")) return KIOSK_MOST_LIKED;
+        if (path.endsWith("/videos/recently-added")) return KIOSK_RECENT;
+        if (path.endsWith("/videos/local")) return KIOSK_LOCAL;
+        return null;
+    }
+
+    private static Map<String, String> parseQuery(final String query) throws ParsingException {
         final Map<String, String> values = new HashMap<>();
         if (query == null || query.isEmpty()) return values;
         try {
@@ -87,8 +83,8 @@ public final class PeertubeTrendingLinkHandlerFactory extends ListLinkHandlerFac
                 values.put(URLDecoder.decode(key, StandardCharsets.UTF_8),
                         URLDecoder.decode(value, StandardCharsets.UTF_8));
             }
-        } catch (final IllegalArgumentException e) {
-            throw new ParsingException("Invalid PeerTube kiosk query", e);
+        } catch (final IllegalArgumentException error) {
+            throw new ParsingException("Invalid PeerTube kiosk query", error);
         }
         return values;
     }
