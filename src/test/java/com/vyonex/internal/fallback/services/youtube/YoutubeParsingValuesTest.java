@@ -61,6 +61,13 @@ class YoutubeParsingValuesTest {
     }
 
     @Test
+    void rejectsMalformedPlaylistUrlQueryEncoding() {
+        assertThrows(ParsingException.class, () ->
+                YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl(
+                        "https://www.youtube.com/playlist?list=%"));
+    }
+
+    @Test
     void recognizesYoutubeAndAlternativeHostsWithoutPrefixCollisions() throws Exception {
         assertTrue(YoutubeParsingHelper.isYoutubeURL(new URL("https://m.youtube.com/watch?v=x")));
         assertTrue(YoutubeParsingHelper.isYoutubeServiceURL(
@@ -80,7 +87,10 @@ class YoutubeParsingValuesTest {
     @Test
     void unwrapsCachedTargetsBeforeGoogleHostCheck() {
         assertTrue(YoutubeParsingHelper.isGoogleURL("https://www.google.com/search?q=x"));
+        assertTrue(YoutubeParsingHelper.isGoogleURL("https://google.co.uk/search?q=x"));
         assertFalse(YoutubeParsingHelper.isGoogleURL("https://notgoogle.com/"));
+        assertFalse(YoutubeParsingHelper.isGoogleURL("https://google.com.example.org/"));
+        assertFalse(YoutubeParsingHelper.isGoogleURL("ftp://google.com/"));
         assertFalse(YoutubeParsingHelper.isGoogleURL(null));
         assertEquals("https://video.example/watch?v=1",
                 YoutubeParsingHelper.extractCachedUrlIfNeeded(

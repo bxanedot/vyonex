@@ -180,12 +180,21 @@ public final class YoutubeParsingHelper {
         final String cachedUrl = extractCachedUrlIfNeeded(url);
         if (cachedUrl == null) return false;
         try {
-            final String host = new URI(cachedUrl).getHost();
-            if (host == null) return false;
-            String domain = host.toLowerCase(Locale.ROOT);
+            final URI uri = new URI(cachedUrl);
+            if (!isHttpUrl(uri) || uri.getHost() == null) return false;
+            String domain = uri.getHost().toLowerCase(Locale.ROOT);
             if (domain.startsWith("www.")) domain = domain.substring(4);
             if (domain.startsWith("m.")) domain = domain.substring(2);
-            return domain.startsWith("google.");
+            if (domain.endsWith(".")) domain = domain.substring(0, domain.length() - 1);
+            final String[] labels = domain.split("\\.");
+            // shortcut: TLD shape cannot prove Google owns the domain; use an authoritative host
+            // list if one becomes available.
+            if (labels.length == 2) {
+                return "google".equals(labels[0]) && labels[1].matches("[a-z]{2,63}");
+            }
+            return labels.length == 3 && "google".equals(labels[0])
+                    && labels[1].matches("co|com|org|net|gov|edu|ac|mil|int")
+                    && labels[2].matches("[a-z]{2}");
         } catch (final URISyntaxException | IllegalArgumentException e) {
             return false;
         }
@@ -381,12 +390,35 @@ public final class YoutubeParsingHelper {
      */
     public static PlaylistInfo.PlaylistType extractPlaylistTypeFromPlaylistUrl(
             final String playlistUrl) throws ParsingException {
+        if (playlistUrl == null) {
+            throw new ParsingException("Could not extract playlist type from empty url");
+        }
+        final URI uri;
         try {
-            return extractPlaylistTypeFromPlaylistId(
-                    Utils.getQueryValue(Utils.stringToURL(playlistUrl), "list"));
-        } catch (final MalformedURLException e) {
+            uri = new URI(playlistUrl);
+        } catch (final URISyntaxException e) {
             throw new ParsingException("Could not extract playlist type from malformed url", e);
         }
+        if (uri.getScheme() == null || uri.getHost() == null || uri.getRawQuery() == null) {
+            throw new ParsingException("Could not extract playlist type from url without list id");
+        }
+        try {
+            for (final String parameter : uri.getRawQuery().split("&")) {
+                final int separator = parameter.indexOf('=');
+                final String key = URLDecoder.decode(
+                        separator < 0 ? parameter : parameter.substring(0, separator),
+                        StandardCharsets.UTF_8);
+                if ("list".equals(key)) {
+                    final String value = separator < 0 ? ""
+                            : URLDecoder.decode(parameter.substring(separator + 1),
+                                    StandardCharsets.UTF_8);
+                    return extractPlaylistTypeFromPlaylistId(value);
+                }
+            }
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Could not extract playlist type from malformed query", e);
+        }
+        throw new ParsingException("Could not extract playlist type from url without list id");
     }
 
     private static JsonObject getInitialData(final String html) throws ParsingException {
