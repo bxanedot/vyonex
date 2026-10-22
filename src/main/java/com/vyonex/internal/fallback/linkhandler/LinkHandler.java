@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.linkhandler;
 
@@ -18,7 +20,7 @@ public class LinkHandler implements Serializable {
     }
 
     public LinkHandler(final LinkHandler handler) {
-        this(handler.originalUrl, handler.url, handler.id);
+        this(handler.getOriginalUrl(), handler.getUrl(), handler.getId());
     }
 
     public String getOriginalUrl() {

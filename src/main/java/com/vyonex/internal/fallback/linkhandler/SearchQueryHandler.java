@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.linkhandler;
 
@@ -14,20 +16,13 @@ public class SearchQueryHandler extends ListLinkHandler {
     }
 
     public SearchQueryHandler(final ListLinkHandler handler) {
-        this(handler.originalUrl,
-                handler.url,
-                handler.id,
-                handler.contentFilters,
-                handler.sortFilter);
+        this(handler.getOriginalUrl(),
+                handler.getUrl(),
+                handler.getId(),
+                handler.getContentFilters(),
+                handler.getSortFilter());
     }
 
-
-    /**
-     * Returns the search string. Since ListQIHandler is based on ListLinkHandler
-     * getSearchString() is equivalent to calling getId().
-     *
-     * @return the search string
-     */
     public String getSearchString() {
         return getId();
     }
