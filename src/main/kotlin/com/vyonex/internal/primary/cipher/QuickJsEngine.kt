@@ -9,15 +9,13 @@ import kotlinx.coroutines.withContext
 
 /**
  * Wrapper around the QuickJS engine for executing JavaScript code.
- * This is used to run the YouTube player cipher deobfuscation logic.
- *
- * Based on yt-dlp's QuickJS integration approach.
+ * This isolates each player transform from the host application runtime.
  */
 internal class QuickJsEngine {
     companion object {
         private const val EVALUATION_TIMEOUT_MS = 30_000L
 
-        // Current ~2.6 MiB player scripts need more than 128 MiB while EJS builds their AST.
+        // Full player scripts need room for their parsed functions and helper tables.
         private const val NATIVE_MEMORY_LIMIT_BYTES = 192L * 1024L * 1024L
         private const val MAX_STACK_SIZE_BYTES = 256L * 1024L
         private const val MAX_EVALUATION_RESULT_LENGTH = 16 * 1024 * 1024
@@ -182,17 +180,17 @@ internal class QuickJsEngine {
                         hash: "",
                         host: "www.youtube.com",
                         hostname: "www.youtube.com",
-                        href: "https://www.youtube.com/watch?v=yt-dlp-wins",
+                        href: "https://www.youtube.com/watch?v=vyonex-probe",
                         origin: "https://www.youtube.com",
                         password: "",
                         pathname: "/watch",
                         port: "",
                         protocol: "https:",
-                        search: "?v=yt-dlp-wins",
+                        search: "?v=vyonex-probe",
                         username: "",
                     };
                 } else {
-                    globalThis.location = new URL("https://www.youtube.com/watch?v=yt-dlp-wins");
+                    globalThis.location = new URL("https://www.youtube.com/watch?v=vyonex-probe");
                 }
                 if (typeof globalThis.document === "undefined") {
                     globalThis.document = Object.create(null);
