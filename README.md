@@ -37,7 +37,7 @@ dependencies {
 
 ## License
 
-VyonEx is distributed under GPL-3.0-only. Third-party code and data sources are listed in [ATTRIBUTION.md](ATTRIBUTION.md); the applicable GPL and Apache license texts are included in the repository and published jar.
+VyonEx is distributed under GPL-3.0-only. Third-party code and data sources are listed in [ATTRIBUTION.md](ATTRIBUTION.md), with applicable notices retained alongside included material.
 
 ## Contributors
 
