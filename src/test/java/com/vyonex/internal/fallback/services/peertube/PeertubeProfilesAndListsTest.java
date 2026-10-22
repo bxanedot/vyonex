@@ -14,6 +14,7 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubePlaylistLinkHandlerFactory;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,12 @@ class PeertubeProfilesAndListsTest {
         assertEquals("Alice", playlist.getUploaderName());
         assertEquals("Music", playlist.getSubChannelName());
         assertEquals(BASE + "/mix.jpg", playlist.getThumbnails().get(0).getUrl());
+
+        final PlaylistInfo playlistInfo = PlaylistInfo.getInfo(playlist);
+        assertEquals("Mix", playlistInfo.getName());
+        assertEquals(1, playlistInfo.getStreamCount());
+        assertEquals("Music", playlistInfo.getSubChannelName());
+        assertEquals(1, playlistInfo.getRelatedItems().size());
 
         final var firstVideoPage = playlist.getInitialPage();
         assertEquals(1, firstVideoPage.getItems().size());
