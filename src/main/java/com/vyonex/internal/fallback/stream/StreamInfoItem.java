@@ -11,7 +11,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
 
-/** Metadata for a stream shown in a list. */
 public class StreamInfoItem extends InfoItem {
     private final StreamType streamType;
     private String uploaderName;
@@ -34,51 +33,31 @@ public class StreamInfoItem extends InfoItem {
 
     public StreamType getStreamType() { return streamType; }
     public String getUploaderName() { return uploaderName; }
-    public void setUploaderName(final String uploaderName) { this.uploaderName = uploaderName; }
+    public void setUploaderName(final String value) { uploaderName = value; }
     public long getViewCount() { return viewCount; }
-    public void setViewCount(final long viewCount) { this.viewCount = viewCount; }
+    public void setViewCount(final long value) { viewCount = value; }
     public long getDuration() { return duration; }
-    public void setDuration(final long duration) { this.duration = duration; }
+    public void setDuration(final long value) { duration = value; }
     public String getUploaderUrl() { return uploaderUrl; }
-    public void setUploaderUrl(final String uploaderUrl) { this.uploaderUrl = uploaderUrl; }
-
-    @Nonnull
-    public List<Image> getUploaderAvatars() { return uploaderAvatars; }
-
-    public void setUploaderAvatars(@Nonnull final List<Image> uploaderAvatars) {
-        this.uploaderAvatars = uploaderAvatars;
-    }
-
+    public void setUploaderUrl(final String value) { uploaderUrl = value; }
+    @Nonnull public List<Image> getUploaderAvatars() { return uploaderAvatars; }
+    public void setUploaderAvatars(@Nonnull final List<Image> value) { uploaderAvatars = value; }
     public String getShortDescription() { return shortDescription; }
-    public void setShortDescription(final String shortDescription) {
-        this.shortDescription = shortDescription;
-    }
+    public void setShortDescription(final String value) { shortDescription = value; }
     @Nullable public String getTextualUploadDate() { return textualUploadDate; }
-    public void setTextualUploadDate(final String textualUploadDate) {
-        this.textualUploadDate = textualUploadDate;
-    }
+    public void setTextualUploadDate(final String value) { textualUploadDate = value; }
     @Nullable public DateWrapper getUploadDate() { return uploadDate; }
-    public void setUploadDate(@Nullable final DateWrapper uploadDate) {
-        this.uploadDate = uploadDate;
-    }
+    public void setUploadDate(@Nullable final DateWrapper value) { uploadDate = value; }
     public boolean isUploaderVerified() { return uploaderVerified; }
-    public void setUploaderVerified(final boolean uploaderVerified) {
-        this.uploaderVerified = uploaderVerified;
-    }
+    public void setUploaderVerified(final boolean value) { uploaderVerified = value; }
     public boolean isShortFormContent() { return shortFormContent; }
-    public void setShortFormContent(final boolean shortFormContent) {
-        this.shortFormContent = shortFormContent;
+    public void setShortFormContent(final boolean value) { shortFormContent = value; }
+    @Nonnull public ContentAvailability getContentAvailability() { return contentAvailability; }
+    public void setContentAvailability(@Nonnull final ContentAvailability value) {
+        contentAvailability = value;
     }
 
-    @Nonnull
-    public ContentAvailability getContentAvailability() { return contentAvailability; }
-
-    public void setContentAvailability(@Nonnull final ContentAvailability availability) {
-        this.contentAvailability = availability;
-    }
-
-    @Override
-    public String toString() {
+    @Override public String toString() {
         return "StreamInfoItem{"
                 + "streamType=" + streamType
                 + ", uploaderName='" + uploaderName + '\''
