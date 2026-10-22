@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.InfoItem;
@@ -40,35 +39,35 @@ public final class PeertubeSearchExtractor extends SearchExtractor {
     @Override public boolean isCorrectedSearch() { return false; }
     @Override public List<MetaInfo> getMetaInfo() { return List.of(); }
 
-    @Override public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        return getPage(new Page(getUrl() + "&" + START_KEY + "=0&"
-                + COUNT_KEY + "=" + ITEMS_PER_PAGE));
+    @Override
+    public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
+        final String firstUrl = getUrl() + "&" + START_KEY + "=0&" + COUNT_KEY + "=" + ITEMS_PER_PAGE;
+        return getPage(new Page(firstUrl));
     }
 
-    @Override public InfoItemsPage<InfoItem> getPage(final Page page)
+    @Override
+    public InfoItemsPage<InfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
         }
         final Response response = getDownloader().get(page.getUrl());
-        final JsonObject json = readObject(response);
-        PeertubeParsingHelper.validate(json);
-
-        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
-        collectItemsFrom(items, json, getBaseUrl(), sepia);
-        return new InfoItemsPage<>(items,
-                PeertubeParsingHelper.getNextPage(page.getUrl(), json.getLong("total")));
-    }
-
-    private static JsonObject readObject(final Response response) throws ExtractionException {
         if (response == null || response.responseBody().isBlank()) {
             throw new ExtractionException("PeerTube returned no search results");
         }
+
+        final JsonObject data;
         try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Invalid PeerTube search response", e);
+            data = JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube search response", error);
         }
+        PeertubeParsingHelper.validate(data);
+
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        collectItemsFrom(items, data, getBaseUrl(), sepia);
+        final Page next = PeertubeParsingHelper.getNextPage(page.getUrl(), data.getLong("total"));
+        return new InfoItemsPage<>(items, next);
     }
 
     @Override public void onFetchPage(final Downloader downloader) { }

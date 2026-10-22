@@ -10,6 +10,8 @@ import com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeTrendingLinkHandlerFactory;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 class PeertubeServiceTest {
     @Test
     void preservesCustomInstanceAndTrendingKiosks() throws Exception {
@@ -20,6 +22,7 @@ class PeertubeServiceTest {
         assertEquals("PeerTube", service.getServiceInfo().getName());
         assertTrue(service.getServiceInfo().getMediaCapabilities().contains(MediaCapability.VIDEO));
         assertTrue(service.getServiceInfo().getMediaCapabilities().contains(MediaCapability.COMMENTS));
+        assertEquals(List.of(), service.getSuggestionExtractor().suggestionList("ambient"));
 
         final var kiosks = service.getKioskList();
         assertEquals(PeertubeTrendingLinkHandlerFactory.KIOSK_TRENDING,

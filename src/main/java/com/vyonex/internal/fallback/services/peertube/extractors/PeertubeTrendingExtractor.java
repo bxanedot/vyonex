@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Page;
@@ -27,19 +26,20 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 
 public final class PeertubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     public PeertubeTrendingExtractor(final StreamingService service,
-                                     final ListLinkHandler handler, final String kioskId) {
+                                    final ListLinkHandler handler, final String kioskId) {
         super(service, handler, kioskId);
     }
 
     @Override public String getName() { return getId(); }
 
-    @Override public InfoItemsPage<StreamInfoItem> getInitialPage()
-            throws IOException, ExtractionException {
-        return getPage(new Page(getUrl() + "&" + START_KEY + "=0&"
-                + COUNT_KEY + "=" + ITEMS_PER_PAGE));
+    @Override
+    public InfoItemsPage<StreamInfoItem> getInitialPage() throws IOException, ExtractionException {
+        final String firstUrl = getUrl() + "&" + START_KEY + "=0&" + COUNT_KEY + "=" + ITEMS_PER_PAGE;
+        return getPage(new Page(firstUrl));
     }
 
-    @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page)
+    @Override
+    public InfoItemsPage<StreamInfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
@@ -48,17 +48,19 @@ public final class PeertubeTrendingExtractor extends KioskExtractor<StreamInfoIt
         if (response == null || response.responseBody().isBlank()) {
             throw new ExtractionException("PeerTube returned no kiosk results");
         }
-        final JsonObject json;
+
+        final JsonObject data;
         try {
-            json = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Invalid PeerTube kiosk response", e);
+            data = JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube kiosk response", error);
         }
-        PeertubeParsingHelper.validate(json);
+        PeertubeParsingHelper.validate(data);
+
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        collectItemsFrom(items, json, getBaseUrl());
-        return new InfoItemsPage<>(items,
-                PeertubeParsingHelper.getNextPage(page.getUrl(), json.getLong("total")));
+        collectItemsFrom(items, data, getBaseUrl());
+        final Page next = PeertubeParsingHelper.getNextPage(page.getUrl(), data.getLong("total"));
+        return new InfoItemsPage<>(items, next);
     }
 
     @Override public void onFetchPage(final Downloader downloader) { }
