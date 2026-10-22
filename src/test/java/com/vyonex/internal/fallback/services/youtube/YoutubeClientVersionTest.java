@@ -33,7 +33,8 @@ class YoutubeClientVersionTest {
     void findsEcatcherVersionAfterCsiLookupMisses() throws Exception {
         final StubDownloader downloader = new StubDownloader();
         downloader.workerBody = "worker has no version";
-        downloader.htmlBody = "window[\"ytInitialData\"] = {\"responseContext\":{"
+        downloader.htmlBody = "window[\"ytInitialData\"] = {\"note\":\"brace { } and \\\"quote\\\"\","
+                + "\"responseContext\":{"
                 + "\"serviceTrackingParams\":[{\"service\":\"ECATCHER\",\"params\":["
                 + "{\"key\":\"client.version\",\"value\":\"2.20261022.91\"}]}]}};";
 

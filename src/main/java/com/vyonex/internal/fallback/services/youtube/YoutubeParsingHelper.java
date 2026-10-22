@@ -166,10 +166,6 @@ public final class YoutubeParsingHelper {
             {"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"([0-9\\.]+?)\"",
                     "innertube_context_client_version\":\"([0-9\\.]+?)\"",
                     "client.version=([0-9\\.]+)"};
-    private static final String[] INITIAL_DATA_REGEXES =
-            {"window\\[\"ytInitialData\"\\]\\s*=\\s*(\\{.*?\\});",
-                    "var\\s*ytInitialData\\s*=\\s*(\\{.*?\\});"};
-
     private static final String CONTENT_PLAYBACK_NONCE_ALPHABET =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
@@ -394,12 +390,46 @@ public final class YoutubeParsingHelper {
     }
 
     private static JsonObject getInitialData(final String html) throws ParsingException {
-        try {
-            return JsonParser.object().from(getStringResultFromRegexArray(html,
-                    INITIAL_DATA_REGEXES, 1));
-        } catch (final JsonParserException | Parser.RegexException e) {
-            throw new ParsingException("Could not get ytInitialData", e);
+        final int marker = html.indexOf("ytInitialData");
+        if (marker < 0) throw new ParsingException("Could not find YouTube page data");
+        final int assignment = html.indexOf('=', marker + "ytInitialData".length());
+        if (assignment < 0) throw new ParsingException("Could not find YouTube page data");
+        int start = assignment + 1;
+        while (start < html.length() && Character.isWhitespace(html.charAt(start))) start++;
+        if (start == html.length() || html.charAt(start) != '{') {
+            throw new ParsingException("YouTube page data is not an object");
         }
+
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int index = start; index < html.length(); index++) {
+            final char character = html.charAt(index);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (character == '\\') {
+                    escaped = true;
+                } else if (character == '"') {
+                    inString = false;
+                }
+            } else if (character == '"') {
+                inString = true;
+            } else if (character == '{') {
+                depth++;
+            } else if (character == '}') {
+                depth--;
+                if (depth == 0) {
+                    try {
+                        return JsonParser.object().from(html.substring(start, index + 1));
+                    } catch (final JsonParserException e) {
+                        throw new ParsingException("Could not parse YouTube page data", e);
+                    }
+                }
+                if (depth < 0) break;
+            }
+        }
+        throw new ParsingException("YouTube page data is incomplete");
     }
 
     public static boolean isHardcodedClientVersionValid()
