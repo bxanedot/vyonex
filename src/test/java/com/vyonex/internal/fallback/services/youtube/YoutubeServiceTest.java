@@ -4,10 +4,16 @@
 package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Request;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.UnsupportedContentInCountryException;
 import com.vyonex.internal.fallback.localization.ContentCountry;
 import com.vyonex.internal.fallback.localization.Localization;
 import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,16 +49,29 @@ class YoutubeServiceTest {
 
     @Test
     void chartKiosksKeepTheirNamesAndMusicCountryRestriction() throws Exception {
-        final YoutubeService service = new YoutubeService(11);
-        final var kiosks = service.getKioskList();
+        final var previousDownloader = VyonEx.getDownloader();
+        final Localization previousLocalization = VyonEx.getPreferredLocalization();
+        final ContentCountry previousCountry = VyonEx.getPreferredContentCountry();
+        VyonEx.init(new Downloader() {
+            @Override
+            public Response execute(final Request request) throws IOException {
+                throw new IOException("Unexpected request: " + request.url());
+            }
+        }, previousLocalization, previousCountry);
+        try {
+            final YoutubeService service = new YoutubeService(11);
+            final var kiosks = service.getKioskList();
 
-        assertEquals("Trending Music Videos",
-                kiosks.getExtractorById("trending_music", null).getName());
-        assertEquals("Trending Movie Trailers",
-                kiosks.getExtractorById("trending_movies_and_shows", null).getName());
+            assertEquals("Trending Music Videos",
+                    kiosks.getExtractorById("trending_music", null).getName());
+            assertEquals("Trending Movie Trailers",
+                    kiosks.getExtractorById("trending_movies_and_shows", null).getName());
 
-        kiosks.forceContentCountry(new ContentCountry("MY"));
-        assertThrows(UnsupportedContentInCountryException.class,
-                () -> kiosks.getExtractorById("trending_music", null).onFetchPage(null));
+            kiosks.forceContentCountry(new ContentCountry("MY"));
+            assertThrows(UnsupportedContentInCountryException.class,
+                    () -> kiosks.getExtractorById("trending_music", null).onFetchPage(null));
+        } finally {
+            VyonEx.init(previousDownloader, previousLocalization, previousCountry);
+        }
     }
 }
