@@ -1396,41 +1396,42 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public List<Frameset> getFrames() throws ExtractionException {
+        return parseStoryboardFrames(playerResponse);
+    }
+
+    static List<Frameset> parseStoryboardFrames(@Nonnull final JsonObject playerResponse)
+            throws ExtractionException {
         try {
             final JsonObject storyboards = playerResponse.getObject("storyboards");
-            final JsonObject storyboardsRenderer = storyboards.getObject(
-                    storyboards.has("playerLiveStoryboardSpecRenderer")
-                            ? "playerLiveStoryboardSpecRenderer"
-                            : "playerStoryboardSpecRenderer"
-            );
-
-            if (storyboardsRenderer == null) {
-                return Collections.emptyList();
-            }
-
+            final String rendererName = storyboards.has("playerLiveStoryboardSpecRenderer")
+                    ? "playerLiveStoryboardSpecRenderer" : "playerStoryboardSpecRenderer";
+            final JsonObject storyboardsRenderer = storyboards.getObject(rendererName);
             final String storyboardsRendererSpec = storyboardsRenderer.getString("spec");
-            if (storyboardsRendererSpec == null) {
+            if (isNullOrEmpty(storyboardsRendererSpec)) {
                 return Collections.emptyList();
             }
 
             final String[] spec = storyboardsRendererSpec.split("\\|");
             final String url = spec[0];
-            final List<Frameset> result = new ArrayList<>(spec.length - 1);
+            final List<Frameset> result = new ArrayList<>(Math.max(0, spec.length - 1));
 
             for (int i = 1; i < spec.length; ++i) {
                 final String[] parts = spec[i].split("#");
-                if (parts.length != 8 || Integer.parseInt(parts[5]) == 0) {
+                if (parts.length != 8) {
                     continue;
                 }
+                final int durationPerFrame = Integer.parseInt(parts[5]);
+                if (durationPerFrame <= 0) continue;
                 final int totalCount = Integer.parseInt(parts[2]);
                 final int framesPerPageX = Integer.parseInt(parts[3]);
                 final int framesPerPageY = Integer.parseInt(parts[4]);
+                if (totalCount < 0 || framesPerPageX <= 0 || framesPerPageY <= 0) continue;
                 final String baseUrl = url.replace("$L", String.valueOf(i - 1))
                         .replace("$N", parts[6]) + "&sigh=" + parts[7];
                 final List<String> urls;
                 if (baseUrl.contains("$M")) {
-                    final int totalPages = (int) Math.ceil(totalCount / (double)
-                            (framesPerPageX * framesPerPageY));
+                    final long framesPerPage = (long) framesPerPageX * framesPerPageY;
+                    final int totalPages = (int) ((totalCount + framesPerPage - 1) / framesPerPage);
                     urls = new ArrayList<>(totalPages);
                     for (int j = 0; j < totalPages; j++) {
                         urls.add(baseUrl.replace("$M", String.valueOf(j)));
@@ -1443,7 +1444,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                         /*frameWidth=*/Integer.parseInt(parts[0]),
                         /*frameHeight=*/Integer.parseInt(parts[1]),
                         totalCount,
-                        /*durationPerFrame=*/Integer.parseInt(parts[5]),
+                        durationPerFrame,
                         framesPerPageX,
                         framesPerPageY
                 ));
