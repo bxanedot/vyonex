@@ -186,39 +186,29 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nullable
     @Override
     public String getTextualUploadDate() {
-        String timestamp = playerMicroFormatRenderer.getString("uploadDate", "");
-        if (timestamp.isEmpty()) {
-            timestamp = playerMicroFormatRenderer.getString("publishDate", "");
-        }
-        if (!timestamp.isEmpty()) {
-            return timestamp;
-        }
+        return extractTextualUploadDate(playerMicroFormatRenderer,
+                getVideoPrimaryInfoRenderer(), streamType);
+    }
 
-        final var liveDetails = playerMicroFormatRenderer.getObject("liveBroadcastDetails");
-        timestamp = liveDetails.getString("endTimestamp", ""); // an ended live stream
-        if (timestamp.isEmpty()) {
-            // a running live stream
-            timestamp = liveDetails.getString("startTimestamp", "");
-        }
-        if (!timestamp.isEmpty()) {
-            return timestamp;
-        } else if (getStreamType() == StreamType.LIVE_STREAM) {
-            // this should never be reached, but a live stream without upload date is valid
-            return null;
-        }
+    @Nullable
+    static String extractTextualUploadDate(@Nonnull final JsonObject microFormat,
+                                           @Nonnull final JsonObject primaryInfo,
+                                           @Nullable final StreamType streamType) {
+        String timestamp = microFormat.getString("uploadDate");
+        if (isNullOrEmpty(timestamp)) timestamp = microFormat.getString("publishDate");
+        if (!isNullOrEmpty(timestamp)) return timestamp;
 
-        final var textObject = getVideoPrimaryInfoRenderer().getObject("dateText");
-        final String rendererDateText = getTextFromObject(textObject);
-        if (rendererDateText == null) {
-            return null;
-        } else if (rendererDateText.startsWith(PREMIERED_ON)) { // Premiered on 21 Feb 2020
-            return rendererDateText.substring(PREMIERED_ON.length());
-        } else if (rendererDateText.startsWith(PREMIERED)) {
-            // Premiered 20 hours ago / Premiered Feb 21, 2020
-            return rendererDateText.substring(PREMIERED.length());
-        } else {
-            return rendererDateText;
-        }
+        final JsonObject liveDetails = microFormat.getObject("liveBroadcastDetails");
+        timestamp = liveDetails.getString("endTimestamp");
+        if (isNullOrEmpty(timestamp)) timestamp = liveDetails.getString("startTimestamp");
+        if (!isNullOrEmpty(timestamp)) return timestamp;
+        if (streamType == StreamType.LIVE_STREAM) return null;
+
+        final String dateText = getTextFromObject(primaryInfo.getObject("dateText"));
+        if (dateText == null) return null;
+        if (dateText.startsWith(PREMIERED_ON)) return dateText.substring(PREMIERED_ON.length());
+        if (dateText.startsWith(PREMIERED)) return dateText.substring(PREMIERED.length());
+        return dateText;
     }
 
     @Override

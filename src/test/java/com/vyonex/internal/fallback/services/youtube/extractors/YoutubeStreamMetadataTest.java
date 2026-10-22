@@ -4,10 +4,12 @@
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class YoutubeStreamMetadataTest {
@@ -25,5 +27,27 @@ class YoutubeStreamMetadataTest {
     void rejectsResponsesWithoutATitle() throws Exception {
         assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractVideoTitle(
                 JsonParser.object().from("{}"), JsonParser.object().from("{}")));
+    }
+
+    @Test
+    void selectsUploadDateFromVideoAndLiveMetadata() throws Exception {
+        assertEquals("upload", YoutubeStreamExtractor.extractTextualUploadDate(
+                JsonParser.object().from("{\"uploadDate\":\"upload\","
+                        + "\"publishDate\":\"published\"}"),
+                JsonParser.object().from("{}"), StreamType.VIDEO_STREAM));
+        assertEquals("ended", YoutubeStreamExtractor.extractTextualUploadDate(
+                JsonParser.object().from("{\"liveBroadcastDetails\":{"
+                        + "\"endTimestamp\":\"ended\",\"startTimestamp\":\"started\"}}"),
+                JsonParser.object().from("{}"), StreamType.POST_LIVE_STREAM));
+    }
+
+    @Test
+    void stripsPremiereLabelsAndAllowsUndatedLiveStreams() throws Exception {
+        assertEquals("Feb 21, 2020", YoutubeStreamExtractor.extractTextualUploadDate(
+                JsonParser.object().from("{}"), JsonParser.object().from(
+                        "{\"dateText\":{\"simpleText\":\"Premiered on Feb 21, 2020\"}}"),
+                StreamType.VIDEO_STREAM));
+        assertNull(YoutubeStreamExtractor.extractTextualUploadDate(JsonParser.object().from("{}"),
+                JsonParser.object().from("{}"), StreamType.LIVE_STREAM));
     }
 }
