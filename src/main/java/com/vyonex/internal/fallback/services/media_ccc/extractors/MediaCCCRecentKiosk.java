@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import com.vyonex.internal.fallback.Page;
@@ -24,50 +23,36 @@ import java.util.Comparator;
 
 public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "recent";
-    private static final String RECENT_EVENTS_URL =
-            "https://api.media.ccc.de/public/events/recent";
-
+    private static final String RECENT_EVENTS_URL = "https://api.media.ccc.de/public/events/recent";
     private JsonObject data;
 
-    public MediaCCCRecentKiosk(final StreamingService service,
-                               final ListLinkHandler linkHandler,
+    public MediaCCCRecentKiosk(final StreamingService service, final ListLinkHandler link,
                                final String kioskId) {
-        super(service, linkHandler, kioskId);
+        super(service, link, kioskId);
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
         try {
             data = JsonParser.object().from(downloader.get(
                     RECENT_EVENTS_URL, getExtractorLocalization()).responseBody());
-        } catch (JsonParserException e) {
-            throw new ExtractionException("Could not parse recent events.", e);
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse recent events.", error);
         }
     }
 
-    @Nonnull
-    @Override
-    public InfoItemsPage<StreamInfoItem> getInitialPage() {
+    @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {
         final Comparator<StreamInfoItem> newestFirst = Comparator.comparing(
                 StreamInfoItem::getUploadDate,
                 Comparator.nullsLast(Comparator.comparing(DateWrapper::getInstant).reversed()));
-        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(
-                getServiceId(), newestFirst);
+        final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId(), newestFirst);
         final JsonArray events = data.getArray("events");
-        events.streamAsJsonObjects()
-                .map(MediaCCCRecentKioskExtractor::new)
-                .filter(event -> event.getDuration() > 0)
-                .forEach(collector::commit);
-        return new InfoItemsPage<>(collector, null);
+        events.streamAsJsonObjects().map(MediaCCCRecentKioskExtractor::new)
+                .filter(event -> event.getDuration() > 0).forEach(items::commit);
+        return new InfoItemsPage<>(items, null);
     }
-
-    @Override
-    public InfoItemsPage<StreamInfoItem> getPage(final Page page) {
+    @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page) {
         return InfoItemsPage.emptyPage();
     }
-
-    @Nonnull
-    @Override
-    public String getName() throws ParsingException { return KIOSK_ID; }
+    @Nonnull @Override public String getName() throws ParsingException { return KIOSK_ID; }
 }
