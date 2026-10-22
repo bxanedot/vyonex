@@ -244,57 +244,51 @@ public final class YoutubeParsingHelper {
      */
     public static int parseDurationString(@Nonnull final String input)
             throws ParsingException, NumberFormatException {
-        if (!input.matches(".*\\d.*") && !input.equalsIgnoreCase("SHORTS")) {
-            throw new ParsingException("Error duration string contains no digits: " + input);
+        if (input == null) {
+            throw new ParsingException("Duration is missing");
         }
-
-        // If time separator : is not detected, try . instead
-        final String[] splitInput = input.contains(":")
-                ? input.split(":")
-                : input.split("\\.");
-
-        final int[] units = {24, 60, 60, 1};
-        final int offset = units.length - splitInput.length;
-        if (offset < 0) {
-            throw new ParsingException("Error duration string with unknown format: " + input);
-        }
-        int duration = 0;
-        for (int i = 0; i < splitInput.length; i++) {
-            duration = units[i + offset] * (duration + convertDurationToInt(splitInput[i]));
-        }
-        return duration;
-    }
-
-    /**
-     * Tries to convert a duration string to an integer without throwing an exception.
-     * <br/>
-     * Helper method for {@link #parseDurationString(String)}.
-     * <br/>
-     * Note: This method is also used as a workaround for VyonEx#8034 (YT shorts no longer
-     * display any duration in channels).
-     *
-     * @param input The string to process
-     * @return The converted integer or 0 if the conversion failed.
-     */
-    private static int convertDurationToInt(final String input) {
-        if (input == null || input.isEmpty()) {
+        final String value = input.trim();
+        if (value.equalsIgnoreCase("SHORTS")) {
             return 0;
         }
-
-        final String clearedInput = Utils.removeNonDigitCharacters(input);
-        try {
-            return Integer.parseInt(clearedInput);
-        } catch (final NumberFormatException ex) {
-            return 0;
+        if (value.isEmpty() || (value.contains(":") && value.contains("."))) {
+            throw new ParsingException("Unsupported duration: " + input);
         }
+
+        final String[] parts = value.split(value.contains(":") ? ":" : "\\.", -1);
+        if (parts.length == 0 || parts.length > 4) {
+            throw new ParsingException("Unsupported duration: " + input);
+        }
+
+        final long[] multipliers = parts.length == 4
+                ? new long[]{24L * 60 * 60, 60L * 60, 60, 1}
+                : parts.length == 3
+                ? new long[]{60L * 60, 60, 1}
+                : parts.length == 2 ? new long[]{60, 1} : new long[]{1};
+        long seconds = 0;
+        for (int i = 0; i < parts.length; i++) {
+            final String part = parts[i];
+            if (!part.matches("\\d+")) {
+                throw new ParsingException("Invalid duration component: " + part);
+            }
+            final long component = Long.parseLong(part);
+            if (component > Integer.MAX_VALUE) {
+                throw new ParsingException("Duration component is too large: " + part);
+            }
+            seconds += component * multipliers[i];
+        }
+        if (seconds > Integer.MAX_VALUE) {
+            throw new ParsingException("Duration is too large: " + input);
+        }
+        return (int) seconds;
     }
 
     @Nonnull
     public static String getFeedUrlFrom(@Nonnull final String channelIdOrUser) {
         if (channelIdOrUser.startsWith("user/")) {
-            return FEED_BASE_USER + channelIdOrUser.replace("user/", "");
+            return FEED_BASE_USER + channelIdOrUser.substring("user/".length());
         } else if (channelIdOrUser.startsWith("channel/")) {
-            return FEED_BASE_CHANNEL_ID + channelIdOrUser.replace("channel/", "");
+            return FEED_BASE_CHANNEL_ID + channelIdOrUser.substring("channel/".length());
         } else {
             return FEED_BASE_CHANNEL_ID + channelIdOrUser;
         }
@@ -308,7 +302,7 @@ public final class YoutubeParsingHelper {
      * @return Whether given id belongs to a YouTube Mix
      */
     public static boolean isYoutubeMixId(@Nonnull final String playlistId) {
-        return playlistId.startsWith("RD");
+        return playlistId != null && playlistId.startsWith("RD");
     }
 
     /**
@@ -319,7 +313,7 @@ public final class YoutubeParsingHelper {
      * @return Whether given id belongs to a YouTube My Mix
      */
     public static boolean isYoutubeMyMixId(@Nonnull final String playlistId) {
-        return playlistId.startsWith("RDMM");
+        return playlistId != null && playlistId.startsWith("RDMM");
     }
 
     /**
@@ -330,7 +324,8 @@ public final class YoutubeParsingHelper {
      * @return Whether given id belongs to a YouTube Music Mix
      */
     public static boolean isYoutubeMusicMixId(@Nonnull final String playlistId) {
-        return playlistId.startsWith("RDAMVM") || playlistId.startsWith("RDCLAK");
+        return playlistId != null && (playlistId.startsWith("RDAMVM")
+                || playlistId.startsWith("RDCLAK"));
     }
 
     /**
@@ -340,7 +335,7 @@ public final class YoutubeParsingHelper {
      * @return Whether given id belongs to a YouTube Genre Mix
      */
     public static boolean isYoutubeGenreMixId(@Nonnull final String playlistId) {
-        return playlistId.startsWith("RDGMEM");
+        return playlistId != null && playlistId.startsWith("RDGMEM");
     }
 
     /**
@@ -354,34 +349,22 @@ public final class YoutubeParsingHelper {
     @Nonnull
     public static String extractVideoIdFromMixId(final String playlistId)
             throws ParsingException {
-        if (isNullOrEmpty(playlistId)) {
-            throw new ParsingException("Video id could not be determined from empty playlist id");
-
-        } else if (isYoutubeMyMixId(playlistId)) {
-            return playlistId.substring(4);
-
-        } else if (isYoutubeMusicMixId(playlistId)) {
-            return playlistId.substring(6);
-
-        } else if (isYoutubeGenreMixId(playlistId)) {
-            // Genre mixes are of the form RDGMEM{garbage}, so videoId can't be determined
-            throw new ParsingException("Video id could not be determined from genre mix id: "
-                    + playlistId);
-
-        } else if (isYoutubeMixId(playlistId)) { // normal mix
-            if (playlistId.length() != 13) {
-                // Stream YouTube mixes are of the form RD{videoId}, but if videoId is not exactly
-                // 11 characters then it can't be a video id, hence we are dealing with a different
-                // type of mix (e.g. genre mixes handled above, of the form RDGMEM{garbage})
-                throw new ParsingException("Video id could not be determined from mix id: "
-                    + playlistId);
-            }
-            return playlistId.substring(2);
-
-        } else { // not a mix
-            throw new ParsingException("Video id could not be determined from playlist id: "
-                    + playlistId);
+        if (playlistId == null || playlistId.isEmpty()) {
+            throw new ParsingException("A video cannot be derived from an empty playlist id");
         }
+        if (isYoutubeMyMixId(playlistId)) {
+            return playlistId.substring(4);
+        }
+        if (isYoutubeMusicMixId(playlistId)) {
+            return playlistId.substring(6);
+        }
+        if (isYoutubeGenreMixId(playlistId)) {
+            throw new ParsingException("A genre mix does not identify a video");
+        }
+        if (isYoutubeMixId(playlistId) && playlistId.length() == 13) {
+            return playlistId.substring(2);
+        }
+        throw new ParsingException("A video cannot be derived from playlist id: " + playlistId);
     }
 
     /**
@@ -393,21 +376,19 @@ public final class YoutubeParsingHelper {
     @Nonnull
     public static PlaylistInfo.PlaylistType extractPlaylistTypeFromPlaylistId(
             final String playlistId) throws ParsingException {
-        if (isNullOrEmpty(playlistId)) {
+        if (playlistId == null || playlistId.isEmpty()) {
             throw new ParsingException("Could not extract playlist type from empty playlist id");
-        } else if (isYoutubeMusicMixId(playlistId)) {
-            return PlaylistInfo.PlaylistType.MIX_MUSIC;
-        } else if (isYoutubeGenreMixId(playlistId)) {
-            return PlaylistInfo.PlaylistType.MIX_GENRE;
-        } else if (isYoutubeMixId(playlistId)) { // normal mix
-            // Either a normal mix based on a stream, or a "my mix" (still based on a stream).
-            // NOTE: if YouTube introduces even more types of mixes that still start with RD,
-            // they will default to this, even though they might not be based on a stream.
-            return PlaylistInfo.PlaylistType.MIX_STREAM;
-        } else {
-            // not a known type of mix: just consider it a normal playlist
-            return PlaylistInfo.PlaylistType.NORMAL;
         }
+        if (isYoutubeMusicMixId(playlistId)) {
+            return PlaylistInfo.PlaylistType.MIX_MUSIC;
+        }
+        if (isYoutubeGenreMixId(playlistId)) {
+            return PlaylistInfo.PlaylistType.MIX_GENRE;
+        }
+        if (isYoutubeMixId(playlistId)) {
+            return PlaylistInfo.PlaylistType.MIX_STREAM;
+        }
+        return PlaylistInfo.PlaylistType.NORMAL;
     }
 
     /**
