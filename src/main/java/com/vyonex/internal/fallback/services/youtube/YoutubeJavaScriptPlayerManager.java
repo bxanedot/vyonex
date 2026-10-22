@@ -242,13 +242,10 @@ public final class YoutubeJavaScriptPlayerManager {
         if (cachedThrottlingDeobfuscationFunction == null) {
             try {
                 cachedThrottlingDeobfuscationFunctionName =
-                        YoutubeThrottlingParameterUtils.getDeobfuscationFunctionName(
-                                cachedJavaScriptPlayerCode);
-
+                        YoutubeThrottlingParameterUtils.DEOBFUSCATION_FUNCTION_NAME;
                 cachedThrottlingDeobfuscationFunction =
                         YoutubeThrottlingParameterUtils.getDeobfuscationFunction(
-                                cachedJavaScriptPlayerCode,
-                                cachedThrottlingDeobfuscationFunctionName);
+                                cachedJavaScriptPlayerCode);
             } catch (final ParsingException e) {
                 // Store the exception for future calls of this method, in order to improve
                 // performance
