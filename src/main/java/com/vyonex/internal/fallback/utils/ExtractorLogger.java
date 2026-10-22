@@ -1,241 +1,154 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.utils;
 
-/**
- * Logging class for outputting logs from the extractor to the desired output<br><br>
- * Intended to be used in the same manner as Android's {@code Log}:<br>
- * {@code ExtractorLogger.d("Hello my name Jeff")}<br>
- * <br>
- * Also supports formatted arguments:<br>
- * {@code ExtractorLogger.d("Hello my name is {Name} {}", name, surname)}
- */
 public final class ExtractorLogger {
+    private static volatile Logger logger;
 
     private ExtractorLogger() { }
 
-    private static final Logger EMPTY_LOGGER = new EmptyLogger();
-    private static volatile Logger logger = EMPTY_LOGGER;
-
-    /**
-     * Set the Logger that you want the extractor logs to be logged to
-     * <br>
-     * Provide an implementation of the {@code Logger} interface for each method and whenever the
-     * extractor code calls {@code ExtractorLogger.d/w/e}
-     * it will be routed through to {@code customLogger}
-     * <br>
-     * <br>
-     * For VyonEx, this should be set at the start of the application ideally in
-     * {@code MainActivity.onCreate}, but absolutely before any extractor code can run
-     */
     public static void setLogger(final Logger customLogger) {
-        logger = customLogger != null ? customLogger : EMPTY_LOGGER;
+        logger = customLogger;
     }
 
     public enum Level { DEBUG, WARN, ERROR }
 
-    @SuppressWarnings("checkstyle:NeedBraces")
-    private static void log(final Level level,
-                            final String tag,
-                            final String message,
-                            final Throwable t) {
-        if (logger == EMPTY_LOGGER) return;
+    private static void log(final Level level, final String tag, final String message,
+                            final Throwable cause) {
+        final Logger target = logger;
+        if (target == null) return;
         switch (level) {
-            case DEBUG:
-                if (t == null) {
-                    logger.debug(tag, message);
-                } else {
-                    logger.debug(tag, message, t);
-                }
-                break;
-            case WARN:
-                if (t == null) {
-                    logger.warn(tag, message);
-                } else {
-                    logger.warn(tag, message, t);
-                }
-                break;
-            case ERROR:
-                if (t == null) {
-                    logger.error(tag, message);
-                } else {
-                    logger.error(tag, message, t);
-                }
-                break;
+            case DEBUG -> {
+                if (cause == null) target.debug(tag, message);
+                else target.debug(tag, message, cause);
+            }
+            case WARN -> {
+                if (cause == null) target.warn(tag, message);
+                else target.warn(tag, message, cause);
+            }
+            case ERROR -> {
+                if (cause == null) target.error(tag, message);
+                else target.error(tag, message, cause);
+            }
         }
     }
 
-    /***
-     * Internal method for logging with formatting
-     */
-    @SuppressWarnings("checkstyle:NeedBraces")
-    private static void logFormat(final Level level,
-                                  final String tag,
-                                  final Throwable t,
-                                  final String template,
-                                  final Object... args) {
-        if (logger == EMPTY_LOGGER) return;
-        log(level, tag, format(template, args), t);
+    private static void logFormat(final Level level, final String tag, final Throwable cause,
+                                  final String template, final Object... arguments) {
+        if (logger != null) log(level, tag, format(template, arguments), cause);
     }
 
-    // DEBUG
-    public static void d(final String tag, final String msg) {
-        log(Level.DEBUG, tag, msg, null);
+    public static void d(final String tag, final String message) {
+        log(Level.DEBUG, tag, message, null);
     }
 
-    public static void d(final String tag, final String msg, final Throwable t) {
-        log(Level.DEBUG, tag, msg, t);
+    public static void d(final String tag, final String message, final Throwable cause) {
+        log(Level.DEBUG, tag, message, cause);
     }
 
-    public static void d(final String tag, final String template, final Object... args) {
-        logFormat(Level.DEBUG, tag, null, template, args);
+    public static void d(final String tag, final String template, final Object... arguments) {
+        logFormat(Level.DEBUG, tag, null, template, arguments);
     }
 
-    public static void d(final String tag,
-                         final Throwable t,
-                         final String template,
-                         final Object... args) {
-        logFormat(Level.DEBUG, tag, t, template, args);
+    public static void d(final String tag, final Throwable cause, final String template,
+                         final Object... arguments) {
+        logFormat(Level.DEBUG, tag, cause, template, arguments);
     }
 
-    // WARN
-    public static void w(final String tag, final String msg) {
-        log(Level.WARN, tag, msg, null);
+    public static void w(final String tag, final String message) {
+        log(Level.WARN, tag, message, null);
     }
 
-    public static void w(final String tag, final String msg, final Throwable t) {
-        log(Level.WARN, tag, msg, t);
+    public static void w(final String tag, final String message, final Throwable cause) {
+        log(Level.WARN, tag, message, cause);
     }
 
-    public static void w(final String tag, final String template, final Object... args) {
-        logFormat(Level.WARN, tag, null, template, args);
+    public static void w(final String tag, final String template, final Object... arguments) {
+        logFormat(Level.WARN, tag, null, template, arguments);
     }
 
-    public static void w(final String tag,
-                         final Throwable t,
-                         final String template,
-                         final Object... args) {
-        logFormat(Level.WARN, tag, t, template, args);
+    public static void w(final String tag, final Throwable cause, final String template,
+                         final Object... arguments) {
+        logFormat(Level.WARN, tag, cause, template, arguments);
     }
 
-    // ERROR
-    public static void e(final String tag, final String msg) {
-        log(Level.ERROR, tag, msg, null);
+    public static void e(final String tag, final String message) {
+        log(Level.ERROR, tag, message, null);
     }
 
-    public static void e(final String tag, final String msg, final Throwable t) {
-        log(Level.ERROR, tag, msg, t);
+    public static void e(final String tag, final String message, final Throwable cause) {
+        log(Level.ERROR, tag, message, cause);
     }
 
-    public static void e(final String tag, final String template, final Object... args) {
-        logFormat(Level.ERROR, tag, null, template, args);
+    public static void e(final String tag, final String template, final Object... arguments) {
+        logFormat(Level.ERROR, tag, null, template, arguments);
     }
 
-    public static void e(final String tag,
-                         final Throwable t,
-                         final String template,
-                         final Object... args) {
-        logFormat(Level.ERROR, tag, t, template, args);
+    public static void e(final String tag, final Throwable cause, final String template,
+                         final Object... arguments) {
+        logFormat(Level.ERROR, tag, cause, template, arguments);
     }
 
-    /**
-     * Simple string format method for easier logging in the form of
-     * {@code ExtractorLogger.d("Hello my name {Name} {}", name, surname)}<br><br>
-     * Braces can be escaped by double braces:
-     * <code>{{ -> {</code> and
-     * <code>}} -> }</code>
-     * @param template The template string to format
-     * @param args Arguments to replace identifiers with in {@code template}
-     * @return Formatted string with arguments replaced
-     */
-    private static String format(final String template, final Object... args) {
-        if (template == null || args == null || args.length == 0) {
-            return template;
-        }
-        final var result = new StringBuilder(template.length() + Math.min(32, 16 * args.length));
-        int cursorIndex = 0;
-        int argIndex = 0;
-        final int n = template.length();
-        while (cursorIndex < n) {
-            final char ch = template.charAt(cursorIndex);
-
-            // {{ -> {
-            // If current char is { and next char is {, append { and skip 2 chars
-            if (ch == '{' && cursorIndex + 1 < n && template.charAt(cursorIndex + 1) == '{') {
-                result.append('{');
-                cursorIndex += 2;
-                continue;
-            }
-
-            // }} -> }
-            if (ch == '}' && cursorIndex + 1 < n && template.charAt(cursorIndex + 1) == '}') {
-                result.append('}');
-                cursorIndex += 2;
-                continue;
-            }
-
-            // {name}, {} placeholders
-            if (ch == '{') {
-                // Find first } after the current {
-                final int closeBraceIndex = template.indexOf('}', cursorIndex + 1);
-                if (closeBraceIndex < 0) {
-                    // If none found then there's no more arguments to replace
-                    // Append rest of the string
-                    result.append(template, cursorIndex, n);
+    private static String format(final String template, final Object... arguments) {
+        if (template == null || arguments == null || arguments.length == 0) return template;
+        final StringBuilder result = new StringBuilder(template.length() + arguments.length * 8);
+        int argument = 0;
+        for (int cursor = 0; cursor < template.length();) {
+            final char current = template.charAt(cursor);
+            if ((current == '{' || current == '}') && cursor + 1 < template.length()
+                    && template.charAt(cursor + 1) == current) {
+                result.append(current);
+                cursor += 2;
+            } else if (current == '{') {
+                final int close = template.indexOf('}', cursor + 1);
+                if (close < 0) {
+                    result.append(template, cursor, template.length());
                     break;
                 }
-
-                // Found a }
-                if (argIndex < args.length) {
-                    // Append the argument
-                    result.append(args[argIndex++]);
-                } else {
-                    // No args left to append; append text as is
-                    result.append(template, cursorIndex, closeBraceIndex + 1);
-                }
-                cursorIndex = closeBraceIndex + 1;
-                continue;
+                if (argument < arguments.length) result.append(arguments[argument++]);
+                else result.append(template, cursor, close + 1);
+                cursor = close + 1;
+            } else {
+                result.append(current);
+                cursor++;
             }
-
-            result.append(ch);
-            cursorIndex++;
         }
         return result.toString();
     }
 
-    private static final class EmptyLogger implements Logger {
-        public void debug(final String tag, final String msg) { }
-        public void debug(final String tag, final String msg, final Throwable throwable) { }
-        public void warn(final String tag, final String msg) { }
-        public void warn(final String tag, final String msg, final Throwable t) { }
-        public void error(final String tag, final String msg) { }
-        public void error(final String tag, final String msg, final Throwable t) { }
-    }
-
     public static final class ConsoleLogger implements Logger {
-        public void debug(final String tag, final String msg) {
-            System.out.println("[DEBUG][" + tag + "] " + msg);
+        @Override
+        public void debug(final String tag, final String message) {
+            System.out.println("[DEBUG][" + tag + "] " + message);
         }
 
-        public void debug(final String tag, final String msg, final Throwable throwable) {
-            debug(tag, msg);
-            throwable.printStackTrace(System.err);
-        }
-        public void warn(final String tag, final String msg) {
-            System.out.println("[WARN ][" + tag + "] " + msg);
+        @Override
+        public void debug(final String tag, final String message, final Throwable cause) {
+            debug(tag, message);
+            cause.printStackTrace(System.err);
         }
 
-        public void warn(final String tag, final String msg, final Throwable t) {
-            warn(tag, msg);
-            t.printStackTrace(System.err);
+        @Override
+        public void warn(final String tag, final String message) {
+            System.out.println("[WARN ][" + tag + "] " + message);
         }
 
-        public void error(final String tag, final String msg) {
-            System.err.println("[ERROR][" + tag + "] " + msg);
+        @Override
+        public void warn(final String tag, final String message, final Throwable cause) {
+            warn(tag, message);
+            cause.printStackTrace(System.err);
         }
 
-        public void error(final String tag, final String msg, final Throwable t) {
-            System.err.println("[ERROR][" + tag + "] " + msg);
-            t.printStackTrace(System.err);
+        @Override
+        public void error(final String tag, final String message) {
+            System.err.println("[ERROR][" + tag + "] " + message);
+        }
+
+        @Override
+        public void error(final String tag, final String message, final Throwable cause) {
+            error(tag, message);
+            cause.printStackTrace(System.err);
         }
     }
 }
