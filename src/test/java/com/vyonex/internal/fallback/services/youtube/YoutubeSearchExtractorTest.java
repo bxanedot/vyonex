@@ -11,6 +11,7 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
+import com.vyonex.internal.fallback.search.SearchInfo;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSearchExtractor;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory;
 import com.vyonex.internal.json.JsonArray;
@@ -47,6 +48,12 @@ class YoutubeSearchExtractorTest {
             VyonEx.init(downloader);
             final YoutubeSearchExtractor extractor = extractor(YoutubeSearchQueryHandlerFactory.ALL);
             extractor.onFetchPage(downloader);
+
+            final SearchInfo searchInfo = SearchInfo.getInfo(extractor);
+            assertEquals("ambient", searchInfo.getSearchString());
+            assertEquals("ambient band", searchInfo.getSearchSuggestion());
+            assertFalse(searchInfo.isCorrectedSearch());
+            assertTrue(searchInfo.getMetaInfo().isEmpty());
 
             assertEquals("ambient band", extractor.getSearchSuggestion());
             assertFalse(extractor.isCorrectedSearch());
