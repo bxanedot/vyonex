@@ -1171,46 +1171,22 @@ public final class YoutubeParsingHelper {
     public static void defaultAlertsCheck(@Nonnull final JsonObject initialData)
             throws ParsingException {
         final JsonArray alerts = initialData.getArray("alerts");
-        if (!isNullOrEmpty(alerts)) {
-            final JsonObject alertRenderer = alerts.getObject(0).getObject("alertRenderer");
-            final String alertText = getTextFromObject(alertRenderer.getObject("text"));
-            final String alertType = alertRenderer.getString("type", "");
-            if (alertType.equalsIgnoreCase("ERROR")) {
-                if (alertText != null
-                        && (alertText.contains("This account has been terminated")
-                        || alertText.contains("This channel was removed"))) {
-                    if (alertText.matches(".*violat(ed|ion|ing).*")
-                            || alertText.contains("infringement")) {
-                        // Possible error messages:
-                        // "This account has been terminated for a violation of YouTube's Terms of
-                        //     Service."
-                        // "This account has been terminated due to multiple or severe violations of
-                        //     YouTube's policy prohibiting hate speech."
-                        // "This account has been terminated due to multiple or severe violations of
-                        //     YouTube's policy prohibiting content designed to harass, bully or
-                        //     threaten."
-                        // "This account has been terminated due to multiple or severe violations
-                        //     of YouTube's policy against spam, deceptive practices and misleading
-                        //     content or other Terms of Service violations."
-                        // "This account has been terminated due to multiple or severe violations of
-                        //     YouTube's policy on nudity or sexual content."
-                        // "This account has been terminated for violating YouTube's Community
-                        //     Guidelines."
-                        // "This account has been terminated because we received multiple
-                        //     third-party claims of copyright infringement regarding material that
-                        //     the user posted."
-                        // "This account has been terminated because it is linked to an account that
-                        //     received multiple third-party claims of copyright infringement."
-                        // "This channel was removed because it violated our Community Guidelines."
-                        throw new AccountTerminatedException(alertText,
-                                AccountTerminatedException.Reason.VIOLATION);
-                    } else {
-                        throw new AccountTerminatedException(alertText);
-                    }
-                }
-                throw new ContentNotAvailableException("Got error: \"" + alertText + "\"");
+        if (alerts.isEmpty()) return;
+        final JsonObject alert = alerts.getObject(0).getObject("alertRenderer");
+        if (!"ERROR".equalsIgnoreCase(alert.getString("type", ""))) return;
+
+        final String text = getTextFromObject(alert.getObject("text"));
+        if (text != null && (text.contains("This account has been terminated")
+                || text.contains("This channel was removed"))) {
+            final String lower = text.toLowerCase(Locale.ROOT);
+            if (lower.contains("violated") || lower.contains("violation")
+                    || lower.contains("violating") || lower.contains("infringement")) {
+                throw new AccountTerminatedException(text,
+                        AccountTerminatedException.Reason.VIOLATION);
             }
+            throw new AccountTerminatedException(text);
         }
+        throw new ContentNotAvailableException("YouTube returned an error: " + text);
     }
 
     /**

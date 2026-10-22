@@ -5,6 +5,8 @@ package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.AccountTerminatedException;
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.json.JsonParser;
@@ -161,6 +163,36 @@ class YoutubeParsingHelperTest {
         YoutubeParsingHelper.setConsentAccepted(true);
         assertEquals("SOCS=CAISAiAD", YoutubeParsingHelper.generateConsentCookie());
         YoutubeParsingHelper.setConsentAccepted(false);
+    }
+
+    @Test
+    void classifiesServiceAlertsByAvailabilityAndTerminationReason()
+            throws JsonParserException, ParsingException {
+        YoutubeParsingHelper.defaultAlertsCheck(JsonParser.object().from("{}"));
+        YoutubeParsingHelper.defaultAlertsCheck(JsonParser.object().from(
+                "{\"alerts\":[{\"alertRenderer\":{\"type\":\"WARNING\","
+                        + "\"text\":{\"simpleText\":\"Warning\"}}}]}"));
+
+        final var unavailable = JsonParser.object().from(
+                "{\"alerts\":[{\"alertRenderer\":{\"type\":\"ERROR\","
+                        + "\"text\":{\"simpleText\":\"Unavailable\"}}}]}");
+        assertThrows(ContentNotAvailableException.class,
+                () -> YoutubeParsingHelper.defaultAlertsCheck(unavailable));
+
+        final var violation = JsonParser.object().from(
+                "{\"alerts\":[{\"alertRenderer\":{\"type\":\"ERROR\","
+                        + "\"text\":{\"simpleText\":\"This account has been terminated for "
+                        + "violating policy\"}}}]}");
+        final var violationError = assertThrows(AccountTerminatedException.class,
+                () -> YoutubeParsingHelper.defaultAlertsCheck(violation));
+        assertEquals(AccountTerminatedException.Reason.VIOLATION, violationError.getReason());
+
+        final var unknownReason = JsonParser.object().from(
+                "{\"alerts\":[{\"alertRenderer\":{\"type\":\"ERROR\","
+                        + "\"text\":{\"simpleText\":\"This channel was removed\"}}}]}");
+        final var unknownError = assertThrows(AccountTerminatedException.class,
+                () -> YoutubeParsingHelper.defaultAlertsCheck(unknownReason));
+        assertEquals(AccountTerminatedException.Reason.UNKNOWN, unknownError.getReason());
     }
 
     private static String navigation(final String json) throws JsonParserException {
