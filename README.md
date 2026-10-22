@@ -1,6 +1,6 @@
 # VyonEx
 
-VyonEx is one Kotlin/JVM library for YouTube media extraction. It bundles both extraction engines into one Gradle dependency under the com.vyonex namespace.
+VyonEx is one Kotlin/JVM library for YouTube media extraction. One Gradle dependency under the com.vyonex namespace.
 
 ## Coordinates
 
