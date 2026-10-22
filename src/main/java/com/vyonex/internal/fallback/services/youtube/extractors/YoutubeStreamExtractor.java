@@ -1457,35 +1457,45 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public Privacy getPrivacy() {
-        return playerMicroFormatRenderer.getBoolean("isUnlisted")
-                || getVideoPrimaryInfoRenderer().getArray("badges")
-                .streamAsJsonObjects()
-                .anyMatch(badge ->
-                        "PRIVACY_UNLISTED".equals(badge.getObject("metadataBadgeRenderer")
-                                .getObject("icon")
-                                .getString("iconType")))
-                ? Privacy.UNLISTED
-                : Privacy.PUBLIC;
+        return parsePrivacy(playerMicroFormatRenderer, getVideoPrimaryInfoRenderer());
+    }
+
+    static Privacy parsePrivacy(@Nonnull final JsonObject microFormat,
+                                @Nonnull final JsonObject primaryInfo) {
+        if (microFormat.getBoolean("isUnlisted")) return Privacy.UNLISTED;
+        for (final JsonObject badge : primaryInfo.getArray("badges").streamAsJsonObjects().toList()) {
+            if ("PRIVACY_UNLISTED".equals(badge.getObject("metadataBadgeRenderer")
+                    .getObject("icon").getString("iconType"))) return Privacy.UNLISTED;
+        }
+        return Privacy.PUBLIC;
     }
 
     @Nonnull
     @Override
     public String getCategory() {
-        return playerMicroFormatRenderer.getString("category", "");
+        return parseCategory(playerMicroFormatRenderer);
+    }
+
+    static String parseCategory(@Nonnull final JsonObject microFormat) {
+        return microFormat.getString("category", "");
     }
 
     @Nonnull
     @Override
     public String getLicence() throws ParsingException {
-        final JsonObject metadataRowRenderer = getVideoSecondaryInfoRenderer()
+        return parseLicense(getVideoSecondaryInfoRenderer());
+    }
+
+    static String parseLicense(@Nonnull final JsonObject secondaryInfo) {
+        final JsonObject metadataRowRenderer = secondaryInfo
                 .getObject("metadataRowContainer")
                 .getObject("metadataRowContainerRenderer")
                 .getArray("rows")
                 .getObject(0)
                 .getObject("metadataRowRenderer");
 
-        final JsonArray contents = metadataRowRenderer.getArray("contents");
-        final String license = getTextFromObject(contents.getObject(0));
+        final String license = getTextFromObject(metadataRowRenderer.getArray("contents")
+                .getObject(0));
         return license != null
                 && "Licence".equals(getTextFromObject(metadataRowRenderer.getObject(TITLE)))
                 ? license
@@ -1500,8 +1510,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public List<String> getTags() {
-        return JsonUtils.getStringListFromJsonArray(playerResponse.getObject(VIDEO_DETAILS)
-                .getArray("keywords"));
+        return parseTags(playerResponse.getObject(VIDEO_DETAILS));
+    }
+
+    static List<String> parseTags(@Nonnull final JsonObject videoDetails) {
+        final List<String> tags = new ArrayList<>();
+        final JsonArray keywords = videoDetails.getArray("keywords");
+        for (int index = 0; index < keywords.size(); index++) {
+            final String tag = keywords.getString(index);
+            if (tag != null) tags.add(tag);
+        }
+        return tags;
     }
 
     @Nonnull
