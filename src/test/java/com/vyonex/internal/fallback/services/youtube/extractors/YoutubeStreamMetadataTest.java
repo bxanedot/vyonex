@@ -50,4 +50,13 @@ class YoutubeStreamMetadataTest {
         assertNull(YoutubeStreamExtractor.extractTextualUploadDate(JsonParser.object().from("{}"),
                 JsonParser.object().from("{}"), StreamType.LIVE_STREAM));
     }
+
+    @Test
+    void detectsAgeRestrictionInMetadataRows() throws Exception {
+        final var restricted = JsonParser.object().from("{\"metadataRowContainer\":{"
+                + "\"metadataRowContainerRenderer\":{\"rows\":[{\"metadataRowRenderer\":{"
+                + "\"contents\":[{\"runs\":[{\"text\":\"Age-restricted\"}]}]}}]}}}");
+        assertEquals(18, YoutubeStreamExtractor.parseAgeLimit(restricted));
+        assertEquals(0, YoutubeStreamExtractor.parseAgeLimit(JsonParser.object().from("{}")));
+    }
 }

@@ -290,24 +290,26 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         if (ageLimit != -1) {
             return ageLimit;
         }
-
-        final boolean ageRestricted = getVideoSecondaryInfoRenderer()
-                .getObject("metadataRowContainer")
-                .getObject("metadataRowContainerRenderer")
-                .getArray("rows")
-                .streamAsJsonObjects()
-                .flatMap(metadataRow -> metadataRow
-                        .getObject("metadataRowRenderer")
-                        .getArray("contents")
-                        .streamAsJsonObjects())
-                .flatMap(content -> content
-                        .getArray("runs")
-                        .streamAsJsonObjects())
-                .map(run -> run.getString("text", ""))
-                .anyMatch(rowText -> rowText.contains("Age-restricted"));
-
-        ageLimit = ageRestricted ? 18 : NO_AGE_LIMIT;
+        ageLimit = parseAgeLimit(getVideoSecondaryInfoRenderer());
         return ageLimit;
+    }
+
+    static int parseAgeLimit(@Nonnull final JsonObject secondaryInfo) {
+        final JsonArray rows = secondaryInfo.getObject("metadataRowContainer")
+                .getObject("metadataRowContainerRenderer").getArray("rows");
+        for (int row = 0; row < rows.size(); row++) {
+            final JsonArray contents = rows.getObject(row).getObject("metadataRowRenderer")
+                    .getArray("contents");
+            for (int content = 0; content < contents.size(); content++) {
+                final JsonArray runs = contents.getObject(content).getArray("runs");
+                for (int run = 0; run < runs.size(); run++) {
+                    if (runs.getObject(run).getString("text", "").contains("Age-restricted")) {
+                        return 18;
+                    }
+                }
+            }
+        }
+        return NO_AGE_LIMIT;
     }
 
     @Override
