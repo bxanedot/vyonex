@@ -583,26 +583,27 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public long getUploaderSubscriberCount() throws ParsingException {
-        final JsonObject videoOwnerRenderer = JsonUtils.getObject(videoSecondaryInfoRenderer,
-                "owner.videoOwnerRenderer");
+        return extractUploaderSubscriberCount(videoSecondaryInfoRenderer.getObject("owner")
+                .getObject("videoOwnerRenderer"));
+    }
 
-        String subscriberCountText = null;
-        if (videoOwnerRenderer.has("subscriberCountText")) {
-            subscriberCountText = getTextFromObject(videoOwnerRenderer
-                .getObject("subscriberCountText"));
-        } else {
-            final String content = YoutubeParsingHelper.getFirstCollaborator(
-                videoOwnerRenderer.getObject("navigationEndpoint")
-            ).getObject("subtitle").getString("content");
-            subscriberCountText = content.split("•")[1];
+    static long extractUploaderSubscriberCount(@Nonnull final JsonObject owner)
+            throws ParsingException {
+        String countText = getTextFromObject(owner.getObject("subscriberCountText"));
+        if (isNullOrEmpty(countText)) {
+            final JsonObject collaborator = YoutubeParsingHelper.getFirstCollaborator(
+                    owner.getObject("navigationEndpoint"));
+            if (collaborator != null) {
+                final String subtitle = collaborator.getObject("subtitle").getString("content");
+                if (subtitle != null) {
+                    final int separator = subtitle.indexOf('•');
+                    if (separator >= 0) countText = subtitle.substring(separator + 1).trim();
+                }
+            }
         }
-
-        if (isNullOrEmpty(subscriberCountText)) {
-            return UNKNOWN_SUBSCRIBER_COUNT;
-        }
-
+        if (isNullOrEmpty(countText)) return UNKNOWN_SUBSCRIBER_COUNT;
         try {
-            return Utils.mixedNumberWordToLong(subscriberCountText);
+            return Utils.mixedNumberWordToLong(countText);
         } catch (final NumberFormatException e) {
             throw new ParsingException("Could not get uploader subscriber count", e);
         }

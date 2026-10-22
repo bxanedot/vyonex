@@ -5,6 +5,7 @@ package com.vyonex.internal.fallback.services.youtube.extractors;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.stream.Description;
+import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -135,5 +136,21 @@ class YoutubeStreamMetadataTest {
                 JsonParser.object().from("{}"), 0));
         assertEquals(java.util.List.of(), YoutubeStreamExtractor.extractUploaderAvatars(
                 JsonParser.object().from("{}"), 18));
+    }
+
+    @Test
+    void readsSubscriberCountFromOwnerOrCollaborator() throws Exception {
+        assertEquals(1_200_000, YoutubeStreamExtractor.extractUploaderSubscriberCount(
+                JsonParser.object().from("{\"subscriberCountText\":{"
+                        + "\"simpleText\":\"1.2M subscribers\"}}")));
+        assertEquals(12_000, YoutubeStreamExtractor.extractUploaderSubscriberCount(
+                JsonParser.object().from("{\"navigationEndpoint\":{\"showDialogCommand\":{"
+                        + "\"panelLoadingStrategy\":{\"inlineContent\":{"
+                        + "\"dialogViewModel\":{\"customContent\":{\"listViewModel\":{"
+                        + "\"listItems\":[{\"listItemViewModel\":{\"subtitle\":{"
+                        + "\"content\":\"Artist • 12K subscribers\"}}}]}}}}}}}}")));
+        assertEquals(StreamExtractor.UNKNOWN_SUBSCRIBER_COUNT,
+                YoutubeStreamExtractor.extractUploaderSubscriberCount(
+                        JsonParser.object().from("{}")));
     }
 }
