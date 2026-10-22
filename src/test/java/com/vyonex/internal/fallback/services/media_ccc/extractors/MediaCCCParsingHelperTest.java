@@ -41,6 +41,20 @@ class MediaCCCParsingHelperTest {
     }
 
     @Test
+    void extractsLiveStreamImageFields() throws JsonParserException {
+        final JsonObject item = JsonParser.object().from("""
+                {"thumb":"https://example.test/live.jpg","poster":"https://example.test/poster.jpg"}
+                """);
+
+        final List<Image> images = MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem(item);
+
+        assertEquals("https://example.test/live.jpg", images.get(0).getUrl());
+        assertEquals(Image.ResolutionLevel.MEDIUM, images.get(0).getEstimatedResolutionLevel());
+        assertEquals("https://example.test/poster.jpg", images.get(1).getUrl());
+        assertEquals(Image.ResolutionLevel.HIGH, images.get(1).getEstimatedResolutionLevel());
+    }
+
+    @Test
     void ignoresMissingThumbnailAndLogoUrls() throws JsonParserException {
         final JsonObject item = JsonParser.object().from("{\"thumb_url\":\"\",\"poster_url\":null}");
 
