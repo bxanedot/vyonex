@@ -41,6 +41,7 @@ import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonWriter;
 
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.InfoItemExtractor;
 import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.MetaInfo;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
@@ -740,30 +741,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
             final TimeAgoParser timeAgoParser = getTimeAgoParser();
             results.streamAsJsonObjects()
-                    .map(result -> {
-                        if (result.has("compactVideoRenderer")) {
-                            return new YoutubeStreamInfoItemExtractor(
-                                    result.getObject("compactVideoRenderer"), timeAgoParser);
-                        } else if (result.has("compactRadioRenderer")) {
-                            return new YoutubeMixOrPlaylistInfoItemExtractor(
-                                    result.getObject("compactRadioRenderer"));
-                        } else if (result.has("compactPlaylistRenderer")) {
-                            return new YoutubeMixOrPlaylistInfoItemExtractor(
-                                    result.getObject("compactPlaylistRenderer"));
-                        } else if (result.has("lockupViewModel")) {
-                            final JsonObject lockupViewModel = result.getObject("lockupViewModel");
-                            final String contentType = lockupViewModel.getString("contentType");
-                            if ("LOCKUP_CONTENT_TYPE_PLAYLIST".equals(contentType)
-                                    || "LOCKUP_CONTENT_TYPE_PODCAST".equals(contentType)) {
-                                return new YoutubeMixOrPlaylistLockupInfoItemExtractor(
-                                        lockupViewModel);
-                            } else if ("LOCKUP_CONTENT_TYPE_VIDEO".equals(contentType)) {
-                                return new YoutubeStreamInfoItemLockupExtractor(
-                                        lockupViewModel, timeAgoParser);
-                            }
-                        }
-                        return null;
-                    })
+                    .map(result -> parseRelatedItem(result, timeAgoParser))
                     .filter(Objects::nonNull)
                     .forEach(collector::commit);
 
@@ -771,6 +749,32 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         } catch (final Exception e) {
             throw new ParsingException("Could not get related videos", e);
         }
+    }
+
+    @Nullable
+    static InfoItemExtractor parseRelatedItem(@Nonnull final JsonObject result,
+                                              @Nullable final TimeAgoParser timeAgoParser) {
+        if (result.has("compactVideoRenderer")) {
+            return new YoutubeStreamInfoItemExtractor(
+                    result.getObject("compactVideoRenderer"), timeAgoParser);
+        }
+        if (result.has("compactRadioRenderer")) {
+            return new YoutubeMixOrPlaylistInfoItemExtractor(
+                    result.getObject("compactRadioRenderer"));
+        }
+        if (result.has("compactPlaylistRenderer")) {
+            return new YoutubeMixOrPlaylistInfoItemExtractor(
+                    result.getObject("compactPlaylistRenderer"));
+        }
+
+        final JsonObject lockupViewModel = result.getObject("lockupViewModel");
+        return switch (lockupViewModel.getString("contentType", "")) {
+            case "LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST" ->
+                    new YoutubeMixOrPlaylistLockupInfoItemExtractor(lockupViewModel);
+            case "LOCKUP_CONTENT_TYPE_VIDEO" ->
+                    new YoutubeStreamInfoItemLockupExtractor(lockupViewModel, timeAgoParser);
+            default -> null;
+        };
     }
 
     /**
