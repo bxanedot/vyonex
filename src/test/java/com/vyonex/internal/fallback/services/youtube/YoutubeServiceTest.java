@@ -18,7 +18,9 @@ class YoutubeServiceTest {
         assertEquals("YouTube", service.getServiceInfo().getName());
         assertEquals("https://youtube.com", service.getBaseUrl());
         assertEquals("live", service.getKioskList().getDefaultKioskId());
-        assertTrue(service.getKioskList().getAvailableKiosks().contains("trending_music"));
+        assertTrue(service.getKioskList().getAvailableKiosks().containsAll(java.util.List.of(
+                "live", "trending_podcasts_episodes", "trending_gaming",
+                "trending_movies_and_shows", "trending_music")));
         assertTrue(service.getSupportedCountries().stream()
                 .anyMatch(country -> "US".equals(country.getCountryCode())));
     }

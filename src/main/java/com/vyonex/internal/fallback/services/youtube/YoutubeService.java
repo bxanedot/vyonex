@@ -37,12 +37,10 @@ import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSearchExt
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSubscriptionExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeSuggestionExtractor;
-import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeLiveExtractor;
+import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeDesktopBaseKioskExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingExtractor;
-import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingGamingVideosExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingMoviesAndShowsTrailersExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingMusicExtractor;
-import com.vyonex.internal.fallback.services.youtube.extractors.kiosk.YoutubeTrendingPodcastsEpisodesExtractor;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeCommentsLinkHandlerFactory;
@@ -127,13 +125,16 @@ public final class YoutubeService extends StreamingService {
         final var music = YoutubeTrendingMusicLinkHandlerFactory.INSTANCE;
         final var trending = YoutubeTrendingLinkHandlerFactory.INSTANCE;
         try {
-            kiosks.addKioskEntry((service, url, id) -> new YoutubeLiveExtractor(this,
-                    live.fromUrl(url), id), live, YoutubeLiveLinkHandlerFactory.KIOSK_ID);
-            kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingPodcastsEpisodesExtractor(
-                    this, podcasts.fromUrl(url), id), podcasts,
+            kiosks.addKioskEntry((service, url, id) -> new YoutubeDesktopBaseKioskExtractor(this,
+                    live.fromUrl(url), id, "UC4R8DWoMoI7CAwX8_LjQHig", "EgdsaXZldGFikgEDCKEK"),
+                    live, YoutubeLiveLinkHandlerFactory.KIOSK_ID);
+            kiosks.addKioskEntry((service, url, id) -> new YoutubeDesktopBaseKioskExtractor(
+                    this, podcasts.fromUrl(url), id, "FEpodcasts_destination", "qgcCCAM%3D"),
+                    podcasts,
                     YoutubeTrendingPodcastsEpisodesLinkHandlerFactory.KIOSK_ID);
-            kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingGamingVideosExtractor(
-                    this, gaming.fromUrl(url), id), gaming,
+            kiosks.addKioskEntry((service, url, id) -> new YoutubeDesktopBaseKioskExtractor(
+                    this, gaming.fromUrl(url), id, "UCOpNcN46UbXVtpKMrmU4Abg",
+                    "Egh0cmVuZGluZw%3D%3D"), gaming,
                     YoutubeTrendingGamingVideosLinkHandlerFactory.KIOSK_ID);
             kiosks.addKioskEntry((service, url, id) -> new YoutubeTrendingMoviesAndShowsTrailersExtractor(
                     this, trailers.fromUrl(url), id), trailers,

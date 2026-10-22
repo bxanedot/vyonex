@@ -33,18 +33,18 @@ import java.nio.charset.StandardCharsets;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-abstract class YoutubeDesktopBaseKioskExtractor extends KioskExtractor<StreamInfoItem> {
+public class YoutubeDesktopBaseKioskExtractor extends KioskExtractor<StreamInfoItem> {
 
     protected final String browseId;
     protected final String params;
 
     protected YoutubeChannelHelper.ChannelResponseData responseData;
 
-    protected YoutubeDesktopBaseKioskExtractor(final StreamingService streamingService,
-                                               final ListLinkHandler linkHandler,
-                                               final String kioskId,
-                                               final String browseId,
-                                               final String params) {
+    public YoutubeDesktopBaseKioskExtractor(final StreamingService streamingService,
+                                            final ListLinkHandler linkHandler,
+                                            final String kioskId,
+                                            final String browseId,
+                                            final String params) {
         super(streamingService, linkHandler, kioskId);
         this.browseId = browseId;
         this.params = params;
