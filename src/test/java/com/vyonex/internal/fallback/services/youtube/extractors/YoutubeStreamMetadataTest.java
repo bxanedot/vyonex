@@ -193,4 +193,16 @@ class YoutubeStreamMetadataTest {
         assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.parseLikeCount(
                 true, JsonParser.array().from("[]")));
     }
+
+    @Test
+    void classifiesLivePostLiveAndVideoResponses() throws Exception {
+        assertEquals(StreamType.LIVE_STREAM, YoutubeStreamExtractor.parseStreamType(
+                JsonParser.object().from("{\"playabilityStatus\":{"
+                        + "\"liveStreamability\":{}},\"videoDetails\":{"
+                        + "\"isPostLiveDvr\":true}}")));
+        assertEquals(StreamType.POST_LIVE_STREAM, YoutubeStreamExtractor.parseStreamType(
+                JsonParser.object().from("{\"videoDetails\":{\"isPostLiveDvr\":true}}")));
+        assertEquals(StreamType.VIDEO_STREAM, YoutubeStreamExtractor.parseStreamType(
+                JsonParser.object().from("{}")));
+    }
 }

@@ -708,14 +708,15 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     }
 
     private void setStreamType() {
-        if (playerResponse.getObject(PLAYABILITY_STATUS).has("liveStreamability")) {
-            streamType = StreamType.LIVE_STREAM;
-        } else if (playerResponse.getObject(VIDEO_DETAILS)
-                .getBoolean("isPostLiveDvr", false)) {
-            streamType = StreamType.POST_LIVE_STREAM;
-        } else {
-            streamType = StreamType.VIDEO_STREAM;
+        streamType = parseStreamType(playerResponse);
+    }
+
+    static StreamType parseStreamType(@Nonnull final JsonObject response) {
+        if (response.getObject(PLAYABILITY_STATUS).has("liveStreamability")) {
+            return StreamType.LIVE_STREAM;
         }
+        return response.getObject(VIDEO_DETAILS).getBoolean("isPostLiveDvr", false)
+                ? StreamType.POST_LIVE_STREAM : StreamType.VIDEO_STREAM;
     }
 
     @Nullable
