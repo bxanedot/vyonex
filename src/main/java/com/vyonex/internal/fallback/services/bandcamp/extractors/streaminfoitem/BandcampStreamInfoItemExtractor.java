@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem;
 
@@ -8,50 +10,33 @@ import com.vyonex.internal.fallback.stream.StreamType;
 
 import javax.annotation.Nullable;
 
-/**
- * Implements methods that return a constant value in subclasses for better readability.
- */
 public abstract class BandcampStreamInfoItemExtractor implements StreamInfoItemExtractor {
     private final String uploaderUrl;
 
-    public BandcampStreamInfoItemExtractor(final String uploaderUrl) {
+    protected BandcampStreamInfoItemExtractor(final String uploaderUrl) {
         this.uploaderUrl = uploaderUrl;
     }
 
     @Override
-    public StreamType getStreamType() {
-        return StreamType.AUDIO_STREAM;
-    }
+    public StreamType getStreamType() { return StreamType.AUDIO_STREAM; }
 
     @Override
-    public long getViewCount() {
-        return -1;
-    }
+    public long getViewCount() { return -1; }
 
     @Override
-    public String getUploaderUrl() {
-        return uploaderUrl;
-    }
+    public String getUploaderUrl() { return uploaderUrl; }
 
     @Nullable
     @Override
-    public String getTextualUploadDate() {
-        return null;
-    }
+    public String getTextualUploadDate() { return null; }
 
     @Nullable
     @Override
-    public DateWrapper getUploadDate() {
-        return null;
-    }
+    public DateWrapper getUploadDate() { return null; }
 
     @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
+    public boolean isUploaderVerified() throws ParsingException { return false; }
 
     @Override
-    public boolean isAd() {
-        return false;
-    }
+    public boolean isAd() { return false; }
 }
