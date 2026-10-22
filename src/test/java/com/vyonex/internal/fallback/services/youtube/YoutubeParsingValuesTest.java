@@ -45,6 +45,8 @@ class YoutubeParsingValuesTest {
 
         assertEquals(PlaylistInfo.PlaylistType.MIX_STREAM,
                 YoutubeParsingHelper.extractPlaylistTypeFromPlaylistId("RDMMabcdefghijk"));
+        assertTrue(YoutubeParsingHelper.isYoutubeMixId("RDabcdefghijk"));
+        assertFalse(YoutubeParsingHelper.isYoutubeMixId("RDnot-a-mix"));
         assertEquals(PlaylistInfo.PlaylistType.MIX_MUSIC,
                 YoutubeParsingHelper.extractPlaylistTypeFromPlaylistId("RDAMVMabcdefghijk"));
         assertEquals(PlaylistInfo.PlaylistType.MIX_GENRE,
