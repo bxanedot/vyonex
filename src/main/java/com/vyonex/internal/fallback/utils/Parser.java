@@ -1,173 +1,65 @@
-/*
- * Created by Christian Schabesberger on 02.02.16.
- *
- * Copyright (C) 2016 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * Parser.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx. If not, see <https://www.gnu.org/licenses/>.
- */
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.utils;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 
-import java.util.Arrays;
+import javax.annotation.Nonnull;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
-
-/**
- * Avoid using regex !!!
- */
 public final class Parser {
-
-    private Parser() {
-    }
+    private Parser() { }
 
     public static class RegexException extends ParsingException {
-        public RegexException(final String message) {
-            super(message);
-        }
+        public RegexException(final String message) { super(message); }
     }
 
-    @Nonnull
-    public static Matcher matchOrThrow(@Nonnull final Pattern pattern,
-                                              final String input) throws RegexException {
+    @Nonnull public static Matcher matchOrThrow(@Nonnull final Pattern pattern,
+                                                 final String input) throws RegexException {
         final Matcher matcher = pattern.matcher(input);
-        if (matcher.find()) {
-            return matcher;
-        } else {
-            String errorMessage = "Failed to find pattern \"" + pattern.pattern() + "\"";
-            if (input.length() <= 1024) {
-                errorMessage += " inside of \"" + input + "\"";
-            }
-            throw new RegexException(errorMessage);
-        }
+        if (matcher.find()) return matcher;
+        throw noMatch(pattern, input, 1024);
     }
 
-    /**
-     * Matches group 1 of the given pattern against the input
-     * and returns the matched group
-     *
-     * @param pattern The regex pattern to match.
-     * @param input   The input string to match against.
-     * @return The matching group as a string.
-     * @throws RegexException If the pattern does not match the input or if the group is not found.
-     */
-    @Nonnull
-    public static String matchGroup1(final String pattern, final String input)
+    @Nonnull public static String matchGroup1(final String pattern, final String input)
             throws RegexException {
         return matchGroup(pattern, input, 1);
     }
 
-    /**
-     * Matches group 1 of the given pattern against the input
-     * and returns the matched group
-     *
-     * @param pattern The regex pattern to match.
-     * @param input   The input string to match against.
-     * @return The matching group as a string.
-     * @throws RegexException If the pattern does not match the input or if the group is not found.
-     */
-    @Nonnull
-    public static String matchGroup1(final Pattern pattern, final String input)
+    @Nonnull public static String matchGroup1(final Pattern pattern, final String input)
             throws RegexException {
         return matchGroup(pattern, input, 1);
     }
 
-    /**
-     * Matches the specified group of the given pattern against the input,
-     * and returns the matched group
-     *
-     * @param pattern The regex pattern to match.
-     * @param input   The input string to match against.
-     * @param group   The group number to retrieve (1-based index).
-     * @return The matching group as a string.
-     * @throws RegexException If the pattern does not match the input or if the group is not found.
-     */
-    @Nonnull
-    public static String matchGroup(final String pattern, final String input, final int group)
-            throws RegexException {
+    @Nonnull public static String matchGroup(final String pattern, final String input,
+                                             final int group) throws RegexException {
         return matchGroup(Pattern.compile(pattern), input, group);
     }
 
-    /**
-     * Matches the specified group of the given pattern against the input,
-     * and returns the matched group
-     *
-     * @param pattern The regex pattern to match.
-     * @param input   The input string to match against.
-     * @param group   The group number to retrieve (1-based index).
-     * @return The matching group as a string.
-     * @throws RegexException If the pattern does not match the input or if the group is not found.
-     */
-    @Nonnull
-    public static String matchGroup(@Nonnull final Pattern pattern,
-                                    final String input,
-                                    final int group)
-            throws RegexException {
+    @Nonnull public static String matchGroup(@Nonnull final Pattern pattern, final String input,
+                                             final int group) throws RegexException {
         return matchOrThrow(pattern, input).group(group);
     }
 
-    /**
-     * Matches multiple patterns against the input string and
-     * returns the first successful matcher
-     *
-     * @param patterns The array of regex patterns to match.
-     * @param input    The input string to match against.
-     * @return A {@code Matcher} for the first successful match.
-     * @throws RegexException If no patterns match the input or if {@code patterns} is empty.
-     */
-    public static String matchGroup1MultiplePatterns(final Pattern[] patterns, final String input)
-            throws RegexException {
+    public static String matchGroup1MultiplePatterns(final Pattern[] patterns,
+                                                      final String input) throws RegexException {
         return matchMultiplePatterns(patterns, input).group(1);
     }
 
-    /**
-     * Matches multiple patterns against the input string and
-     * returns the first successful matcher
-     *
-     * @param patterns The array of regex patterns to match.
-     * @param input    The input string to match against.
-     * @return A {@code Matcher} for the first successful match.
-     * @throws RegexException If no patterns match the input or if {@code patterns} is empty.
-     */
     public static Matcher matchMultiplePatterns(final Pattern[] patterns, final String input)
             throws RegexException {
-        RegexException exception = null;
-        for (final var pattern : patterns) {
-            final var matcher = pattern.matcher(input);
-            if (matcher.find()) {
-                return matcher;
-            } else if (exception == null) {
-                exception = new RegexException("Failed to find pattern \"" + pattern.pattern()
-                    + "\""
-                    // only pass input to exception message when it is not too long
-                    + (input.length() <= 1000
-                    ? "inside of \"" + input + "\""
-                    : "")
-                );
-            }
+        for (final Pattern pattern : patterns) {
+            final Matcher matcher = pattern.matcher(input);
+            if (matcher.find()) return matcher;
         }
-
-        throw exception != null
-            ? exception
-            : new RegexException("Empty patterns array passed to matchMultiplePatterns");
+        if (patterns.length == 0) {
+            throw new RegexException("Empty patterns array passed to matchMultiplePatterns");
+        }
+        throw noMatch(patterns[0], input, 1000);
     }
 
     public static boolean isMatch(final String pattern, final String input) {
@@ -178,13 +70,21 @@ public final class Parser {
         return pattern.matcher(input).find();
     }
 
-    @Nonnull
-    public static Map<String, String> compatParseMap(@Nonnull final String input) {
-        return Arrays.stream(input.split("&"))
-                .map(arg -> arg.split("="))
-                .filter(splitArg -> splitArg.length > 1)
-                .collect(Collectors.toMap(splitArg -> splitArg[0],
-                        splitArg -> Utils.decodeUrlUtf8(splitArg[1]),
-                        (existing, replacement) -> replacement));
+    @Nonnull public static Map<String, String> compatParseMap(@Nonnull final String input) {
+        final Map<String, String> result = new HashMap<>();
+        for (final String argument : input.split("&")) {
+            final int separator = argument.indexOf('=');
+            if (separator >= 0) {
+                result.put(argument.substring(0, separator),
+                        Utils.decodeUrlUtf8(argument.substring(separator + 1)));
+            }
+        }
+        return result;
+    }
+
+    private static RegexException noMatch(final Pattern pattern, final String input,
+                                           final int maxInputLength) {
+        return new RegexException("Failed to find pattern \"" + pattern.pattern() + "\""
+                + (input.length() <= maxInputLength ? " inside of \"" + input + "\"" : ""));
     }
 }
