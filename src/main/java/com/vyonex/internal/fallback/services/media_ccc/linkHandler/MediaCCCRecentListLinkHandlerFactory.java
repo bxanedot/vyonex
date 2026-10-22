@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -10,32 +9,25 @@ import java.net.URI;
 import java.util.List;
 
 public final class MediaCCCRecentListLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final String URL = "https://media.ccc.de/recent";
     private static final MediaCCCRecentListLinkHandlerFactory INSTANCE =
             new MediaCCCRecentListLinkHandlerFactory();
-    private static final String URL = "https://media.ccc.de/recent";
 
     private MediaCCCRecentListLinkHandlerFactory() { }
-
     public static MediaCCCRecentListLinkHandlerFactory getInstance() { return INSTANCE; }
-
-    @Override
-    public String getId(final String url) { return "recent"; }
-
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public String getId(final String url) { return "recent"; }
+    @Override public String getUrl(final String id, final List<String> filters, final String sort) {
+        return URL;
+    }
+    @Override public boolean onAcceptUrl(final String value) {
         try {
-            final URI uri = MediaCCCUrl.parse(url);
+            final URI uri = MediaCCCUrl.parse(value);
             final String path = uri.getPath();
-            return MediaCCCUrl.hasHost(uri, "media.ccc.de")
-                    && ("/recent".equals(path) || "/recent/".equals(path))
+            final boolean recentPath = "/recent".equals(path) || "/recent/".equals(path);
+            return MediaCCCUrl.hasHost(uri, "media.ccc.de") && recentPath
                     && uri.getQuery() == null;
-        } catch (ParsingException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
-    }
-
-    @Override
-    public String getUrl(final String id, final List<String> contentFilter, final String sortFilter) {
-        return URL;
     }
 }
