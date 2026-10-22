@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.suggestion;
 
@@ -23,32 +25,24 @@ public abstract class SuggestionExtractor {
     public abstract List<String> suggestionList(String query)
             throws IOException, ExtractionException;
 
-    public int getServiceId() {
-        return service.getServiceId();
-    }
-
-    public StreamingService getService() {
-        return service;
-    }
-
-    // TODO: Create a more general Extractor class
+    public int getServiceId() { return service.getServiceId(); }
+    public StreamingService getService() { return service; }
 
     public void forceLocalization(@Nullable final Localization localization) {
-        this.forcedLocalization = localization;
+        forcedLocalization = localization;
     }
 
     public void forceContentCountry(@Nullable final ContentCountry contentCountry) {
-        this.forcedContentCountry = contentCountry;
+        forcedContentCountry = contentCountry;
     }
 
     @Nonnull
     public Localization getExtractorLocalization() {
-        return forcedLocalization == null ? getService().getLocalization() : forcedLocalization;
+        return forcedLocalization == null ? service.getLocalization() : forcedLocalization;
     }
 
     @Nonnull
     public ContentCountry getExtractorContentCountry() {
-        return forcedContentCountry == null
-                ? getService().getContentCountry() : forcedContentCountry;
+        return forcedContentCountry == null ? service.getContentCountry() : forcedContentCountry;
     }
 }

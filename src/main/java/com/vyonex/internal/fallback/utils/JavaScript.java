@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.utils;
 
@@ -6,15 +8,11 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptableObject;
 
 public final class JavaScript {
-
-    private JavaScript() {
-    }
+    private JavaScript() { }
 
     public static void compileOrThrow(final String function) {
         try (Context context = Context.enter()) {
             context.setInterpretedMode(true);
-
-            // If it doesn't compile it throws an exception here
             context.compileString(function, null, 1, null);
         }
     }
@@ -25,12 +23,10 @@ public final class JavaScript {
         try (Context context = Context.enter()) {
             context.setInterpretedMode(true);
             final ScriptableObject scope = context.initSafeStandardObjects();
-
             context.evaluateString(scope, function, functionName, 1, null);
-            final Function jsFunction = (Function) scope.get(functionName, scope);
-            final Object result = jsFunction.call(context, scope, scope, parameters);
+            final Function callable = (Function) scope.get(functionName, scope);
+            final Object result = callable.call(context, scope, scope, parameters);
             return result.toString();
         }
     }
-
 }
