@@ -87,6 +87,7 @@ import com.vyonex.internal.fallback.utils.Parser;
 import com.vyonex.internal.fallback.utils.Utils;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -586,18 +587,33 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                 if (isNullOrEmpty(manifestUrl)) {
                     continue;
                 }
-
-                // If poToken is not null, add it to manifest URL
-                if (streamingDataObj.getSecond() == null) {
-                    return manifestUrl + "?" + partToAppendToManifestUrlEnd;
-                } else {
-                    return manifestUrl + "?pot=" + streamingDataObj.getSecond() + "&"
-                            + partToAppendToManifestUrlEnd;
-                }
+                return appendManifestParameters(manifestUrl, streamingDataObj.getSecond(),
+                        partToAppendToManifestUrlEnd);
             }
         }
 
         return "";
+    }
+
+    static String appendManifestParameters(@Nonnull final String manifestUrl,
+                                           @Nullable final String poToken,
+                                           @Nullable final String additionalParameters) {
+        final StringBuilder parameters = new StringBuilder();
+        if (!isNullOrEmpty(poToken)) {
+            parameters.append("pot=").append(URLEncoder.encode(poToken, StandardCharsets.UTF_8));
+        }
+        if (!isNullOrEmpty(additionalParameters)) {
+            if (!parameters.isEmpty()) parameters.append('&');
+            parameters.append(additionalParameters);
+        }
+        if (parameters.isEmpty()) return manifestUrl;
+
+        final int fragmentStart = manifestUrl.indexOf('#');
+        final String base = fragmentStart < 0 ? manifestUrl : manifestUrl.substring(0, fragmentStart);
+        final String fragment = fragmentStart < 0 ? "" : manifestUrl.substring(fragmentStart);
+        final String separator = !base.contains("?") ? "?"
+                : base.endsWith("?") || base.endsWith("&") ? "" : "&";
+        return base + separator + parameters + fragment;
     }
 
     @Override
