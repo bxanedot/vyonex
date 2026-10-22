@@ -831,55 +831,43 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
     }
 
-    private static void checkPlayabilityStatus(@Nonnull final JsonObject playabilityStatus)
+    static void checkPlayabilityStatus(@Nonnull final JsonObject playabilityStatus)
             throws ParsingException {
         final String status = playabilityStatus.getString("status");
-        if (status == null || status.equalsIgnoreCase("ok")) {
-            return;
-        }
-
+        if (status == null || status.equalsIgnoreCase("ok")) return;
         final String reason = playabilityStatus.getString("reason");
+        final String normalizedStatus = status.toLowerCase(Locale.ROOT);
+        final String normalizedReason = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
 
-        if (reason != null) {
-            if (status.equalsIgnoreCase("login_required")) {
-                if (reason.contains("inappropriate for some users")) {
-                    throw new AgeRestrictedContentException(
-                            "This age-restricted video cannot be watched anonymously");
-                }
-
-                if (reason.contains("private")) {
-                    throw new PrivateContentException("This video is private");
-                }
-
-                if (reason.contains("a bot")) {
-                    throw new SignInConfirmNotBotException(
-                            "YouTube probably temporarily blocked anonymous watch access with this"
-                                    + " IP , got error " + status + ": \"" + reason + "\"");
-                }
+        if (normalizedStatus.equals("login_required")) {
+            if (normalizedReason.contains("inappropriate for some users")) {
+                throw new AgeRestrictedContentException(
+                        "This age-restricted video cannot be watched anonymously");
             }
-
-            if (status.equalsIgnoreCase("unplayable") || status.equalsIgnoreCase("error")) {
-                if (reason.contains("Music Premium")) {
-                    throw new YoutubeMusicPremiumContentException();
-                }
-
-                if (reason.contains("payment")) {
-                    throw new PaidContentException("This video is a paid video");
-                }
-
-                if (reason.contains("members")) {
-                    throw new PaidContentException("This video is only available for members of "
-                            + "the channel of this video");
-                }
-
-                if (reason.contains("country")) {
-                    throw new GeographicRestrictionException(
-                            "This video is not available in client's country.");
-                }
-
-                if (reason.contains("closed") || reason.contains("terminated")) {
-                    throw new AccountTerminatedException(reason);
-                }
+            if (normalizedReason.contains("private")) {
+                throw new PrivateContentException("This video is private");
+            }
+            if (normalizedReason.contains("a bot")) {
+                throw new SignInConfirmNotBotException(
+                        "YouTube access was blocked: " + status + ": \"" + reason + "\"");
+            }
+        } else if (normalizedStatus.equals("unplayable") || normalizedStatus.equals("error")) {
+            if (normalizedReason.contains("music premium")) {
+                throw new YoutubeMusicPremiumContentException();
+            }
+            if (normalizedReason.contains("payment")) {
+                throw new PaidContentException("This video is a paid video");
+            }
+            if (normalizedReason.contains("members")) {
+                throw new PaidContentException("This video is only available for members of "
+                        + "the channel of this video");
+            }
+            if (normalizedReason.contains("country")) {
+                throw new GeographicRestrictionException(
+                        "This video is not available in client's country.");
+            }
+            if (normalizedReason.contains("closed") || normalizedReason.contains("terminated")) {
+                throw new AccountTerminatedException(reason);
             }
         }
 
