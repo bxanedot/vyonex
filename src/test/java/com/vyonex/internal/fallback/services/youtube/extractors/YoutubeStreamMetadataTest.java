@@ -90,4 +90,21 @@ class YoutubeStreamMetadataTest {
         assertEquals("plain", plain.getContent());
         assertEquals(Description.PLAIN_TEXT, plain.getType());
     }
+
+    @Test
+    void readsViewCountFromRendererOrVideoDetails() throws Exception {
+        final var primaryInfo = JsonParser.object().from("{\"viewCount\":{"
+                + "\"videoViewCountRenderer\":{\"viewCount\":{"
+                + "\"simpleText\":\"1,234 views\"}}}}");
+        assertEquals(1234, YoutubeStreamExtractor.parseViewCount(primaryInfo,
+                JsonParser.object().from("{\"viewCount\":\"567\"}")));
+        assertEquals(567, YoutubeStreamExtractor.parseViewCount(JsonParser.object().from("{}"),
+                JsonParser.object().from("{\"viewCount\":\"567\"}")));
+        assertEquals(0, YoutubeStreamExtractor.parseViewCount(JsonParser.object().from(
+                "{\"viewCount\":{\"videoViewCountRenderer\":{\"viewCount\":{"
+                        + "\"simpleText\":\"No views\"}}}}"),
+                JsonParser.object().from("{\"viewCount\":\"No views\"}")));
+        assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.parseViewCount(
+                JsonParser.object().from("{}"), JsonParser.object().from("{}")));
+    }
 }

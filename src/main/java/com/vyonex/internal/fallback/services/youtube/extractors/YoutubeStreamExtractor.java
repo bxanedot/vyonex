@@ -369,23 +369,23 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public long getViewCount() throws ParsingException {
-        String views = getTextFromObject(getVideoPrimaryInfoRenderer().getObject("viewCount")
+        return parseViewCount(getVideoPrimaryInfoRenderer(),
+                playerResponse.getObject(VIDEO_DETAILS));
+    }
+
+    static long parseViewCount(@Nonnull final JsonObject primaryInfo,
+                               @Nonnull final JsonObject videoDetails)
+            throws ParsingException {
+        String views = getTextFromObject(primaryInfo.getObject("viewCount")
                 .getObject("videoViewCountRenderer").getObject("viewCount"));
-
-        if (isNullOrEmpty(views)) {
-            views = playerResponse.getObject(VIDEO_DETAILS)
-                    .getString("viewCount");
-
-            if (isNullOrEmpty(views)) {
-                throw new ParsingException("Could not get view count");
-            }
+        if (isNullOrEmpty(views)) views = videoDetails.getString("viewCount");
+        if (isNullOrEmpty(views)) throw new ParsingException("Could not get view count");
+        if (views.toLowerCase(Locale.ROOT).contains("no views")) return 0;
+        try {
+            return Long.parseLong(Utils.removeNonDigitCharacters(views));
+        } catch (final NumberFormatException e) {
+            throw new ParsingException("Could not parse view count", e);
         }
-
-        if (views.toLowerCase().contains("no views")) {
-            return 0;
-        }
-
-        return Long.parseLong(Utils.removeNonDigitCharacters(views));
     }
 
     @Override
