@@ -662,88 +662,78 @@ public final class YoutubeParsingHelper {
     @Nullable
     public static String getUrlFromNavigationEndpoint(
             @Nonnull final JsonObject navigationEndpoint) {
-        if (navigationEndpoint.has("urlEndpoint")) {
-            final String value = navigationEndpoint.getObject("urlEndpoint").getString("url");
-            if (value != null) {
-                try {
-                    final URI uri = new URI(value);
-                    if ("/redirect".equals(uri.getPath())) {
-                        final String target = queryParameter(uri.getRawQuery(), "q");
-                        if (target != null) return target;
-                    } else if (isHttpUrl(uri)) {
-                        return uri.toASCIIString();
-                    } else if (value.startsWith("/channel") || value.startsWith("/user")
-                            || value.startsWith("/watch")) {
-                        return "https://www.youtube.com" + value;
-                    }
-                } catch (final URISyntaxException ignored) {
-                    return null;
-                }
-            }
-        }
+        final String url = resolveEndpointUrl(navigationEndpoint.getObject("urlEndpoint")
+                .getString("url"));
+        if (url != null) return url;
 
-        if (navigationEndpoint.has("browseEndpoint")) {
-            final JsonObject browseEndpoint = navigationEndpoint.getObject("browseEndpoint");
-            final String canonicalBaseUrl = browseEndpoint.getString("canonicalBaseUrl");
-            final String browseId = browseEndpoint.getString("browseId");
-            if (browseId != null) {
-                if (browseId.startsWith("UC")) {
-                    return "https://www.youtube.com/channel/" + browseId;
-                }
-                if (browseId.startsWith("VL")) {
-                    return "https://www.youtube.com/playlist?list=" + browseId.substring(2);
-                }
-            }
-            if (canonicalBaseUrl != null && !canonicalBaseUrl.isEmpty()) {
-                return canonicalBaseUrl.startsWith("http") ? canonicalBaseUrl
-                        : canonicalBaseUrl.startsWith("/")
-                        ? "https://www.youtube.com" + canonicalBaseUrl : null;
-            }
+        final JsonObject browse = navigationEndpoint.getObject("browseEndpoint");
+        final String browseId = browse.getString("browseId");
+        if (browseId != null && browseId.startsWith("UC")) {
+            return "https://www.youtube.com/channel/" + browseId;
         }
+        if (browseId != null && browseId.startsWith("VL")) {
+            return "https://www.youtube.com/playlist?list=" + browseId.substring(2);
+        }
+        final String canonicalPath = resolveEndpointUrl(browse.getString("canonicalBaseUrl"));
+        if (canonicalPath != null) return canonicalPath;
 
-        if (navigationEndpoint.has("watchEndpoint")) {
-            final JsonObject watch = navigationEndpoint.getObject("watchEndpoint");
-            final String videoId = watch.getString(VIDEO_ID);
-            if (videoId == null || videoId.isEmpty()) return null;
+        final JsonObject watch = navigationEndpoint.getObject("watchEndpoint");
+        final String videoId = watch.getString(VIDEO_ID);
+        if (videoId != null && !videoId.isEmpty()) {
             final StringBuilder result = new StringBuilder(
                     "https://www.youtube.com/watch?v=").append(videoId);
             final String playlistId = watch.getString("playlistId");
-            if (playlistId != null) result.append("&list=").append(playlistId);
+            if (playlistId != null && !playlistId.isEmpty()) {
+                result.append("&list=").append(playlistId);
+            }
             if (watch.has("startTimeSeconds")) {
-                result.append("&t=").append(watch.getInt("startTimeSeconds"));
+                result.append("&t=").append(watch.getLong("startTimeSeconds"));
             }
             return result.toString();
         }
 
-        if (navigationEndpoint.has("watchPlaylistEndpoint")) {
-            final String playlistId = navigationEndpoint.getObject("watchPlaylistEndpoint")
-                    .getString("playlistId");
-            return playlistId == null ? null
-                    : "https://www.youtube.com/playlist?list=" + playlistId;
+        final String playlistId = navigationEndpoint.getObject("watchPlaylistEndpoint")
+                .getString("playlistId");
+        if (playlistId != null && !playlistId.isEmpty()) {
+            return "https://www.youtube.com/playlist?list=" + playlistId;
         }
 
-        if (navigationEndpoint.has("showDialogCommand")) {
-            final JsonArray items = navigationEndpoint.getObject("showDialogCommand")
-                    .getObject("panelLoadingStrategy").getObject("inlineContent")
-                    .getObject("dialogViewModel").getObject("customContent")
-                    .getObject("listViewModel").getArray("listItems");
-            if (!items.isEmpty()) {
-                final JsonObject command = items.getObject(0).getObject("listItemViewModel")
-                        .getObject("rendererContext").getObject("commandContext")
-                        .getObject("onTap").getObject("innertubeCommand");
-                final String url = getUrlFromNavigationEndpoint(command);
-                if (url != null) return url;
-            }
+        final JsonArray items = navigationEndpoint.getObject("showDialogCommand")
+                .getObject("panelLoadingStrategy").getObject("inlineContent")
+                .getObject("dialogViewModel").getObject("customContent")
+                .getObject("listViewModel").getArray("listItems");
+        if (!items.isEmpty()) {
+            final JsonObject command = items.getObject(0).getObject("listItemViewModel")
+                    .getObject("rendererContext").getObject("commandContext")
+                    .getObject("onTap").getObject("innertubeCommand");
+            final String dialogUrl = getUrlFromNavigationEndpoint(command);
+            if (dialogUrl != null) return dialogUrl;
         }
 
-        if (navigationEndpoint.has("commandMetadata")) {
-            final JsonObject metadata = navigationEndpoint.getObject("commandMetadata")
-                    .getObject("webCommandMetadata");
-            final String value = metadata.getString("url");
-            if (value != null) {
-                if (value.startsWith("http://") || value.startsWith("https://")) return value;
-                if (value.startsWith("/")) return "https://www.youtube.com" + value;
+        return resolveEndpointUrl(navigationEndpoint.getObject("commandMetadata")
+                .getObject("webCommandMetadata").getString("url"));
+    }
+
+    private static String resolveEndpointUrl(@Nullable final String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            final URI uri = new URI(value);
+            if ("/redirect".equals(uri.getPath())) {
+                final String target = queryParameter(uri.getRawQuery(), "q");
+                if (target == null) return null;
+                final URI destination = new URI(target);
+                if (isHttpUrl(destination)) return destination.toASCIIString();
+                return destination.getScheme() == null && destination.getRawAuthority() == null
+                        && target.startsWith("/") && !target.startsWith("//")
+                        ? "https://www.youtube.com" + target : null;
             }
+            if (isHttpUrl(uri)) return uri.toASCIIString();
+            if (uri.getScheme() == null && uri.getRawAuthority() == null
+                    && value.startsWith("/") && !value.startsWith("//")) {
+                return "https://www.youtube.com" + value;
+            }
+        } catch (final URISyntaxException | IllegalArgumentException ignored) {
+            // Try another available endpoint representation.
         }
         return null;
     }

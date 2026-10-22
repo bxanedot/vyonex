@@ -147,6 +147,19 @@ class YoutubeParsingHelperTest {
     }
 
     @Test
+    void ignoresMalformedUrlWhenAnotherEndpointCanResolve() throws JsonParserException {
+        assertEquals("https://www.youtube.com/watch?v=abcdefghijk",
+                navigation("{\"urlEndpoint\":{\"url\":\"https://[invalid\"},"
+                        + "\"watchEndpoint\":{\"videoId\":\"abcdefghijk\"}}"));
+    }
+
+    @Test
+    void rejectsUnsafeRedirectTargets() throws JsonParserException {
+        assertNull(navigation("{\"urlEndpoint\":{\"url\":"
+                + "\"https://www.youtube.com/redirect?q=javascript%3Aalert%281%29\"}}"));
+    }
+
+    @Test
     void escapesTextAndAllowsOnlySafeLinksInHtmlMode() throws JsonParserException {
         final var plain = JsonParser.object().from("{\"simpleText\":\"<b>plain</b>\"}");
         assertEquals("<b>plain</b>", YoutubeParsingHelper.getTextFromObject(plain));
