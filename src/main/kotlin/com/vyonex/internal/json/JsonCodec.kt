@@ -4,6 +4,7 @@
 package com.vyonex.internal.json
 
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray as JsonTreeArray
 import kotlinx.serialization.json.JsonElement
@@ -11,13 +12,19 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject as JsonTreeObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.decodeFromStream
 import java.math.BigDecimal
+import java.io.InputStream
 
 internal object JsonCodec {
     private val json = Json
 
     @JvmStatic
     fun parse(source: String): Any? = fromElement(json.parseToJsonElement(source))
+
+    @JvmStatic
+    @OptIn(ExperimentalSerializationApi::class)
+    fun parse(source: InputStream): Any? = fromElement(json.decodeFromStream(JsonElement.serializer(), source))
 
     @JvmStatic
     fun stringify(value: Any?): String = json.encodeToString(JsonElement.serializer(), toElement(value))

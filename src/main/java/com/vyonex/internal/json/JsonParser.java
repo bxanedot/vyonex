@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 public final class JsonParser {
     private JsonParser() { }
@@ -22,11 +21,7 @@ public final class JsonParser {
 
         public T from(final String source) throws JsonParserException {
             try {
-                final Object value = JsonCodec.parse(source);
-                if (type != Object.class && !type.isInstance(value)) {
-                    throw new JsonParserException("JSON value is not a " + type.getSimpleName());
-                }
-                return type.cast(value);
+                return cast(JsonCodec.parse(source));
             } catch (JsonParserException e) {
                 throw e;
             } catch (RuntimeException e) {
@@ -48,9 +43,11 @@ public final class JsonParser {
 
         public T from(final InputStream input) throws JsonParserException {
             try {
-                return from(new String(input.readAllBytes(), StandardCharsets.UTF_8));
-            } catch (IOException e) {
-                throw new JsonParserException("Unable to read JSON", e);
+                return cast(JsonCodec.parse(input));
+            } catch (JsonParserException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                throw new JsonParserException("Invalid JSON", e);
             }
         }
 
@@ -60,6 +57,13 @@ public final class JsonParser {
             } catch (IOException e) {
                 throw new JsonParserException("Unable to open JSON URL", e);
             }
+        }
+
+        private T cast(final Object value) throws JsonParserException {
+            if (type != Object.class && !type.isInstance(value)) {
+                throw new JsonParserException("JSON value is not a " + type.getSimpleName());
+            }
+            return type.cast(value);
         }
     }
 }

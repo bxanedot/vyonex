@@ -95,5 +95,7 @@ class JsonLayerTest {
     void rejectsMalformedAndTrailingJson() {
         assertThrows(JsonParserException.class, () -> JsonParser.object().from("{broken}"));
         assertThrows(JsonParserException.class, () -> JsonParser.array().from("[] {}"));
+        assertThrows(JsonParserException.class, () -> JsonParser.array().from(new ByteArrayInputStream(
+                "[] {}".getBytes(StandardCharsets.UTF_8))));
     }
 }
