@@ -43,7 +43,8 @@ class StreamModelContractTest {
 
     @Test
     void carriesVideoMetadataFromItagAndRequiresItsCoreFields() throws Exception {
-        final ItagItem itag = ItagItem.getItag(22);
+        final ItagItem itag = new ItagItem(22, ItagItem.ItagType.VIDEO,
+                MediaFormat.MPEG_4, "720p");
         final VideoStream video = new VideoStream.Builder()
                 .setId("video")
                 .setContent("https://media.example/video.mp4", true)
