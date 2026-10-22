@@ -71,7 +71,10 @@ import com.vyonex.internal.fallback.utils.Utils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
@@ -80,7 +83,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -189,32 +191,27 @@ public final class YoutubeParsingHelper {
     private static final Pattern C_IOS_PATTERN = Pattern.compile("&c=IOS");
     private static final Pattern C_VISIONOS_PATTERN = Pattern.compile("&c=VISIONOS");
 
-    private static final Set<String> GOOGLE_URLS = Set.of("google.", "m.google.", "www.google.");
-    private static final Set<String> INVIDIOUS_URLS = Set.of("invidio.us", "dev.invidio.us",
-            "www.invidio.us", "redirect.invidious.io", "invidious.snopyta.org", "yewtu.be",
-            "tube.connect.cafe", "tubus.eduvid.org", "invidious.kavin.rocks", "invidious.site",
-            "invidious-us.kavin.rocks", "piped.kavin.rocks", "vid.mint.lgbt", "invidiou.site",
-            "invidious.fdn.fr", "invidious.048596.xyz", "invidious.zee.li", "vid.puffyan.us",
-            "ytprivate.com", "invidious.namazso.eu", "invidious.silkky.cloud", "ytb.trom.tf",
-            "invidious.exonip.de", "inv.riverside.rocks", "invidious.blamefran.net", "y.com.cm",
-            "invidious.moomoo.me", "yt.cyberhost.uk");
-    private static final Set<String> YOUTUBE_URLS = Set.of("youtube.com", "www.youtube.com",
-            "m.youtube.com", "music.youtube.com");
-
     private static boolean consentAccepted = false;
 
     public static boolean isGoogleURL(final String url) {
         final String cachedUrl = extractCachedUrlIfNeeded(url);
+        if (cachedUrl == null) return false;
         try {
-            final URL u = new URL(cachedUrl);
-            return GOOGLE_URLS.stream().anyMatch(item -> u.getHost().startsWith(item));
-        } catch (final MalformedURLException e) {
+            final String host = new URI(cachedUrl).getHost();
+            if (host == null) return false;
+            String domain = host.toLowerCase(Locale.ROOT);
+            if (domain.startsWith("www.")) domain = domain.substring(4);
+            if (domain.startsWith("m.")) domain = domain.substring(2);
+            return domain.startsWith("google.");
+        } catch (final URISyntaxException | IllegalArgumentException e) {
             return false;
         }
     }
 
     public static boolean isYoutubeURL(@Nonnull final URL url) {
-        return YOUTUBE_URLS.contains(url.getHost().toLowerCase(Locale.ROOT));
+        final String host = url.getHost().toLowerCase(Locale.ROOT);
+        return host.equals("youtube.com") || host.equals("www.youtube.com")
+                || host.equals("m.youtube.com") || host.equals("music.youtube.com");
     }
 
     public static boolean isYoutubeServiceURL(@Nonnull final URL url) {
@@ -224,12 +221,13 @@ public final class YoutubeParsingHelper {
     }
 
     public static boolean isHooktubeURL(@Nonnull final URL url) {
-        final String host = url.getHost();
-        return host.equalsIgnoreCase("hooktube.com");
+        return url.getHost().equalsIgnoreCase("hooktube.com");
     }
 
     public static boolean isInvidiousURL(@Nonnull final URL url) {
-        return INVIDIOUS_URLS.contains(url.getHost().toLowerCase(Locale.ROOT));
+        final String host = url.getHost().toLowerCase(Locale.ROOT);
+        return host.contains("invidious") || host.contains("piped")
+                || host.equals("yewtu.be") || host.endsWith(".yewtu.be");
     }
 
     public static boolean isY2ubeURL(@Nonnull final URL url) {
@@ -1285,8 +1283,28 @@ public final class YoutubeParsingHelper {
         if (url == null) {
             return null;
         }
-        if (url.contains("webcache.googleusercontent.com")) {
-            return url.split("cache:")[1];
+        try {
+            final URI uri = new URI(url);
+            if (!"webcache.googleusercontent.com".equalsIgnoreCase(uri.getHost())
+                    || uri.getRawQuery() == null) {
+                return url;
+            }
+            for (final String parameter : uri.getRawQuery().split("&")) {
+                final int separator = parameter.indexOf('=');
+                if (separator < 0 || !"q".equals(URLDecoder.decode(
+                        parameter.substring(0, separator), StandardCharsets.UTF_8))) {
+                    continue;
+                }
+                final String query = URLDecoder.decode(parameter.substring(separator + 1),
+                        StandardCharsets.UTF_8);
+                final int cache = query.indexOf("cache:");
+                if (cache < 0) return url;
+                final String cached = query.substring(cache + "cache:".length());
+                final int scheme = Math.max(cached.indexOf("https://"), cached.indexOf("http://"));
+                return scheme < 0 ? cached : cached.substring(scheme);
+            }
+        } catch (final URISyntaxException | IllegalArgumentException e) {
+            return url;
         }
         return url;
     }

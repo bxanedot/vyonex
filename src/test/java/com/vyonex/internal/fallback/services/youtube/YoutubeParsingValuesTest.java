@@ -7,8 +7,12 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import org.junit.jupiter.api.Test;
 
+import java.net.URL;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YoutubeParsingValuesTest {
     @Test
@@ -54,5 +58,37 @@ class YoutubeParsingValuesTest {
         assertEquals(PlaylistInfo.PlaylistType.MIX_STREAM,
                 YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl(
                         "https://www.youtube.com/playlist?list=RDMMabcdefghijk"));
+    }
+
+    @Test
+    void recognizesYoutubeAndAlternativeHostsWithoutPrefixCollisions() throws Exception {
+        assertTrue(YoutubeParsingHelper.isYoutubeURL(new URL("https://m.youtube.com/watch?v=x")));
+        assertTrue(YoutubeParsingHelper.isYoutubeServiceURL(
+                new URL("https://youtu.be/abcdefghijk")));
+        assertTrue(YoutubeParsingHelper.isYoutubeServiceURL(
+                new URL("https://www.youtube-nocookie.com/embed/abcdefghijk")));
+        assertTrue(YoutubeParsingHelper.isHooktubeURL(new URL("https://hooktube.com/watch?v=x")));
+        assertTrue(YoutubeParsingHelper.isInvidiousURL(
+                new URL("https://invidious.example.org/watch?v=x")));
+        assertTrue(YoutubeParsingHelper.isInvidiousURL(new URL("https://yewtu.be/watch?v=x")));
+        assertTrue(YoutubeParsingHelper.isInvidiousURL(new URL("https://piped.example/watch?v=x")));
+        assertTrue(YoutubeParsingHelper.isY2ubeURL(new URL("https://y2u.be/watch?v=x")));
+        assertFalse(YoutubeParsingHelper.isYoutubeURL(new URL("https://youtube.com.example.org/")));
+        assertFalse(YoutubeParsingHelper.isInvidiousURL(new URL("https://example.org/watch?v=x")));
+    }
+
+    @Test
+    void unwrapsCachedTargetsBeforeGoogleHostCheck() {
+        assertTrue(YoutubeParsingHelper.isGoogleURL("https://www.google.com/search?q=x"));
+        assertFalse(YoutubeParsingHelper.isGoogleURL("https://notgoogle.com/"));
+        assertFalse(YoutubeParsingHelper.isGoogleURL(null));
+        assertEquals("https://video.example/watch?v=1",
+                YoutubeParsingHelper.extractCachedUrlIfNeeded(
+                        "https://webcache.googleusercontent.com/search?q=cache%3Ahttps%3A%2F%2Fvideo.example%2Fwatch%3Fv%3D1"));
+        assertEquals("https://video.example/watch?v=1",
+                YoutubeParsingHelper.extractCachedUrlIfNeeded(
+                        "https://webcache.googleusercontent.com/search?q=cache%3Aabc%3Ahttps%3A%2F%2Fvideo.example%2Fwatch%3Fv%3D1"));
+        assertEquals("https://example.org/path", YoutubeParsingHelper.extractCachedUrlIfNeeded(
+                "https://example.org/path"));
     }
 }
