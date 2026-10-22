@@ -1,67 +1,58 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler;
 
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Parser;
 
+import java.net.URI;
 import java.util.List;
 
-/**
- * Since MediaCCC does not really have channel tabs (i.e. it only has one single "tab" with videos),
- * this link handler acts both as the channel link handler and the channel tab link handler. That's
- * why {@link #getAvailableContentFilter()} has been overridden.
- */
 public final class MediaCCCConferenceLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final MediaCCCConferenceLinkHandlerFactory INSTANCE =
+            new MediaCCCConferenceLinkHandlerFactory();
 
-    private static final MediaCCCConferenceLinkHandlerFactory INSTANCE
-            = new MediaCCCConferenceLinkHandlerFactory();
-
-    public static final String CONFERENCE_API_ENDPOINT
-            = "https://api.media.ccc.de/public/conferences/";
+    public static final String CONFERENCE_API_ENDPOINT =
+            "https://api.media.ccc.de/public/conferences/";
     public static final String CONFERENCE_PATH = "https://media.ccc.de/c/";
-    private static final String ID_PATTERN
-            = "(?:(?:(?:api\\.)?media\\.ccc\\.de/public/conferences/)"
-            + "|(?:media\\.ccc\\.de/[bc]/))([^/?&#]*)";
 
-    private MediaCCCConferenceLinkHandlerFactory() {
-    }
+    private MediaCCCConferenceLinkHandlerFactory() { }
 
-    public static MediaCCCConferenceLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
+    public static MediaCCCConferenceLinkHandlerFactory getInstance() { return INSTANCE; }
 
     @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilter,
-                         final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
+    public String getUrl(final String id, final List<String> contentFilter, final String sortFilter) {
         return CONFERENCE_PATH + id;
     }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        return Parser.matchGroup1(ID_PATTERN, url);
+    public String getId(final String url) throws ParsingException {
+        final URI uri = MediaCCCUrl.parse(url);
+        final List<String> path = MediaCCCUrl.pathSegments(uri);
+        if ((MediaCCCUrl.hasHost(uri, "api.media.ccc.de")
+                || MediaCCCUrl.hasHost(uri, "media.ccc.de")) && path.size() == 3
+                && "public".equals(path.get(0)) && "conferences".equals(path.get(1))) {
+            return path.get(2);
+        }
+        if (MediaCCCUrl.hasHost(uri, "media.ccc.de") && path.size() == 2
+                && ("b".equals(path.get(0)) || "c".equals(path.get(0)))) {
+            return path.get(1);
+        }
+        throw new ParsingException("Unsupported media.ccc.de conference URL: " + url);
     }
 
     @Override
     public boolean onAcceptUrl(final String url) {
         try {
-            return getId(url) != null;
-        } catch (final ParsingException e) {
+            getId(url);
+            return true;
+        } catch (ParsingException e) {
             return false;
         }
     }
 
-    /**
-     * @see MediaCCCConferenceLinkHandlerFactory
-     * @return MediaCCC's only channel "tab", i.e. {@link ChannelTabs#VIDEOS}
-     */
     @Override
-    public String[] getAvailableContentFilter() {
-        return new String[]{
-                ChannelTabs.VIDEOS,
-        };
-    }
+    public String[] getAvailableContentFilter() { return new String[] { ChannelTabs.VIDEOS }; }
 }
