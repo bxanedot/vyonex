@@ -10,6 +10,7 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.feed.FeedExtractor;
+import com.vyonex.internal.fallback.feed.FeedInfo;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeFeedExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,9 @@ class YoutubeFeedExtractorTest {
             assertEquals("UC123", extractor.getId());
             assertEquals(CHANNEL_URL, extractor.getUrl());
             assertEquals("Channel", extractor.getName());
+            final FeedInfo feedInfo = FeedInfo.getInfo(extractor);
+            assertEquals("UC123", feedInfo.getId());
+            assertEquals(1, feedInfo.getRelatedItems().size());
             final List<StreamInfoItem> items = extractor.getInitialPage().getItems();
             assertEquals(1, items.size());
             final StreamInfoItem item = items.get(0);
