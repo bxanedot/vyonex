@@ -13,8 +13,10 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YoutubeStreamMetadataTest {
     @Test
@@ -152,5 +154,15 @@ class YoutubeStreamMetadataTest {
         assertEquals(StreamExtractor.UNKNOWN_SUBSCRIBER_COUNT,
                 YoutubeStreamExtractor.extractUploaderSubscriberCount(
                         JsonParser.object().from("{}")));
+    }
+
+    @Test
+    void readsUploaderVerificationFromOwnerBadges() throws Exception {
+        assertTrue(YoutubeStreamExtractor.isUploaderVerified(JsonParser.object().from(
+                "{\"badges\":[{\"metadataBadgeRenderer\":{"
+                        + "\"style\":\"BADGE_STYLE_TYPE_VERIFIED\"}}]}")));
+        assertFalse(YoutubeStreamExtractor.isUploaderVerified(JsonParser.object().from(
+                "{\"badges\":[{\"metadataBadgeRenderer\":{"
+                        + "\"style\":\"BADGE_STYLE_TYPE_LIVE_NOW\"}}]}")));
     }
 }

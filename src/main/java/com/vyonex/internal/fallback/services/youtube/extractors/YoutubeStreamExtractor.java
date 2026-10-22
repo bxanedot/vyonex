@@ -534,25 +534,16 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public boolean isUploaderVerified() throws ParsingException {
-        final JsonObject videoOwnerRenderer = getVideoSecondaryInfoRenderer()
-                        .getObject("owner")
-                        .getObject("videoOwnerRenderer");
+        return isUploaderVerified(getVideoSecondaryInfoRenderer().getObject("owner")
+                .getObject("videoOwnerRenderer"));
+    }
 
-        if (videoOwnerRenderer.has("badges")) {
-            return YoutubeParsingHelper.isVerified(videoOwnerRenderer
-                .getArray("badges"));
-        }
-
-
-        final JsonObject channel = YoutubeParsingHelper.getFirstCollaborator(
-            videoOwnerRenderer.getObject("navigationEndpoint"));
-        if (channel == null) {
-            return false;
-        }
-
-        return YoutubeParsingHelper.hasArtistOrVerifiedIconBadgeAttachment(
-            channel.getObject(TITLE)
-                    .getArray("attachmentRuns"));
+    static boolean isUploaderVerified(@Nonnull final JsonObject owner) throws ParsingException {
+        if (owner.has("badges")) return YoutubeParsingHelper.isVerified(owner.getArray("badges"));
+        final JsonObject collaborator = YoutubeParsingHelper.getFirstCollaborator(
+                owner.getObject("navigationEndpoint"));
+        return collaborator != null && YoutubeParsingHelper.hasArtistOrVerifiedIconBadgeAttachment(
+                collaborator.getObject(TITLE).getArray("attachmentRuns"));
     }
 
     @Nonnull
