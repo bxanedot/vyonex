@@ -21,7 +21,7 @@ import com.vyonex.internal.json.JsonParserException;
 import javax.annotation.Nonnull;
 import java.io.IOException;
 
-public final class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
+public class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
     public static final String KIOSK_ID = "conferences";
 
     private JsonObject data;

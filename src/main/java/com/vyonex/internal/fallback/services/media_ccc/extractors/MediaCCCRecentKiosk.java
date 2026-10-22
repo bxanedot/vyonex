@@ -22,7 +22,7 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.Comparator;
 
-public final class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
+public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "recent";
     private static final String RECENT_EVENTS_URL =
             "https://api.media.ccc.de/public/events/recent";

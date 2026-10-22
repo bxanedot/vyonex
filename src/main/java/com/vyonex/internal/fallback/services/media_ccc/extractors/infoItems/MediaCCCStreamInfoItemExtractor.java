@@ -17,7 +17,7 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
         .getThumbnailsFromStreamItem;
 
-public final class MediaCCCStreamInfoItemExtractor implements StreamInfoItemExtractor {
+public class MediaCCCStreamInfoItemExtractor implements StreamInfoItemExtractor {
     private final JsonObject event;
 
     public MediaCCCStreamInfoItemExtractor(final JsonObject event) {

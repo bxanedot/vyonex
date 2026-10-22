@@ -15,7 +15,7 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
         .getImageListFromLogoImageUrl;
 
-public final class MediaCCCConferenceInfoItemExtractor implements ChannelInfoItemExtractor {
+public class MediaCCCConferenceInfoItemExtractor implements ChannelInfoItemExtractor {
     private final JsonObject conference;
 
     public MediaCCCConferenceInfoItemExtractor(final JsonObject conference) {

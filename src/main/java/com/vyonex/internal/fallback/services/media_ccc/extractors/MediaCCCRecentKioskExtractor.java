@@ -20,7 +20,7 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
         .getImageListFromLogoImageUrl;
 
-public final class MediaCCCRecentKioskExtractor implements StreamInfoItemExtractor {
+public class MediaCCCRecentKioskExtractor implements StreamInfoItemExtractor {
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSzzzz");
 

@@ -18,7 +18,7 @@ import com.vyonex.internal.json.JsonObject;
 import javax.annotation.Nonnull;
 import java.io.IOException;
 
-public final class MediaCCCLiveStreamKiosk extends KioskExtractor<StreamInfoItem> {
+public class MediaCCCLiveStreamKiosk extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "live";
 
     private JsonArray conferences;

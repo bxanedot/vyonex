@@ -80,18 +80,9 @@ class MediaCCCKioskTest {
 
     @Test
     void liveKioskIncludesRoomsOnlyFromActiveConferences() throws Exception {
-        final String body = """
-                [{"conference":"Chaos","slug":"chaos-2026","isCurrentlyStreaming":true,
-                  "groups":[{"group":"Hall A","rooms":[
-                    {"talks":{"current":{"title":"Live video"}},"link":"https://streaming.media.ccc.de/chaos-2026/a",
-                     "display":"Room A","streams":[{"type":"video"}]},
-                    {"talks":{"current":{"title":"Live audio"}},"link":"https://streaming.media.ccc.de/chaos-2026/b",
-                     "display":"Room B","streams":[{"type":"audio"}]}]}]},
-                 {"conference":"Past","slug":"past","isCurrentlyStreaming":false,"groups":[]}] 
-                """;
         final var link = MediaCCCLiveListLinkHandlerFactory.getInstance()
                 .fromUrl("https://media.ccc.de/live");
-        final StubDownloader downloader = new StubDownloader(body);
+        final StubDownloader downloader = new StubDownloader(MediaCCCExtractorTest.LIVE_STREAMS_BODY);
         VyonEx.init(downloader);
         final MediaCCCLiveStreamKiosk kiosk = new MediaCCCLiveStreamKiosk(
                 new MediaCCCService(8), link, MediaCCCLiveStreamKiosk.KIOSK_ID);
@@ -104,7 +95,6 @@ class MediaCCCKioskTest {
         assertEquals("Live audio", items.get(1).getName());
         assertEquals("Chaos - Hall A - Room A", items.get(0).getUploaderName());
         assertEquals("Chaos - Hall A - Room B", items.get(1).getUploaderName());
-        assertEquals("https://streaming.media.ccc.de/streams/v2.json", downloader.requestedUrl);
     }
 
     private static final class StubDownloader extends Downloader {

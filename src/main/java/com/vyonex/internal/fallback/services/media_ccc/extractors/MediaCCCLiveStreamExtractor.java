@@ -1,12 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
-
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem;
-import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
-import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
-
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
@@ -22,23 +17,23 @@ import com.vyonex.internal.fallback.stream.Stream;
 import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
+import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
+        .getThumbnailsFromLiveStreamItem;
 
 public class MediaCCCLiveStreamExtractor extends StreamExtractor {
-    private static final String STREAMS = "streams";
-    private static final String URLS = "urls";
-    private static final String URL = "url";
-
-    private JsonObject conference = null;
+    private JsonObject conference;
     private String group = "";
-    private JsonObject room = null;
+    private JsonObject room;
 
     public MediaCCCLiveStreamExtractor(final StreamingService service,
                                        final LinkHandler linkHandler) {
@@ -48,53 +43,47 @@ public class MediaCCCLiveStreamExtractor extends StreamExtractor {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final JsonArray doc = MediaCCCParsingHelper.getLiveStreams(downloader,
-                getExtractorLocalization());
-        // Find the correct room
-        for (int c = 0; c < doc.size(); c++) {
-            final JsonObject conferenceObject = doc.getObject(c);
-            final JsonArray groups = conferenceObject.getArray("groups");
-            for (int g = 0; g < groups.size(); g++) {
-                final String groupObject = groups.getObject(g).getString("group");
-                final JsonArray rooms = groups.getObject(g).getArray("rooms");
-                for (int r = 0; r < rooms.size(); r++) {
-                    final JsonObject roomObject = rooms.getObject(r);
-                    if (getId().equals(conferenceObject.getString("slug") + "/"
-                            + roomObject.getString("slug"))) {
-                        conference = conferenceObject;
-                        group = groupObject;
-                        room = roomObject;
+        final JsonArray conferences = MediaCCCParsingHelper.getLiveStreams(
+                downloader, getExtractorLocalization());
+        final String wantedId = getId();
+        for (int conferenceIndex = 0; conferenceIndex < conferences.size(); conferenceIndex++) {
+            final JsonObject candidate = conferences.getObject(conferenceIndex);
+            final JsonArray groups = candidate.getArray("groups");
+            for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+                final JsonObject groupEntry = groups.getObject(groupIndex);
+                final JsonArray rooms = groupEntry.getArray("rooms");
+                for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+                    final JsonObject roomEntry = rooms.getObject(roomIndex);
+                    if (wantedId.equals(candidate.getString("slug") + "/"
+                            + roomEntry.getString("slug"))) {
+                        conference = candidate;
+                        group = groupEntry.getString("group");
+                        room = roomEntry;
                         return;
                     }
                 }
             }
         }
-        throw new ExtractionException("Could not find room matching id: '" + getId() + "'");
+        throw new ExtractionException("No live room matches " + wantedId);
     }
 
     @Nonnull
     @Override
-    public String getName() throws ParsingException {
-        return room.getString("display");
-    }
+    public String getName() throws ParsingException { return room.getString("display"); }
 
     @Nonnull
     @Override
-    public List<Image> getThumbnails() throws ParsingException {
-       return getThumbnailsFromLiveStreamItem(room);
-    }
+    public List<Image> getThumbnails() { return getThumbnailsFromLiveStreamItem(room); }
 
     @Nonnull
     @Override
-    public Description getDescription() throws ParsingException {
-        return new Description(conference.getString("description")
-                + " - " + group, Description.PLAIN_TEXT);
+    public Description getDescription() {
+        return new Description(conference.getString("description") + " - " + group,
+                Description.PLAIN_TEXT);
     }
 
     @Override
-    public long getViewCount() {
-        return -1;
-    }
+    public long getViewCount() { return -1; }
 
     @Nonnull
     @Override
@@ -108,158 +97,87 @@ public class MediaCCCLiveStreamExtractor extends StreamExtractor {
         return conference.getString("conference");
     }
 
-    /**
-     * Get the URL of the first DASH stream found.
-     *
-     * <p>
-     * There can be several DASH streams, so the URL of the first one found is returned by this
-     * method.
-     * </p>
-     *
-     * <p>
-     * You can find the other DASH video streams by using {@link #getVideoStreams()}
-     * </p>
-     */
     @Nonnull
     @Override
-    public String getDashMpdUrl() throws ParsingException {
-        return getManifestOfDeliveryMethodWanted("dash");
-    }
+    public String getDashMpdUrl() throws ParsingException { return getManifest("dash"); }
 
-    /**
-     * Get the URL of the first HLS stream found.
-     *
-     * <p>
-     * There can be several HLS streams, so the URL of the first one found is returned by this
-     * method.
-     * </p>
-     *
-     * <p>
-     * You can find the other HLS video streams by using {@link #getVideoStreams()}
-     * </p>
-     */
     @Nonnull
     @Override
-    public String getHlsUrl() {
-        return getManifestOfDeliveryMethodWanted("hls");
-    }
+    public String getHlsUrl() throws ParsingException { return getManifest("hls"); }
 
-    @Nonnull
-    private String getManifestOfDeliveryMethodWanted(@Nonnull final String deliveryMethod) {
-        return room.getArray(STREAMS).streamAsJsonObjects()
-                .map(streamObject -> streamObject.getObject(URLS))
-                .filter(urls -> urls.has(deliveryMethod))
-                .map(urls -> urls.getObject(deliveryMethod).getString(URL, ""))
-                .findFirst()
-                .orElse("");
+    private String getManifest(final String method) {
+        final JsonArray streams = room.getArray("streams");
+        for (int index = 0; index < streams.size(); index++) {
+            final JsonObject urls = streams.getObject(index).getObject("urls");
+            if (urls.has(method)) return urls.getObject(method).getString("url", "");
+        }
+        return "";
     }
 
     @Override
     public List<AudioStream> getAudioStreams() throws IOException, ExtractionException {
-        return getStreams("audio",
-                dto -> {
-                    final AudioStream.Builder builder = new AudioStream.Builder()
-                            .setId(dto.urlValue.getString("tech", ID_UNKNOWN))
-                            .setContent(dto.urlValue.getString(URL), true)
-                            .setAverageBitrate(UNKNOWN_BITRATE);
-
-                    if ("hls".equals(dto.urlKey)) {
-                        // We don't know with the type string what media format will
-                        // have HLS streams.
-                        // However, the tech string may contain some information
-                        // about the media format used.
-                        return builder.setDeliveryMethod(DeliveryMethod.HLS)
-                                .build();
-                    }
-
-                    return builder.setMediaFormat(MediaFormat.getFromSuffix(dto.urlKey))
-                            .build();
-                });
+        final List<AudioStream> result = new ArrayList<>();
+        final JsonArray streams = room.getArray("streams");
+        for (int index = 0; index < streams.size(); index++) {
+            final JsonObject stream = streams.getObject(index);
+            if (!"audio".equals(stream.getString("type"))) continue;
+            final JsonObject urls = stream.getObject("urls");
+            for (final var entry : urls.entrySet()) {
+                if (!(entry.getValue() instanceof JsonObject value) || "dash".equals(entry.getKey())) {
+                    continue;
+                }
+                final AudioStream.Builder builder = new AudioStream.Builder()
+                        .setId(value.getString("tech", ID_UNKNOWN))
+                        .setContent(value.getString("url"), true)
+                        .setAverageBitrate(UNKNOWN_BITRATE);
+                if ("hls".equals(entry.getKey())) {
+                    builder.setDeliveryMethod(DeliveryMethod.HLS);
+                } else {
+                    builder.setMediaFormat(MediaFormat.getFromSuffix(entry.getKey()));
+                }
+                result.add(builder.build());
+            }
+        }
+        return result;
     }
 
     @Override
     public List<VideoStream> getVideoStreams() throws IOException, ExtractionException {
-        return getStreams("video",
-                dto -> {
-                    final JsonArray videoSize = dto.streamJsonObj.getArray("videoSize");
-
-                    final VideoStream.Builder builder = new VideoStream.Builder()
-                            .setId(dto.urlValue.getString("tech", ID_UNKNOWN))
-                            .setContent(dto.urlValue.getString(URL), true)
-                            .setIsVideoOnly(false)
-                            .setResolution(videoSize.getInt(0) + "x" + videoSize.getInt(1));
-
-                    if ("hls".equals(dto.urlKey)) {
-                        // We don't know with the type string what media format will
-                        // have HLS streams.
-                        // However, the tech string may contain some information
-                        // about the media format used.
-                        return builder.setDeliveryMethod(DeliveryMethod.HLS)
-                                .build();
-                    }
-
-                    return builder.setMediaFormat(MediaFormat.getFromSuffix(dto.urlKey))
-                            .build();
-                });
-    }
-
-
-    /**
-     * This is just an internal class used in {@link #getStreams(String, Function)} to tie together
-     * the stream json object, its URL key and its URL value. An object of this class would be
-     * temporary and the three values it holds would be <b>convert</b>ed to a proper {@link Stream}
-     * object based on the wanted stream type.
-     */
-    private static final class MediaCCCLiveStreamMapperDTO {
-        final JsonObject streamJsonObj;
-        final String urlKey;
-        final JsonObject urlValue;
-
-        MediaCCCLiveStreamMapperDTO(final JsonObject streamJsonObj,
-                                    final String urlKey,
-                                    final JsonObject urlValue) {
-            this.streamJsonObj = streamJsonObj;
-            this.urlKey = urlKey;
-            this.urlValue = urlValue;
+        final List<VideoStream> result = new ArrayList<>();
+        final JsonArray streams = room.getArray("streams");
+        for (int index = 0; index < streams.size(); index++) {
+            final JsonObject stream = streams.getObject(index);
+            if (!"video".equals(stream.getString("type"))) continue;
+            final JsonArray size = stream.getArray("videoSize");
+            final String resolution = size.getInt(0) + "x" + size.getInt(1);
+            final JsonObject urls = stream.getObject("urls");
+            for (final var entry : urls.entrySet()) {
+                if (!(entry.getValue() instanceof JsonObject value) || "dash".equals(entry.getKey())) {
+                    continue;
+                }
+                final VideoStream.Builder builder = new VideoStream.Builder()
+                        .setId(value.getString("tech", ID_UNKNOWN))
+                        .setContent(value.getString("url"), true)
+                        .setIsVideoOnly(false)
+                        .setResolution(resolution);
+                if ("hls".equals(entry.getKey())) {
+                    builder.setDeliveryMethod(DeliveryMethod.HLS);
+                } else {
+                    builder.setMediaFormat(MediaFormat.getFromSuffix(entry.getKey()));
+                }
+                result.add(builder.build());
+            }
         }
-    }
-
-    private <T extends Stream> List<T> getStreams(
-            @Nonnull final String streamType,
-            @Nonnull final Function<MediaCCCLiveStreamMapperDTO, T> converter) {
-        return room.getArray(STREAMS).stream()
-                // Ensure that we use only process JsonObjects
-                .filter(JsonObject.class::isInstance)
-                .map(JsonObject.class::cast)
-                // Only process streams of requested type
-                .filter(streamJsonObj -> streamType.equals(streamJsonObj.getString("type")))
-                // Flatmap Urls and ensure that we use only process JsonObjects
-                .flatMap(streamJsonObj -> streamJsonObj.getObject(URLS).entrySet().stream()
-                        .filter(e -> e.getValue() instanceof JsonObject)
-                        .map(e -> new MediaCCCLiveStreamMapperDTO(
-                                streamJsonObj,
-                                e.getKey(),
-                                (JsonObject) e.getValue())))
-                // The DASH manifest will be extracted with getDashMpdUrl
-                .filter(dto -> !"dash".equals(dto.urlKey))
-                // Convert
-                .map(converter)
-                .collect(Collectors.toList());
+        return result;
     }
 
     @Override
-    public List<VideoStream> getVideoOnlyStreams() {
-        return Collections.emptyList();
-    }
+    public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
 
     @Override
-    public StreamType getStreamType() throws ParsingException {
-        return StreamType.LIVE_STREAM;
-    }
+    public StreamType getStreamType() { return StreamType.LIVE_STREAM; }
 
     @Nonnull
     @Override
-    public String getCategory() {
-        return group;
-    }
+    public String getCategory() { return group; }
 }
