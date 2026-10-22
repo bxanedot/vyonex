@@ -168,20 +168,18 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Override
     public String getName() throws ParsingException {
         assertPageFetched();
-        String title;
+        return extractVideoTitle(playerResponse.getObject(VIDEO_DETAILS),
+                getVideoPrimaryInfoRenderer());
+    }
 
-        // Try to get the video's original title, which is untranslated
-        title = playerResponse.getObject(VIDEO_DETAILS)
-                .getString(TITLE);
-
+    static String extractVideoTitle(@Nonnull final JsonObject videoDetails,
+                                    @Nonnull final JsonObject primaryInfo)
+            throws ParsingException {
+        String title = videoDetails.getString(TITLE);
         if (isNullOrEmpty(title)) {
-            title = getTextFromObject(getVideoPrimaryInfoRenderer().getObject(TITLE));
-
-            if (isNullOrEmpty(title)) {
-                throw new ParsingException("Could not get name");
-            }
+            title = getTextFromObject(primaryInfo.getObject(TITLE));
         }
-
+        if (isNullOrEmpty(title)) throw new ParsingException("Could not get name");
         return title;
     }
 
