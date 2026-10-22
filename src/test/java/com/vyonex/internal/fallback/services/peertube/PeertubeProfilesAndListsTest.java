@@ -1,0 +1,141 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
+// bxane
+package com.vyonex.internal.fallback.services.peertube;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.channel.ChannelExtractor;
+import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
+import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Request;
+import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
+import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
+import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubePlaylistLinkHandlerFactory;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+class PeertubeProfilesAndListsTest {
+    private static final String BASE = "https://tube.example";
+
+    @Test
+    void accountIncludesFollowerCountsFromItsChannels() throws Exception {
+        final String accountUrl = BASE + "/api/v1/accounts/alice@tube.example";
+        final String channelsUrl = accountUrl + "/video-channels";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                accountUrl, """
+                {"id":7,"displayName":"Alice","followersCount":5,"avatar":{"path":"/alice.png"}}
+                """,
+                channelsUrl, """
+                {"data":[{"followersCount":2},{"followersCount":3}]}
+                """));
+        VyonEx.init(downloader);
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ListLinkHandler link = service.getChannelLHFactory()
+                .fromUrl(BASE + "/a/alice@tube.example");
+        final ChannelExtractor account = service.getChannelExtractor(link);
+        account.fetchPage();
+
+        assertEquals("Alice", account.getName());
+        assertEquals(10, account.getSubscriberCount());
+        assertEquals(BASE + "/feeds/videos.xml?accountId=7", account.getFeedUrl());
+        assertEquals(BASE + "/accounts/alice@tube.example/videos",
+                account.getTabs().get(0).getUrl());
+        assertEquals(BASE + "/accounts/alice@tube.example/video-channels",
+                account.getTabs().get(1).getUrl());
+        assertEquals(BASE + "/alice.png", account.getAvatars().get(0).getUrl());
+    }
+
+    @Test
+    void channelExposesItsOwnerAndPlaylistTab() throws Exception {
+        final String channelUrl = BASE + "/api/v1/video-channels/music@tube.example";
+        final StubDownloader downloader = new StubDownloader(Map.of(channelUrl, """
+                {"id":9,"displayName":"Music","followersCount":12,
+                 "ownerAccount":{"name":"alice","url":"https://tube.example/a/alice",
+                   "avatar":{"path":"/alice.png"}},"banner":{"path":"/banner.jpg"}}
+                """));
+        VyonEx.init(downloader);
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ChannelExtractor channel = service.getChannelExtractor(service.getChannelLHFactory()
+                .fromUrl(BASE + "/c/music@tube.example"));
+        channel.fetchPage();
+
+        assertEquals("Music", channel.getName());
+        assertEquals(12, channel.getSubscriberCount());
+        assertEquals("alice", channel.getParentChannelName());
+        assertEquals("https://tube.example/a/alice", channel.getParentChannelUrl());
+        assertEquals(BASE + "/feeds/videos.xml?videoChannelId=9", channel.getFeedUrl());
+        assertEquals(ChannelTabs.PLAYLISTS,
+                service.getChannelTabExtractor(channel.getTabs().get(1)).getName());
+        assertEquals(BASE + "/banner.jpg", channel.getBanners().get(0).getUrl());
+    }
+
+    @Test
+    void playlistAndChannelTabReturnPagedVideos() throws Exception {
+        final String playlistUrl = BASE + "/api/v1/video-playlists/list-1";
+        final String playlistVideosUrl = playlistUrl + "/videos?start=0&count=12";
+        final String channelVideosUrl = BASE
+                + "/api/v1/video-channels/music@tube.example/videos?start=0&count=12";
+        final String videoList = """
+                {"total":13,"data":[{"uuid":"video-1","name":"First video","views":4,
+                 "account":{"name":"alice","host":"tube.example","displayName":"Alice"}}]}
+                """;
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                playlistUrl, """
+                {"displayName":"Mix","description":"Playlist notes","videosLength":1,
+                 "thumbnailPath":"/mix.jpg",
+                 "ownerAccount":{"displayName":"Alice","url":"https://tube.example/a/alice"},
+                 "videoChannel":{"displayName":"Music","url":"https://tube.example/c/music"}}
+                """,
+                playlistVideosUrl, videoList,
+                channelVideosUrl, videoList));
+        VyonEx.init(downloader);
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+
+        final var playlistLink = PeertubePlaylistLinkHandlerFactory.getInstance()
+                .fromId("list-1", BASE);
+        final var playlist = service.getPlaylistExtractor(playlistLink);
+        playlist.fetchPage();
+        assertEquals("Mix", playlist.getName());
+        assertEquals(1, playlist.getStreamCount());
+        assertEquals("Alice", playlist.getUploaderName());
+        assertEquals("Music", playlist.getSubChannelName());
+        assertEquals(BASE + "/mix.jpg", playlist.getThumbnails().get(0).getUrl());
+
+        final var firstVideoPage = playlist.getInitialPage();
+        assertEquals(1, firstVideoPage.getItems().size());
+        assertEquals("First video", firstVideoPage.getItems().get(0).getName());
+        assertNotNull(firstVideoPage.getNextPage());
+
+        final var tabLink = PeertubeChannelTabLinkHandlerFactory.getInstance().fromQuery(
+                "video-channels/music@tube.example", List.of(ChannelTabs.VIDEOS), "", BASE);
+        final var tab = service.getChannelTabExtractor(tabLink);
+        final var tabPage = tab.getInitialPage();
+        assertEquals(1, tabPage.getItems().size());
+        assertEquals("First video", tabPage.getItems().get(0).getName());
+        assertNotNull(tabPage.getNextPage());
+    }
+
+    private static final class StubDownloader extends Downloader {
+        private final Map<String, String> bodies;
+        private final List<String> requestedUrls = new ArrayList<>();
+
+        private StubDownloader(final Map<String, String> bodies) { this.bodies = bodies; }
+
+        @Override public Response execute(final Request request)
+                throws IOException, ReCaptchaException {
+            requestedUrls.add(request.url());
+            final String body = bodies.get(request.url());
+            if (body == null) throw new IOException("No offline response for " + request.url());
+            return new Response(200, "OK", Map.of(), body, request.url());
+        }
+    }
+}

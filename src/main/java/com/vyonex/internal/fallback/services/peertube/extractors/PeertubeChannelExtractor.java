@@ -1,9 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
@@ -13,114 +12,83 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
-import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory;
+import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.JsonUtils;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject;
+import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
-public class PeertubeChannelExtractor extends ChannelExtractor {
-    private JsonObject json;
+public final class PeertubeChannelExtractor extends ChannelExtractor {
+    private static final String API = "/api/v1/";
+    private JsonObject channel;
     private final String baseUrl;
 
-    public PeertubeChannelExtractor(final StreamingService service,
-                                    final ListLinkHandler linkHandler) throws ParsingException {
-        super(service, linkHandler);
-        this.baseUrl = getBaseUrl();
+    public PeertubeChannelExtractor(final StreamingService service, final ListLinkHandler handler)
+            throws ParsingException {
+        super(service, handler);
+        baseUrl = getBaseUrl();
     }
 
-    @Nonnull
-    @Override
-    public List<Image> getAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, json);
+    @Override public List<Image> getAvatars() {
+        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, channel);
     }
 
-    @Nonnull
-    @Override
-    public List<Image> getBanners() {
-        return getBannersFromAccountOrVideoChannelObject(baseUrl, json);
+    @Override public List<Image> getBanners() {
+        return getBannersFromAccountOrVideoChannelObject(baseUrl, channel);
     }
 
-    @Override
-    public String getFeedUrl() throws ParsingException {
-        return getBaseUrl() + "/feeds/videos.xml?videoChannelId=" + json.get("id");
+    @Override public String getFeedUrl() {
+        return baseUrl + "/feeds/videos.xml?videoChannelId=" + channel.get("id");
     }
 
-    @Override
-    public long getSubscriberCount() {
-        return json.getLong("followersCount");
+    @Override public long getSubscriberCount() { return channel.getLong("followersCount"); }
+
+    @Override public String getDescription() { return channel.getString("description"); }
+
+    @Override public String getParentChannelName() throws ParsingException {
+        return requiredString(channel, "ownerAccount.name");
     }
 
-    @Nullable
-    @Override
-    public String getDescription() {
-        return json.getString("description");
+    @Override public String getParentChannelUrl() throws ParsingException {
+        return requiredString(channel, "ownerAccount.url");
     }
 
-    @Override
-    public String getParentChannelName() throws ParsingException {
-        return JsonUtils.getString(json, "ownerAccount.name");
+    @Override public List<Image> getParentChannelAvatars() {
+        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl,
+                channel.getObject("ownerAccount"));
     }
 
-    @Override
-    public String getParentChannelUrl() throws ParsingException {
-        return JsonUtils.getString(json, "ownerAccount.url");
-    }
+    @Override public boolean isVerified() { return false; }
 
-    @Nonnull
-    @Override
-    public List<Image> getParentChannelAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(
-                baseUrl, json.getObject("ownerAccount"));
-    }
-
-    @Override
-    public boolean isVerified() throws ParsingException {
-        return false;
-    }
-
-    @Nonnull
-    @Override
-    public List<ListLinkHandler> getTabs() throws ParsingException {
+    @Override public List<ListLinkHandler> getTabs() throws ParsingException {
+        final var tabs = PeertubeChannelTabLinkHandlerFactory.getInstance();
         return List.of(
-                PeertubeChannelTabLinkHandlerFactory.getInstance().fromQuery(getId(),
-                        List.of(ChannelTabs.VIDEOS), "", getBaseUrl()),
-                PeertubeChannelTabLinkHandlerFactory.getInstance().fromQuery(getId(),
-                        List.of(ChannelTabs.PLAYLISTS), "", getBaseUrl()));
+                tabs.fromQuery(getId(), List.of(ChannelTabs.VIDEOS), "", baseUrl),
+                tabs.fromQuery(getId(), List.of(ChannelTabs.PLAYLISTS), "", baseUrl));
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        final Response response = downloader.get(
-                baseUrl + PeertubeChannelLinkHandlerFactory.API_ENDPOINT + getId());
-        if (response != null) {
-            setInitialData(response.responseBody());
-        } else {
-            throw new ExtractionException("Unable to extract PeerTube channel data");
+        final Response response = downloader.get(baseUrl + API + getId());
+        if (response == null || response.responseBody().isBlank()) {
+            throw new ExtractionException("PeerTube channel response is empty");
         }
-    }
-
-    private void setInitialData(final String responseBody) throws ExtractionException {
         try {
-            json = JsonParser.object().from(responseBody);
+            channel = JsonParser.object().from(response.responseBody());
         } catch (final JsonParserException e) {
-            throw new ExtractionException("Unable to extract PeerTube channel data", e);
+            throw new ExtractionException("PeerTube channel response is invalid", e);
         }
-        if (json == null) {
-            throw new ExtractionException("Unable to extract PeerTube channel data");
-        }
+        PeertubeParsingHelper.validate(channel);
     }
 
-    @Nonnull
-    @Override
-    public String getName() throws ParsingException {
-        return JsonUtils.getString(json, "displayName");
+    @Override public String getName() throws ParsingException {
+        return requiredString(channel, "displayName");
     }
 }
