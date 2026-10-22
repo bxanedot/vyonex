@@ -891,7 +891,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
 
         checkPlayabilityStatus(playerResponse.getObject(PLAYABILITY_STATUS));
-        if (isPlayerResponseNotValid(playerResponse, videoId)) {
+        if (!isPlayerResponseValid(playerResponse, videoId)) {
             throw new ExtractionException("ANDROID player response is not valid");
         }
 
@@ -915,7 +915,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             final JsonObject iosPlayerResponse = YoutubeStreamHelper.getIosPlayerResponse(
                     contentCountry, localization, videoId, iosCpn, iosPoTokenResult);
 
-            if (!isPlayerResponseNotValid(iosPlayerResponse, videoId)) {
+            if (isPlayerResponseValid(iosPlayerResponse, videoId)) {
                 iosStreamingData = iosPlayerResponse.getObject(STREAMING_DATA);
 
                 if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
@@ -942,7 +942,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             final JsonObject visionOsPlayerResponse = YoutubeStreamHelper.getVisionOsPlayerResponse(
                     contentCountry, localization, videoId, visionOsCpn);
 
-            if (!isPlayerResponseNotValid(visionOsPlayerResponse, videoId)) {
+            if (isPlayerResponseValid(visionOsPlayerResponse, videoId)) {
                 visionOsStreamingData = visionOsPlayerResponse.getObject(STREAMING_DATA);
 
                 if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
@@ -968,7 +968,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             // exclusively for metadata, not for extracting streams. It turns out that when
             // YouTube returns a playability status error, the metadata may still be there.
 
-            if (!isPlayerResponseNotValid(webPlayerResponse, videoId)) {
+            if (isPlayerResponseValid(webPlayerResponse, videoId)) {
                 // The microformat JSON object of the content is only returned on the WEB client,
                 // so we need to store it instead of getting it directly from the playerResponse
                 playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
@@ -997,40 +997,10 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
     }
 
-    /**
-     * Checks whether a player response is invalid.
-     *
-     * <p>
-     * If YouTube detects that requests come from a third party client, they may replace the real
-     * player response by another one of a video saying that this content is not available on this
-     * app and to watch it on the latest version of YouTube. This behavior has been observed on the
-     * {@code ANDROID} client, see
-     * historical issue #8713.
-     * </p>
-     *
-     * <p>
-     * YouTube may also sometimes for currently unknown reasons rate-limit an IP, and replace the
-     * real one by a player response with a video that says that the requested video is
-     * unavailable. This behaviour has been observed in Piped on the InnerTube clients used by the
-     * extractor ({@code ANDROID} and {@code WEB} clients) which should apply for all clients, see
-     * <a href="https://github.com/TeamPiped/Piped/issues/2487">
-     *     https://github.com/TeamPiped/Piped/issues/2487</a>.
-     * </p>
-     *
-     * <p>
-     * We can detect this by checking whether the video ID of the player response returned is the
-     * same as the one requested by the extractor.
-     * </p>
-     *
-     * @param playerResponse a player response from any client
-     * @param videoId        the video ID of the content requested
-     * @return whether the video ID of the player response is not equal to the one requested
-     */
-    private static boolean isPlayerResponseNotValid(
-            @Nonnull final JsonObject playerResponse,
-            @Nonnull final String videoId) {
-        return !videoId.equals(playerResponse.getObject(VIDEO_DETAILS)
-                .getString("videoId"));
+    static boolean isPlayerResponseValid(@Nonnull final JsonObject playerResponse,
+                                         @Nullable final String videoId) {
+        return videoId != null && videoId.equals(playerResponse.getObject(VIDEO_DETAILS)
+                .getString(VIDEO_ID));
     }
 
     /*//////////////////////////////////////////////////////////////////////////
