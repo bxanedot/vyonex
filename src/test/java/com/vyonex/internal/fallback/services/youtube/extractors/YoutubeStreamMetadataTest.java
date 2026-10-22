@@ -107,4 +107,12 @@ class YoutubeStreamMetadataTest {
         assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.parseViewCount(
                 JsonParser.object().from("{}"), JsonParser.object().from("{}")));
     }
+
+    @Test
+    void readsUploaderNameFromVideoDetails() throws Exception {
+        assertEquals("Artist", YoutubeStreamExtractor.extractUploaderName(
+                JsonParser.object().from("{\"author\":\"Artist\"}")));
+        assertThrows(ParsingException.class, () -> YoutubeStreamExtractor.extractUploaderName(
+                JsonParser.object().from("{}")));
+    }
 }
