@@ -35,6 +35,19 @@ class PeertubeParsingHelperTest {
     }
 
     @Test
+    void readsRequiredAndOptionalNestedFields() throws Exception {
+        final var item = JsonParser.object().from("""
+                {"account":{"displayName":"Creator","followers":12}}
+                """);
+
+        assertEquals("Creator", PeertubeParsingHelper.requiredString(item, "account.displayName"));
+        assertEquals(12, PeertubeParsingHelper.requiredNumber(item, "account.followers").intValue());
+        assertNull(PeertubeParsingHelper.optionalString(item, "account.missing"));
+        assertThrows(ParsingException.class,
+                () -> PeertubeParsingHelper.requiredString(item, "account.missing"));
+    }
+
+    @Test
     void combinesRemoteThumbnailAndAvatarPaths() throws Exception {
         final var item = JsonParser.object().from("""
                 {"thumbnailPath":"/thumb.jpg","previewPath":"/preview.jpg",

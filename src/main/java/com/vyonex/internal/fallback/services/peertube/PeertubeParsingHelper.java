@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube;
 
 import com.vyonex.internal.fallback.Image;
@@ -31,19 +30,20 @@ public final class PeertubeParsingHelper {
 
     private PeertubeParsingHelper() { }
 
-    public static void validate(final JsonObject json) throws ContentNotAvailableException {
-        final String error = json.getString("error");
-        if (error != null && !error.isBlank()) throw new ContentNotAvailableException(error);
+    public static void validate(final JsonObject response) throws ContentNotAvailableException {
+        final String message = response.getString("error");
+        if (message != null && !message.isBlank()) throw new ContentNotAvailableException(message);
     }
 
     public static Page getNextPage(final String previousUrl, final long total) {
-        final Matcher match = START_PARAM.matcher(previousUrl);
-        if (!match.find()) return null;
+        final Matcher start = START_PARAM.matcher(previousUrl);
+        if (!start.find()) return null;
         try {
-            final long next = Math.addExact(Long.parseLong(match.group(2)), ITEMS_PER_PAGE);
-            return next >= total ? null : new Page(match.replaceFirst(
-                    Matcher.quoteReplacement(match.group(1) + next)));
-        } catch (final ArithmeticException | NumberFormatException e) {
+            final long nextStart = Math.addExact(Long.parseLong(start.group(2)), ITEMS_PER_PAGE);
+            if (nextStart >= total) return null;
+            final String replacement = start.group(1) + nextStart;
+            return new Page(start.replaceFirst(Matcher.quoteReplacement(replacement)));
+        } catch (final ArithmeticException | NumberFormatException ignored) {
             return null;
         }
     }
@@ -63,9 +63,9 @@ public final class PeertubeParsingHelper {
         final Object data = response.get("data");
         if (!(data instanceof JsonArray)) throw new ParsingException("Response data is not an array");
 
-        for (final Object value : (JsonArray) data) {
-            if (!(value instanceof JsonObject)) continue;
-            JsonObject item = (JsonObject) value;
+        for (final Object entry : (JsonArray) data) {
+            if (!(entry instanceof JsonObject)) continue;
+            JsonObject item = (JsonObject) entry;
             if (item.get("video") instanceof JsonObject) item = item.getObject("video");
 
             if (sepia) {
@@ -101,60 +101,58 @@ public final class PeertubeParsingHelper {
 
     public static List<Image> getAvatarsFromOwnerAccountOrVideoChannelObject(
             final String baseUrl, final JsonObject item) {
-        return getImages(baseUrl, item, "avatars", "avatar");
+        return profileImages(baseUrl, item, "avatars", "avatar");
     }
 
     public static List<Image> getBannersFromAccountOrVideoChannelObject(
             final String baseUrl, final JsonObject item) {
-        return getImages(baseUrl, item, "banners", "banner");
+        return profileImages(baseUrl, item, "banners", "banner");
     }
 
     public static List<Image> getThumbnailsFromPlaylistOrVideoItem(
             final String baseUrl, final JsonObject item) {
-        final List<Image> images = new ArrayList<>(2);
-        addThumbnail(images, baseUrl, item.getString("thumbnailPath"), ResolutionLevel.LOW);
-        addThumbnail(images, baseUrl, item.getString("previewPath"), ResolutionLevel.MEDIUM);
+        final List<Image> thumbnails = new ArrayList<>(2);
+        addThumbnail(thumbnails, baseUrl, item.getString("thumbnailPath"), ResolutionLevel.LOW);
+        addThumbnail(thumbnails, baseUrl, item.getString("previewPath"), ResolutionLevel.MEDIUM);
+        return Collections.unmodifiableList(thumbnails);
+    }
+
+    private static List<Image> profileImages(final String baseUrl, final JsonObject item,
+                                             final String listKey, final String fallbackKey) {
+        final JsonArray values = item.getArray(listKey);
+        final List<Image> images = new ArrayList<>(values.isEmpty() ? 1 : values.size());
+        if (values.isEmpty()) {
+            addProfileImage(images, baseUrl, item.getObject(fallbackKey));
+        } else {
+            for (final Object value : values) {
+                if (value instanceof JsonObject) addProfileImage(images, baseUrl, (JsonObject) value);
+            }
+        }
         return Collections.unmodifiableList(images);
     }
 
-    private static List<Image> getImages(final String baseUrl, final JsonObject item,
-                                         final String arrayKey, final String objectKey) {
-        final JsonArray entries = item.getArray(arrayKey);
-        if (!entries.isEmpty()) {
-            final List<Image> images = new ArrayList<>(entries.size());
-            for (final Object value : entries) {
-                if (value instanceof JsonObject) addProfileImage(images, baseUrl, (JsonObject) value);
-            }
-            return Collections.unmodifiableList(images);
-        }
-
-        final List<Image> fallback = new ArrayList<>(1);
-        addProfileImage(fallback, baseUrl, item.getObject(objectKey));
-        return Collections.unmodifiableList(fallback);
-    }
-
     private static void addProfileImage(final List<Image> images, final String baseUrl,
-                                        final JsonObject image) {
-        final String path = image.getString("path");
+                                        final JsonObject value) {
+        final String path = value.getString("path");
         if (path != null && !path.isBlank()) {
             images.add(new Image(resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
-                    image.getInt("width", Image.WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN));
+                    value.getInt("width", Image.WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN));
         }
     }
 
     private static void addThumbnail(final List<Image> images, final String baseUrl,
-                                     final String path, final ResolutionLevel level) {
+                                     final String path, final ResolutionLevel quality) {
         if (path != null && !path.isBlank()) {
             images.add(new Image(resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
-                    Image.WIDTH_UNKNOWN, level));
+                    Image.WIDTH_UNKNOWN, quality));
         }
     }
 
     private static String resolve(final String baseUrl, final String path) {
         try {
-            return URI.create(baseUrl.endsWith("/") ? baseUrl : baseUrl + "/")
-                    .resolve(path).toString();
-        } catch (final IllegalArgumentException e) {
+            final String base = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+            return URI.create(base).resolve(path).toString();
+        } catch (final IllegalArgumentException ignored) {
             return baseUrl + (path.startsWith("/") ? "" : "/") + path;
         }
     }
