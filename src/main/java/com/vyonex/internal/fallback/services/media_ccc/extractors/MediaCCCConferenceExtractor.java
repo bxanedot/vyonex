@@ -21,11 +21,10 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
-        .getImageListFromLogoImageUrl;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
 
 public class MediaCCCConferenceExtractor extends ChannelExtractor {
-    private JsonObject data;
+    private JsonObject conference;
 
     public MediaCCCConferenceExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler) {
@@ -39,57 +38,35 @@ public class MediaCCCConferenceExtractor extends ChannelExtractor {
                 + conferenceId;
         try {
             return JsonParser.object().from(downloader.get(url).responseBody());
-        } catch (JsonParserException e) {
-            throw new ExtractionException("Could not parse conference response from " + url, e);
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse conference response from " + url, error);
         }
     }
 
-    @Nonnull
-    @Override
-    public List<Image> getAvatars() { return getImageListFromLogoImageUrl(data.getString("logo_url")); }
+    @Nonnull @Override public List<Image> getAvatars() {
+        return getImageListFromLogoImageUrl(conference.getString("logo_url"));
+    }
+    @Nonnull @Override public List<Image> getBanners() { return List.of(); }
+    @Override public String getFeedUrl() { return null; }
+    @Override public long getSubscriberCount() { return -1; }
+    @Override public String getDescription() { return null; }
+    @Override public String getParentChannelName() { return ""; }
+    @Override public String getParentChannelUrl() { return ""; }
+    @Nonnull @Override public List<Image> getParentChannelAvatars() { return List.of(); }
+    @Override public boolean isVerified() { return false; }
 
-    @Nonnull
-    @Override
-    public List<Image> getBanners() { return List.of(); }
-
-    @Override
-    public String getFeedUrl() { return null; }
-
-    @Override
-    public long getSubscriberCount() { return -1; }
-
-    @Override
-    public String getDescription() { return null; }
-
-    @Override
-    public String getParentChannelName() { return ""; }
-
-    @Override
-    public String getParentChannelUrl() { return ""; }
-
-    @Nonnull
-    @Override
-    public List<Image> getParentChannelAvatars() { return List.of(); }
-
-    @Override
-    public boolean isVerified() { return false; }
-
-    @Nonnull
-    @Override
-    public List<ListLinkHandler> getTabs() throws ParsingException {
-        final JsonObject fetchedConference = data;
+    @Nonnull @Override public List<ListLinkHandler> getTabs() throws ParsingException {
+        final JsonObject fetched = conference;
         return List.of(new ReadyChannelTabListLinkHandler(getUrl(), getId(), ChannelTabs.VIDEOS,
-                (service, linkHandler) ->
-                        new MediaCCCChannelTabExtractor(service, linkHandler, fetchedConference)));
+                (service, link) -> new MediaCCCChannelTabExtractor(service, link, fetched)));
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        data = fetchConferenceData(downloader, getId());
+        conference = fetchConferenceData(downloader, getId());
     }
 
-    @Nonnull
-    @Override
-    public String getName() throws ParsingException { return data.getString("title"); }
+    @Nonnull @Override public String getName() throws ParsingException {
+        return conference.getString("title");
+    }
 }

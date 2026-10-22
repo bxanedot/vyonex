@@ -27,157 +27,127 @@ import java.util.List;
 
 import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
 import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper
-        .getThumbnailsFromLiveStreamItem;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem;
 
 public class MediaCCCLiveStreamExtractor extends StreamExtractor {
     private JsonObject conference;
-    private String group = "";
     private JsonObject room;
+    private String group = "";
 
     public MediaCCCLiveStreamExtractor(final StreamingService service,
                                        final LinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
         final JsonArray conferences = MediaCCCParsingHelper.getLiveStreams(
                 downloader, getExtractorLocalization());
-        final String wantedId = getId();
-        for (int conferenceIndex = 0; conferenceIndex < conferences.size(); conferenceIndex++) {
-            final JsonObject candidate = conferences.getObject(conferenceIndex);
-            final JsonArray groups = candidate.getArray("groups");
-            for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
-                final JsonObject groupEntry = groups.getObject(groupIndex);
-                final JsonArray rooms = groupEntry.getArray("rooms");
-                for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
-                    final JsonObject roomEntry = rooms.getObject(roomIndex);
-                    if (wantedId.equals(candidate.getString("slug") + "/"
-                            + roomEntry.getString("slug"))) {
-                        conference = candidate;
-                        group = groupEntry.getString("group");
-                        room = roomEntry;
-                        return;
-                    }
+        final String target = getId();
+        for (final JsonObject candidate : conferences.streamAsJsonObjects().toList()) {
+            for (final JsonObject section : candidate.getArray("groups").streamAsJsonObjects().toList()) {
+                for (final JsonObject candidateRoom : section.getArray("rooms")
+                        .streamAsJsonObjects().toList()) {
+                    final String id = candidate.getString("slug") + "/"
+                            + candidateRoom.getString("slug");
+                    if (!target.equals(id)) continue;
+                    conference = candidate;
+                    room = candidateRoom;
+                    group = section.getString("group", "");
+                    return;
                 }
             }
         }
-        throw new ExtractionException("No live room matches " + wantedId);
+        throw new ExtractionException("No live room matches " + target);
     }
 
-    @Nonnull
-    @Override
-    public String getName() throws ParsingException { return room.getString("display"); }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() { return getThumbnailsFromLiveStreamItem(room); }
-
-    @Nonnull
-    @Override
-    public Description getDescription() {
+    @Nonnull @Override public String getName() throws ParsingException {
+        return room.getString("display");
+    }
+    @Nonnull @Override public List<Image> getThumbnails() {
+        return getThumbnailsFromLiveStreamItem(room);
+    }
+    @Nonnull @Override public Description getDescription() {
         return new Description(conference.getString("description") + " - " + group,
                 Description.PLAIN_TEXT);
     }
-
-    @Override
-    public long getViewCount() { return -1; }
-
-    @Nonnull
-    @Override
-    public String getUploaderUrl() throws ParsingException {
+    @Override public long getViewCount() { return -1; }
+    @Nonnull @Override public String getUploaderUrl() throws ParsingException {
         return "https://streaming.media.ccc.de/" + conference.getString("slug");
     }
-
-    @Nonnull
-    @Override
-    public String getUploaderName() throws ParsingException {
+    @Nonnull @Override public String getUploaderName() throws ParsingException {
         return conference.getString("conference");
     }
+    @Nonnull @Override public String getDashMpdUrl() throws ParsingException {
+        return manifest("dash");
+    }
+    @Nonnull @Override public String getHlsUrl() throws ParsingException {
+        return manifest("hls");
+    }
 
-    @Nonnull
-    @Override
-    public String getDashMpdUrl() throws ParsingException { return getManifest("dash"); }
-
-    @Nonnull
-    @Override
-    public String getHlsUrl() throws ParsingException { return getManifest("hls"); }
-
-    private String getManifest(final String method) {
-        final JsonArray streams = room.getArray("streams");
-        for (int index = 0; index < streams.size(); index++) {
-            final JsonObject urls = streams.getObject(index).getObject("urls");
-            if (urls.has(method)) return urls.getObject(method).getString("url", "");
+    private String manifest(final String kind) {
+        for (final JsonObject stream : room.getArray("streams").streamAsJsonObjects().toList()) {
+            final JsonObject urls = stream.getObject("urls");
+            if (urls.has(kind)) return urls.getObject(kind).getString("url", "");
         }
         return "";
     }
 
-    @Override
-    public List<AudioStream> getAudioStreams() throws IOException, ExtractionException {
+    @Override public List<AudioStream> getAudioStreams() throws IOException, ExtractionException {
         final List<AudioStream> result = new ArrayList<>();
-        final JsonArray streams = room.getArray("streams");
-        for (int index = 0; index < streams.size(); index++) {
-            final JsonObject stream = streams.getObject(index);
+        for (final JsonObject stream : room.getArray("streams").streamAsJsonObjects().toList()) {
             if (!"audio".equals(stream.getString("type"))) continue;
-            final JsonObject urls = stream.getObject("urls");
-            for (final var entry : urls.entrySet()) {
-                if (!(entry.getValue() instanceof JsonObject value) || "dash".equals(entry.getKey())) {
-                    continue;
-                }
-                final AudioStream.Builder builder = new AudioStream.Builder()
-                        .setId(value.getString("tech", ID_UNKNOWN))
-                        .setContent(value.getString("url"), true)
-                        .setAverageBitrate(UNKNOWN_BITRATE);
-                if ("hls".equals(entry.getKey())) {
-                    builder.setDeliveryMethod(DeliveryMethod.HLS);
-                } else {
-                    builder.setMediaFormat(MediaFormat.getFromSuffix(entry.getKey()));
-                }
-                result.add(builder.build());
-            }
+            appendAudioStreams(result, stream.getObject("urls"));
         }
         return result;
     }
 
-    @Override
-    public List<VideoStream> getVideoStreams() throws IOException, ExtractionException {
+    private static void appendAudioStreams(final List<AudioStream> result, final JsonObject urls) {
+        for (final var entry : urls.entrySet()) {
+            if (!(entry.getValue() instanceof JsonObject)) continue;
+            final String format = entry.getKey();
+            if ("dash".equals(format)) continue;
+            final JsonObject source = (JsonObject) entry.getValue();
+            final AudioStream.Builder audio = new AudioStream.Builder()
+                    .setId(source.getString("tech", ID_UNKNOWN))
+                    .setContent(source.getString("url"), true)
+                    .setAverageBitrate(UNKNOWN_BITRATE);
+            if ("hls".equals(format)) audio.setDeliveryMethod(DeliveryMethod.HLS);
+            else audio.setMediaFormat(MediaFormat.getFromSuffix(format));
+            result.add(audio.build());
+        }
+    }
+
+    @Override public List<VideoStream> getVideoStreams() throws IOException, ExtractionException {
         final List<VideoStream> result = new ArrayList<>();
-        final JsonArray streams = room.getArray("streams");
-        for (int index = 0; index < streams.size(); index++) {
-            final JsonObject stream = streams.getObject(index);
+        for (final JsonObject stream : room.getArray("streams").streamAsJsonObjects().toList()) {
             if (!"video".equals(stream.getString("type"))) continue;
-            final JsonArray size = stream.getArray("videoSize");
-            final String resolution = size.getInt(0) + "x" + size.getInt(1);
-            final JsonObject urls = stream.getObject("urls");
-            for (final var entry : urls.entrySet()) {
-                if (!(entry.getValue() instanceof JsonObject value) || "dash".equals(entry.getKey())) {
-                    continue;
-                }
-                final VideoStream.Builder builder = new VideoStream.Builder()
-                        .setId(value.getString("tech", ID_UNKNOWN))
-                        .setContent(value.getString("url"), true)
-                        .setIsVideoOnly(false)
-                        .setResolution(resolution);
-                if ("hls".equals(entry.getKey())) {
-                    builder.setDeliveryMethod(DeliveryMethod.HLS);
-                } else {
-                    builder.setMediaFormat(MediaFormat.getFromSuffix(entry.getKey()));
-                }
-                result.add(builder.build());
-            }
+            appendVideoStreams(result, stream);
         }
         return result;
     }
 
-    @Override
-    public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
+    private static void appendVideoStreams(final List<VideoStream> result,
+                                          final JsonObject stream) {
+        final JsonArray dimensions = stream.getArray("videoSize");
+        final String resolution = dimensions.getInt(0) + "x" + dimensions.getInt(1);
+        for (final var entry : stream.getObject("urls").entrySet()) {
+            if (!(entry.getValue() instanceof JsonObject)) continue;
+            final String format = entry.getKey();
+            if ("dash".equals(format)) continue;
+            final JsonObject source = (JsonObject) entry.getValue();
+            final VideoStream.Builder video = new VideoStream.Builder()
+                    .setId(source.getString("tech", ID_UNKNOWN))
+                    .setContent(source.getString("url"), true)
+                    .setIsVideoOnly(false)
+                    .setResolution(resolution);
+            if ("hls".equals(format)) video.setDeliveryMethod(DeliveryMethod.HLS);
+            else video.setMediaFormat(MediaFormat.getFromSuffix(format));
+            result.add(video.build());
+        }
+    }
 
-    @Override
-    public StreamType getStreamType() { return StreamType.LIVE_STREAM; }
-
-    @Nonnull
-    @Override
-    public String getCategory() { return group; }
+    @Override public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
+    @Override public StreamType getStreamType() { return StreamType.LIVE_STREAM; }
+    @Nonnull @Override public String getCategory() { return group; }
 }

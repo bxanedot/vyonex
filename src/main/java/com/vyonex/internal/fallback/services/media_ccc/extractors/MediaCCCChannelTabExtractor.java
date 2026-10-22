@@ -20,37 +20,32 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 
 public class MediaCCCChannelTabExtractor extends ChannelTabExtractor {
-    @Nullable
-    private JsonObject conferenceData;
+    @Nullable private JsonObject conference;
 
     public MediaCCCChannelTabExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler,
-                                       @Nullable final JsonObject conferenceData) {
+                                       @Nullable final JsonObject conference) {
         super(service, linkHandler);
-        this.conferenceData = conferenceData;
+        this.conference = conference;
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws ExtractionException, IOException {
-        if (conferenceData == null) {
-            conferenceData = MediaCCCConferenceExtractor.fetchConferenceData(downloader, getId());
+        if (conference == null) {
+            conference = MediaCCCConferenceExtractor.fetchConferenceData(downloader, getId());
         }
     }
 
-    @Nonnull
-    @Override
-    public ListExtractor.InfoItemsPage<InfoItem> getInitialPage() {
-        if (conferenceData == null) throw new IllegalStateException("Conference was not fetched");
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-        conferenceData.getArray("events").streamAsJsonObjects()
+    @Nonnull @Override public ListExtractor.InfoItemsPage<InfoItem> getInitialPage() {
+        if (conference == null) throw new IllegalStateException("Conference was not fetched");
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        conference.getArray("events").streamAsJsonObjects()
                 .map(MediaCCCStreamInfoItemExtractor::new)
-                .forEach(collector::commit);
-        return new ListExtractor.InfoItemsPage<>(collector, null);
+                .forEach(items::commit);
+        return new ListExtractor.InfoItemsPage<>(items, null);
     }
 
-    @Override
-    public ListExtractor.InfoItemsPage<InfoItem> getPage(final Page page) {
+    @Override public ListExtractor.InfoItemsPage<InfoItem> getPage(final Page page) {
         return ListExtractor.InfoItemsPage.emptyPage();
     }
 }
