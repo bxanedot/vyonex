@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -72,5 +73,21 @@ class YoutubeStreamMetadataTest {
         assertEquals(13, YoutubeStreamExtractor.extractVideoDuration(
                 JsonParser.object().from("{\"lengthSeconds\":\"invalid\"}"),
                 Arrays.asList(null, streamingData)));
+    }
+
+    @Test
+    void prefersRenderedDescriptionAndUsesPlainTextFallbacks() throws Exception {
+        final var rendered = YoutubeStreamExtractor.extractDescription(
+                JsonParser.object().from("{\"shortDescription\":\"plain\"}"),
+                JsonParser.object().from("{\"description\":{\"simpleText\":\"rendered\"}}"),
+                JsonParser.object().from("{}"));
+        assertEquals("rendered", rendered.getContent());
+        assertEquals(Description.HTML, rendered.getType());
+
+        final var plain = YoutubeStreamExtractor.extractDescription(
+                JsonParser.object().from("{\"shortDescription\":\"plain\"}"),
+                JsonParser.object().from("{}"), JsonParser.object().from("{}"));
+        assertEquals("plain", plain.getContent());
+        assertEquals(Description.PLAIN_TEXT, plain.getType());
     }
 }

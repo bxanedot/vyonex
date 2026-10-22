@@ -260,29 +260,24 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Override
     public Description getDescription() throws ParsingException {
         assertPageFetched();
-        // Description with more info on links
-        final String videoSecondaryInfoRendererDescription = getTextFromObject(
-                getVideoSecondaryInfoRenderer().getObject("description"),
-                true);
-        if (!isNullOrEmpty(videoSecondaryInfoRendererDescription)) {
-            return new Description(videoSecondaryInfoRendererDescription, Description.HTML);
-        }
+        return extractDescription(playerResponse.getObject(VIDEO_DETAILS),
+                getVideoSecondaryInfoRenderer(), playerMicroFormatRenderer);
+    }
 
-        final String attributedDescription = attributedDescriptionToHtml(
-                getVideoSecondaryInfoRenderer().getObject("attributedDescription"));
-        if (!isNullOrEmpty(attributedDescription)) {
-            return new Description(attributedDescription, Description.HTML);
-        }
+    static Description extractDescription(@Nonnull final JsonObject videoDetails,
+                                          @Nonnull final JsonObject secondaryInfo,
+                                          @Nonnull final JsonObject microFormat)
+            throws ParsingException {
+        final String rendered = getTextFromObject(secondaryInfo.getObject("description"), true);
+        if (!isNullOrEmpty(rendered)) return new Description(rendered, Description.HTML);
 
-        String description = playerResponse.getObject(VIDEO_DETAILS)
-                .getString("shortDescription");
-        if (description == null) {
-            final JsonObject descriptionObject = playerMicroFormatRenderer.getObject("description");
-            description = getTextFromObject(descriptionObject);
-        }
+        final String attributed = attributedDescriptionToHtml(
+                secondaryInfo.getObject("attributedDescription"));
+        if (!isNullOrEmpty(attributed)) return new Description(attributed, Description.HTML);
 
-        // Raw non-html description
-        return new Description(description, Description.PLAIN_TEXT);
+        String plain = videoDetails.getString("shortDescription");
+        if (plain == null) plain = getTextFromObject(microFormat.getObject("description"));
+        return new Description(plain, Description.PLAIN_TEXT);
     }
 
     @Override
