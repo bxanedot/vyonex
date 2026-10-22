@@ -11,6 +11,7 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
+import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -68,5 +69,21 @@ class BandcampStreamExtractorTest {
         assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(""));
         assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(
                 "<div data-tralbum='not json'></div>"));
+    }
+
+    @Test
+    void mapsRelatedAlbumMarkup() {
+        final var album = new BandcampRelatedPlaylistInfoItemExtractor(Jsoup.parse(
+                "<div class='recommended-album'><a class='album-link' "
+                        + "href='http://artist.bandcamp.com/album/record'></a>"
+                        + "<span class='release-title'>Record</span>"
+                        + "<span class='by-artist'>by Artist</span>"
+                        + "<img class='album-art' src='https://img.example/cover.jpg'></div>")
+                .selectFirst(".recommended-album"));
+
+        assertEquals("Record", album.getName());
+        assertEquals("https://artist.bandcamp.com/album/record", album.getUrl());
+        assertEquals("Artist", album.getUploaderName());
+        assertEquals("https://img.example/cover.jpg", album.getThumbnails().get(0).getUrl());
     }
 }

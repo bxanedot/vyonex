@@ -1,61 +1,53 @@
-// Created by Fynn Godau 2021, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import org.jsoup.nodes.Element;
 import com.vyonex.internal.fallback.Image;
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.getImagesFromImageUrl;
-
-/**
- * Extracts recommended albums from tracks' website
- */
 public class BandcampRelatedPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final Element relatedAlbum;
+    private final Element album;
 
-    public BandcampRelatedPlaylistInfoItemExtractor(@Nonnull final Element relatedAlbum) {
-        this.relatedAlbum = relatedAlbum;
+    public BandcampRelatedPlaylistInfoItemExtractor(@Nonnull final Element album) {
+        this.album = album;
     }
 
     @Override
-    public String getName() throws ParsingException {
-        return relatedAlbum.getElementsByClass("release-title").text();
+    public String getName() {
+        final Element title = album.selectFirst(".release-title");
+        return title == null ? "" : title.text();
     }
 
     @Override
-    public String getUrl() throws ParsingException {
-        return relatedAlbum.getElementsByClass("album-link").attr("abs:href");
+    public String getUrl() {
+        final Element link = album.selectFirst(".album-link[href]");
+        return link == null ? "" : link.absUrl("href").replaceFirst("^http://", "https://");
     }
 
     @Nonnull
     @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        return getImagesFromImageUrl(relatedAlbum.getElementsByClass("album-art").attr("src"));
+    public List<Image> getThumbnails() {
+        final Element image = album.selectFirst(".album-art[src]");
+        return BandcampExtractorHelper.getImagesFromImageUrl(image == null ? "" : image.attr("src"));
     }
 
     @Override
-    public String getUploaderName() throws ParsingException {
-        return relatedAlbum.getElementsByClass("by-artist").text().replace("by ", "");
+    public String getUploaderName() {
+        final Element artist = album.selectFirst(".by-artist");
+        return artist == null ? "" : artist.text().replaceFirst("(?i)^by\\s+", "");
     }
 
     @Override
-    public String getUploaderUrl() throws ParsingException {
-        return null;
-    }
+    public String getUploaderUrl() { return null; }
 
     @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
+    public boolean isUploaderVerified() { return false; }
 
     @Override
-    public long getStreamCount() throws ParsingException {
-        return -1;
-    }
+    public long getStreamCount() { return -1; }
 }
