@@ -3,6 +3,9 @@
 // bxane
 package com.vyonex.internal.fallback.services.youtube;
 
+import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.localization.ContentCountry;
+import com.vyonex.internal.fallback.localization.Localization;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,5 +21,19 @@ class YoutubeServiceTest {
         assertTrue(service.getKioskList().getAvailableKiosks().contains("trending_music"));
         assertTrue(service.getSupportedCountries().stream()
                 .anyMatch(country -> "US".equals(country.getCountryCode())));
+    }
+
+    @Test
+    void fallsBackToSupportedLanguageAndCountry() {
+        final Localization previousLocalization = VyonEx.getPreferredLocalization();
+        final ContentCountry previousCountry = VyonEx.getPreferredContentCountry();
+        try {
+            VyonEx.setupLocalization(new Localization("en", "US"), new ContentCountry("AQ"));
+            final YoutubeService service = new YoutubeService(11);
+            assertEquals(new Localization("en", "GB"), service.getLocalization());
+            assertEquals(ContentCountry.DEFAULT, service.getContentCountry());
+        } finally {
+            VyonEx.setupLocalization(previousLocalization, previousCountry);
+        }
     }
 }
