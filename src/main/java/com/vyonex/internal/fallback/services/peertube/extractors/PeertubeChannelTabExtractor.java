@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.InfoItem;
@@ -15,7 +14,6 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory;
-import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
@@ -39,15 +37,16 @@ public final class PeertubeChannelTabExtractor extends ChannelTabExtractor {
 
     @Override public void onFetchPage(final Downloader downloader) { }
 
-    @Override public InfoItemsPage<InfoItem> getInitialPage()
-            throws IOException, ExtractionException {
+    @Override
+    public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
         final String url = baseUrl + PeertubeChannelLinkHandlerFactory.API_ENDPOINT + getId()
                 + getUrlSuffix(getName()) + "?" + START_KEY + "=0&"
                 + COUNT_KEY + "=" + ITEMS_PER_PAGE;
         return getPage(new Page(url));
     }
 
-    @Override public InfoItemsPage<InfoItem> getPage(final Page page)
+    @Override
+    public InfoItemsPage<InfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
@@ -56,16 +55,17 @@ public final class PeertubeChannelTabExtractor extends ChannelTabExtractor {
         if (response == null || response.responseBody().isBlank()) {
             throw new ExtractionException("PeerTube returned no channel tab data");
         }
-        final JsonObject json;
+        final JsonObject data;
         try {
-            json = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Invalid PeerTube channel tab response", e);
+            data = JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube channel tab response", error);
         }
-        PeertubeParsingHelper.validate(json);
+        PeertubeParsingHelper.validate(data);
+
         final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
-        collectItemsFrom(items, json, baseUrl);
-        return new InfoItemsPage<>(items,
-                PeertubeParsingHelper.getNextPage(page.getUrl(), json.getLong("total")));
+        collectItemsFrom(items, data, baseUrl);
+        final Page next = PeertubeParsingHelper.getNextPage(page.getUrl(), data.getLong("total"));
+        return new InfoItemsPage<>(items, next);
     }
 }

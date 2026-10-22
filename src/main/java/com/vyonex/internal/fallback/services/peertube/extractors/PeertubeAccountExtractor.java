@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
@@ -28,70 +27,67 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 
 public final class PeertubeAccountExtractor extends ChannelExtractor {
     private static final String API = "/api/v1/";
-    private JsonObject account;
     private final String baseUrl;
+    private JsonObject account;
 
-    public PeertubeAccountExtractor(final StreamingService service, final ListLinkHandler handler)
+    public PeertubeAccountExtractor(final StreamingService service, final ListLinkHandler link)
             throws ParsingException {
-        super(service, handler);
+        super(service, link);
         baseUrl = getBaseUrl();
     }
 
     @Override public List<Image> getAvatars() {
         return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, account);
     }
-
     @Override public List<Image> getBanners() {
         return getBannersFromAccountOrVideoChannelObject(baseUrl, account);
     }
-
-    @Override public String getFeedUrl() {
-        return baseUrl + "/feeds/videos.xml?accountId=" + account.get("id");
-    }
-
-    @Override public long getSubscriberCount() throws ParsingException {
-        long count = account.getLong("followersCount");
-        final String channelsUrl = baseUrl + API + getId() + "/video-channels";
-        try {
-            final Response response = getDownloader().get(channelsUrl);
-            if (response != null && !response.responseBody().isBlank()) {
-                final JsonObject result = JsonParser.object().from(response.responseBody());
-                final JsonArray channels = result.getArray("data");
-                for (final Object value : channels) {
-                    if (value instanceof JsonObject) {
-                        count += ((JsonObject) value).getLong("followersCount");
-                    }
-                }
-            }
-        } catch (final Exception ignored) {
-            // Account totals remain available when the optional channel list request fails.
-        }
-        return count;
-    }
-
+    @Override public String getFeedUrl() { return baseUrl + "/feeds/videos.xml?accountId=" + account.get("id"); }
     @Override public String getDescription() { return account.getString("description"); }
     @Override public String getParentChannelName() { return ""; }
     @Override public String getParentChannelUrl() { return ""; }
     @Override public List<Image> getParentChannelAvatars() { return List.of(); }
     @Override public boolean isVerified() { return false; }
 
-    @Override public List<ListLinkHandler> getTabs() throws ParsingException {
-        final var tabs = PeertubeChannelTabLinkHandlerFactory.getInstance();
-        return List.of(
-                tabs.fromQuery(getId(), List.of(ChannelTabs.VIDEOS), "", baseUrl),
+    @Override
+    public long getSubscriberCount() throws ParsingException {
+        long followers = account.getLong("followersCount");
+        final String channelListUrl = baseUrl + API + getId() + "/video-channels";
+        try {
+            final Response response = getDownloader().get(channelListUrl);
+            if (response != null && !response.responseBody().isBlank()) {
+                final JsonObject result = JsonParser.object().from(response.responseBody());
+                final JsonArray channels = result.getArray("data");
+                for (final Object value : channels) {
+                    if (value instanceof JsonObject) {
+                        followers += ((JsonObject) value).getLong("followersCount");
+                    }
+                }
+            }
+        } catch (final Exception ignored) {
+            // Keep the account total when its optional channel list cannot be read.
+        }
+        return followers;
+    }
+
+    @Override
+    public List<ListLinkHandler> getTabs() throws ParsingException {
+        final PeertubeChannelTabLinkHandlerFactory tabs =
+                PeertubeChannelTabLinkHandlerFactory.getInstance();
+        return List.of(tabs.fromQuery(getId(), List.of(ChannelTabs.VIDEOS), "", baseUrl),
                 tabs.fromQuery(getId(), List.of(ChannelTabs.CHANNELS), "", baseUrl));
     }
 
-    @Override public void onFetchPage(final Downloader downloader)
-            throws IOException, ExtractionException {
+    @Override
+    public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
         final Response response = downloader.get(baseUrl + API + getId());
         if (response == null || response.responseBody().isBlank()) {
             throw new ExtractionException("PeerTube account response is empty");
         }
         try {
             account = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ExtractionException("PeerTube account response is invalid", e);
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("PeerTube account response is invalid", error);
         }
         PeertubeParsingHelper.validate(account);
     }

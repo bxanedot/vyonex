@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
-// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
@@ -40,65 +39,55 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
     @Override public List<Image> getThumbnails() throws ParsingException {
         return getThumbnailsFromPlaylistOrVideoItem(getBaseUrl(), playlist);
     }
-
-    @Override public String getUploaderUrl() {
-        return playlist.getObject("ownerAccount").getString("url");
-    }
-
+    @Override public String getUploaderUrl() { return playlist.getObject("ownerAccount").getString("url"); }
     @Override public String getUploaderName() {
         return playlist.getObject("ownerAccount").getString("displayName");
     }
-
     @Override public List<Image> getUploaderAvatars() throws ParsingException {
         return getAvatarsFromOwnerAccountOrVideoChannelObject(getBaseUrl(),
                 playlist.getObject("ownerAccount"));
     }
-
     @Override public boolean isUploaderVerified() { return false; }
-
     @Override public long getStreamCount() { return playlist.getLong("videosLength", -1); }
-
     @Override public Description getDescription() {
-        final String description = playlist.getString("description");
-        return description == null || description.isEmpty()
-                ? Description.EMPTY_DESCRIPTION
-                : new Description(description, Description.PLAIN_TEXT);
+        final String text = playlist.getString("description");
+        return text == null || text.isEmpty()
+                ? Description.EMPTY_DESCRIPTION : new Description(text, Description.PLAIN_TEXT);
     }
-
     @Override public String getSubChannelName() {
         return playlist.getObject("videoChannel").getString("displayName");
     }
-
     @Override public String getSubChannelUrl() {
         return playlist.getObject("videoChannel").getString("url");
     }
-
     @Override public List<Image> getSubChannelAvatars() throws ParsingException {
         return getAvatarsFromOwnerAccountOrVideoChannelObject(getBaseUrl(),
                 playlist.getObject("videoChannel"));
     }
 
-    @Override public InfoItemsPage<StreamInfoItem> getInitialPage()
-            throws IOException, ExtractionException {
-        return getPage(new Page(getUrl() + "/videos?" + START_KEY + "=0&"
-                + COUNT_KEY + "=" + ITEMS_PER_PAGE));
+    @Override
+    public InfoItemsPage<StreamInfoItem> getInitialPage() throws IOException, ExtractionException {
+        final String firstUrl = getUrl() + "/videos?" + START_KEY + "=0&"
+                + COUNT_KEY + "=" + ITEMS_PER_PAGE;
+        return getPage(new Page(firstUrl));
     }
 
-    @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page)
+    @Override
+    public InfoItemsPage<StreamInfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
         }
-        final JsonObject response = readObject(getDownloader().get(page.getUrl()), "playlist videos");
-        PeertubeParsingHelper.validate(response);
+        final JsonObject data = readObject(getDownloader().get(page.getUrl()), "playlist videos");
+        PeertubeParsingHelper.validate(data);
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        collectItemsFrom(items, response, getBaseUrl());
-        return new InfoItemsPage<>(items,
-                PeertubeParsingHelper.getNextPage(page.getUrl(), response.getLong("total")));
+        collectItemsFrom(items, data, getBaseUrl());
+        final Page next = PeertubeParsingHelper.getNextPage(page.getUrl(), data.getLong("total"));
+        return new InfoItemsPage<>(items, next);
     }
 
-    @Override public void onFetchPage(final Downloader downloader)
-            throws IOException, ExtractionException {
+    @Override
+    public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
         playlist = readObject(downloader.get(getUrl()), "playlist");
         PeertubeParsingHelper.validate(playlist);
     }
@@ -114,8 +103,8 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
         }
         try {
             return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ExtractionException("PeerTube returned invalid " + kind + " JSON", e);
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("PeerTube returned invalid " + kind + " JSON", error);
         }
     }
 }
