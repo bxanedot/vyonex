@@ -13,6 +13,7 @@ import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 import com.vyonex.internal.json.JsonWriter;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
@@ -102,6 +103,17 @@ public final class BandcampExtractorHelper {
             return new DateWrapper(ZonedDateTime.parse(textDate, DATE_FORMAT).toInstant());
         } catch (final DateTimeException | NullPointerException e) {
             throw new ParsingException("Could not parse Bandcamp date: " + textDate, e);
+        }
+    }
+
+    public static JsonObject getJsonAttribute(final String html, final String attribute)
+            throws ParsingException {
+        final Element element = Jsoup.parse(html).selectFirst("[" + attribute + "]");
+        if (element == null) throw new ParsingException("Page is missing " + attribute + " data");
+        try {
+            return JsonParser.object().from(element.attr(attribute));
+        } catch (final JsonParserException e) {
+            throw new ParsingException("Page contains invalid " + attribute + " data", e);
         }
     }
 
