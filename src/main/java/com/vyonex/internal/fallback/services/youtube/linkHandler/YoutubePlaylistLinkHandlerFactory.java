@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.linkHandler;
 
@@ -6,97 +8,56 @@ import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
-import com.vyonex.internal.fallback.utils.Utils;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.List;
 
 public final class YoutubePlaylistLinkHandlerFactory extends ListLinkHandlerFactory {
-
     private static final YoutubePlaylistLinkHandlerFactory INSTANCE =
             new YoutubePlaylistLinkHandlerFactory();
+    private static final String ID_PATTERN = "[A-Za-z0-9_-]{10,}";
 
-    private YoutubePlaylistLinkHandlerFactory() {
-    }
+    private YoutubePlaylistLinkHandlerFactory() { }
 
-    public static YoutubePlaylistLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
+    public static YoutubePlaylistLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    @Override
-    public String getUrl(final String id, final List<String> contentFilters,
-                         final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
+    @Override public String getUrl(final String id, final List<String> filters, final String sort) {
         return "https://www.youtube.com/playlist?list=" + id;
     }
 
-    @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        try {
-            final URL urlObj = Utils.stringToURL(url);
-
-            if (!Utils.isHTTP(urlObj) || !(YoutubeParsingHelper.isYoutubeURL(urlObj)
-                    || YoutubeParsingHelper.isInvidiousURL(urlObj))) {
-                throw new ParsingException("the url given is not a YouTube-URL");
-            }
-
-            final String path = urlObj.getPath();
-            if (!path.equals("/watch") && !path.equals("/playlist")) {
-                throw new ParsingException("the url given is neither a video nor a playlist URL");
-            }
-
-            final String listID = Utils.getQueryValue(urlObj, "list");
-
-            if (listID == null) {
-                throw new ParsingException("the URL given does not include a playlist");
-            }
-
-            if (!listID.matches("[a-zA-Z0-9_-]{10,}")) {
-                throw new ParsingException(
-                        "the list-ID given in the URL does not match the list pattern");
-            }
-
-            return listID;
-        } catch (final Exception exception) {
-            throw new ParsingException("Error could not parse URL: " + exception.getMessage(),
-                    exception);
+    @Override public String getId(final String value) throws ParsingException {
+        final var url = YoutubeRouteSupport.parse(value);
+        if (!YoutubeRouteSupport.isYoutubeOrMirror(url)
+                || !("/watch".equals(url.getPath()) || "/playlist".equals(url.getPath()))) {
+            throw new ParsingException("URL is not a YouTube playlist or video URL");
         }
+        final String id = YoutubeRouteSupport.queryValue(url, "list");
+        if (id == null || !id.matches(ID_PATTERN)) {
+            throw new ParsingException("URL has no valid playlist ID");
+        }
+        return id;
     }
 
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public boolean onAcceptUrl(final String url) {
         try {
             getId(url);
+            return true;
         } catch (final ParsingException e) {
             return false;
         }
-        return true;
     }
 
-    /**
-     * If it is a mix (auto-generated playlist) URL, return a {@link LinkHandler} where the URL is
-     * like {@code https://youtube.com/watch?v=videoId&list=playlistId}
-     * <p>Otherwise use super</p>
-     */
-    @Override
-    public ListLinkHandler fromUrl(final String url) throws ParsingException {
-        try {
-            final URL urlObj = Utils.stringToURL(url);
-            final String listID = Utils.getQueryValue(urlObj, "list");
-            if (listID != null && YoutubeParsingHelper.isYoutubeMixId(listID)) {
-                String videoID = Utils.getQueryValue(urlObj, "v");
-                if (videoID == null) {
-                    videoID = YoutubeParsingHelper.extractVideoIdFromMixId(listID);
-                }
-                final String newUrl = "https://www.youtube.com/watch?v=" + videoID
-                    + "&list=" + listID;
-                return new ListLinkHandler(new LinkHandler(url, newUrl, listID));
+    @Override public ListLinkHandler fromUrl(final String value) throws ParsingException {
+        final var url = YoutubeRouteSupport.parse(value);
+        final String playlistId = YoutubeRouteSupport.queryValue(url, "list");
+        if (url != null && playlistId != null && YoutubeParsingHelper.isYoutubeMixId(playlistId)) {
+            String videoId = YoutubeRouteSupport.queryValue(url, "v");
+            if (videoId == null) videoId = YoutubeParsingHelper.extractVideoIdFromMixId(playlistId);
+            if (videoId != null && !videoId.isBlank()) {
+                final String canonical = "https://www.youtube.com/watch?v=" + videoId
+                        + "&list=" + playlistId;
+                return new ListLinkHandler(new LinkHandler(value, canonical, playlistId));
             }
-        } catch (final MalformedURLException exception) {
-            throw new ParsingException("Error could not parse URL: " + exception.getMessage(),
-                exception);
         }
-        return super.fromUrl(url);
+        return super.fromUrl(value);
     }
 }

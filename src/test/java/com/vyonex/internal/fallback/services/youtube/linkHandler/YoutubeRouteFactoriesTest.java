@@ -43,4 +43,40 @@ class YoutubeRouteFactoriesTest {
         assertEquals("abcdefghijk", YoutubeCommentsLinkHandlerFactory.getInstance()
                 .getId("https://www.youtube.com/watch?v=abcdefghijk"));
     }
+
+    @Test
+    void resolvesChannelAndPlaylistIdsAndBuildsSearchRoutes() throws Exception {
+        final YoutubeChannelLinkHandlerFactory channels = YoutubeChannelLinkHandlerFactory.getInstance();
+        assertEquals("@artist", channels.getId("https://www.youtube.com/@artist/videos"));
+        assertEquals("channel/UCexample", channels.getId(
+                "https://www.youtube.com/channel/UCexample/streams"));
+        assertFalse(channels.onAcceptUrl("https://www.youtube.com/watch?v=abcdefghijk"));
+
+        final YoutubePlaylistLinkHandlerFactory playlists = YoutubePlaylistLinkHandlerFactory.getInstance();
+        assertEquals("PLabcdefghijk", playlists.getId(
+                "https://www.youtube.com/watch?v=abcdefghijk&list=PLabcdefghijk"));
+        final var mix = playlists.fromUrl(
+                "https://www.youtube.com/watch?v=abcdefghijk&list=RDMMabcdefghijk");
+        assertEquals("https://www.youtube.com/watch?v=abcdefghijk&list=RDMMabcdefghijk",
+                mix.getUrl());
+
+        final YoutubeSearchQueryHandlerFactory search = YoutubeSearchQueryHandlerFactory.getInstance();
+        assertEquals("https://www.youtube.com/results?search_query=ambient+pop"
+                        + "&sp=EgIQAfABAQ%253D%253D",
+                search.getUrl("ambient pop", List.of(YoutubeSearchQueryHandlerFactory.VIDEOS), ""));
+        assertEquals("https://music.youtube.com/search?q=ambient+pop",
+                search.getUrl("ambient pop", List.of(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), ""));
+    }
+
+    @Test
+    void extractsVideoIdsFromSupportedUrlForms() throws Exception {
+        final YoutubeStreamLinkHandlerFactory streams = YoutubeStreamLinkHandlerFactory.getInstance();
+        assertEquals("abcdefghijk", streams.getId("https://www.youtube.com/shorts/abcdefghijk"));
+        assertEquals("abcdefghijk", streams.getId("https://www.youtube.com/embed/abcdefghijk"));
+        assertEquals("abcdefghijk", streams.getId("https://youtu.be/abcdefghijk"));
+        assertEquals("abcdefghijk", streams.getId("vnd.youtube://abcdefghijk"));
+        assertEquals("abcdefghijk", streams.getId(
+                "https://www.youtube.com/attribution_link?u=%2Fwatch%3Fv%3Dabcdefghijk"));
+        assertFalse(streams.onAcceptUrl("https://www.youtube.com/watch?v=abcdefghijk&list=PLabcdefghijk"));
+    }
 }

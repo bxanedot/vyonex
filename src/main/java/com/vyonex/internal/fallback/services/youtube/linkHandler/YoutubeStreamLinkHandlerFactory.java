@@ -1,263 +1,130 @@
-/*
- * Created by Christian Schabesberger on 02.02.16.
- *
- * Copyright (C) 2018 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * YoutubeStreamLinkHandlerFactory.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx.  If not, see <https://www.gnu.org/licenses/>.
- */
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.linkHandler;
-
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isHooktubeURL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isInvidiousURL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isY2ubeURL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isYoutubeServiceURL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.isYoutubeURL;
 
 import com.vyonex.internal.fallback.exceptions.FoundAdException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 
-import java.net.MalformedURLException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 public final class YoutubeStreamLinkHandlerFactory extends LinkHandlerFactory {
+    private static final YoutubeStreamLinkHandlerFactory INSTANCE =
+            new YoutubeStreamLinkHandlerFactory();
+    private static final Pattern VIDEO_ID = Pattern.compile("^([A-Za-z0-9_-]{11})");
+    private static final List<String> ID_PATHS = List.of(
+            "/embed/", "/live/", "/shorts/", "/watch/", "/v/", "/w/");
 
-    private static final Pattern YOUTUBE_VIDEO_ID_REGEX_PATTERN
-            = Pattern.compile("^([a-zA-Z0-9_-]{11})");
-    private static final YoutubeStreamLinkHandlerFactory INSTANCE
-            = new YoutubeStreamLinkHandlerFactory();
-    private static final List<String> SUBPATHS
-            = List.of("embed/", "live/", "shorts/", "watch/", "v/", "w/");
+    private YoutubeStreamLinkHandlerFactory() { }
 
-    private YoutubeStreamLinkHandlerFactory() {
-    }
+    public static YoutubeStreamLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    public static YoutubeStreamLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
-
-    @Nullable
-    private static String extractId(@Nullable final String id) {
-        if (id != null) {
-            final Matcher m = YOUTUBE_VIDEO_ID_REGEX_PATTERN.matcher(id);
-            return m.find() ? m.group(1) : null;
-        }
-        return null;
-    }
-
-    @Nonnull
-    private static String assertIsId(@Nullable final String id) throws ParsingException {
-        final String extractedId = extractId(id);
-        if (extractedId != null) {
-            return extractedId;
-        } else {
-            throw new ParsingException("The given string is not a YouTube video ID");
-        }
-    }
-
-    @Nonnull
-    @Override
-    public String getUrl(final String id) throws ParsingException, UnsupportedOperationException {
+    @Override public String getUrl(final String id) {
         return "https://www.youtube.com/watch?v=" + id;
     }
 
-    @SuppressWarnings("AvoidNestedBlocks")
-    @Nonnull
-    @Override
-    public String getId(final String theUrlString)
-            throws ParsingException, UnsupportedOperationException {
-        String urlString = theUrlString;
+    @Override public String getId(final String value) throws ParsingException {
+        if (value == null || value.isBlank()) throw new ParsingException("Video URL is empty");
         try {
-            final URI uri = new URI(urlString);
+            final URI uri = new URI(value);
             final String scheme = uri.getScheme();
-
-            if (scheme != null
-                    && (scheme.equals("vnd.youtube") || scheme.equals("vnd.youtube.launch"))) {
-                final String schemeSpecificPart = uri.getSchemeSpecificPart();
-                if (schemeSpecificPart.startsWith("//")) {
-                    final String extractedId = extractId(schemeSpecificPart.substring(2));
-                    if (extractedId != null) {
-                        return extractedId;
-                    }
-
-                    urlString = "https:" + schemeSpecificPart;
-                } else {
-                    return assertIsId(schemeSpecificPart);
+            if ("vnd.youtube".equalsIgnoreCase(scheme)
+                    || "vnd.youtube.launch".equalsIgnoreCase(scheme)) {
+                final String target = uri.getRawSchemeSpecificPart();
+                if (target.startsWith("//")) {
+                    final String candidate = target.substring(2);
+                    final String direct = extractId(candidate);
+                    if (direct != null) return direct;
+                    final URL embedded = YoutubeRouteSupport.parse("https:" + target);
+                    return parseWebUrl(embedded, value);
                 }
+                return requireId(target);
             }
-        } catch (final URISyntaxException ignored) {
+        } catch (final java.net.URISyntaxException e) {
+            throw new ParsingException("Video URL is invalid", e);
         }
-
-        final URL url;
-        try {
-            url = Utils.stringToURL(urlString);
-        } catch (final MalformedURLException e) {
-            throw new ParsingException("The given URL is not valid", e);
-        }
-
-        final String host = url.getHost();
-        String path = url.getPath();
-        // remove leading "/" of URL-path if URL-path is given
-        if (!path.isEmpty()) {
-            path = path.substring(1);
-        }
-
-        if (!Utils.isHTTP(url) || !(isYoutubeURL(url) || isYoutubeServiceURL(url)
-                || isHooktubeURL(url) || isInvidiousURL(url) || isY2ubeURL(url))) {
-            if (host.equalsIgnoreCase("googleads.g.doubleclick.net")) {
-                throw new FoundAdException("Error: found ad: " + urlString);
-            }
-
-            throw new ParsingException("The URL is not a YouTube URL");
-        }
-
-        if (YoutubePlaylistLinkHandlerFactory.getInstance().acceptUrl(urlString)) {
-            throw new ParsingException("Error: no suitable URL: " + urlString);
-        }
-
-        // Using uppercase instead of lowercase, because toLowercase replaces some unicode
-        // characters with their lowercase ASCII equivalent. Using toLowercase could result in
-        // faultily matching unicode urls.
-        switch (host.toUpperCase()) {
-            case "WWW.YOUTUBE-NOCOOKIE.COM": {
-                if (path.startsWith("embed/")) {
-                    return assertIsId(path.substring(6));
-                }
-                break;
-            }
-
-            case "YOUTUBE.COM":
-            case "WWW.YOUTUBE.COM":
-            case "M.YOUTUBE.COM":
-            case "MUSIC.YOUTUBE.COM": {
-                if (path.equals("attribution_link")) {
-                    final String uQueryValue = Utils.getQueryValue(url, "u");
-
-                    final URL decodedURL;
-                    try {
-                        decodedURL = Utils.stringToURL("https://www.youtube.com" + uQueryValue);
-                    } catch (final MalformedURLException e) {
-                        throw new ParsingException("Error: no suitable URL: " + urlString);
-                    }
-
-                    final String viewQueryValue = Utils.getQueryValue(decodedURL, "v");
-                    return assertIsId(viewQueryValue);
-                }
-
-                final String maybeId = getIdFromSubpathsInPath(path);
-                if (maybeId != null) {
-                    return maybeId;
-                }
-
-                final String viewQueryValue = Utils.getQueryValue(url, "v");
-                return assertIsId(viewQueryValue);
-            }
-
-            case "Y2U.BE":
-            case "YOUTU.BE": {
-                final String viewQueryValue = Utils.getQueryValue(url, "v");
-                if (viewQueryValue != null) {
-                    return assertIsId(viewQueryValue);
-                }
-
-                return assertIsId(path);
-            }
-
-            case "HOOKTUBE.COM":
-            case "INVIDIO.US":
-            case "DEV.INVIDIO.US":
-            case "WWW.INVIDIO.US":
-            case "REDIRECT.INVIDIOUS.IO":
-            case "INVIDIOUS.SNOPYTA.ORG":
-            case "YEWTU.BE":
-            case "TUBE.CONNECT.CAFE":
-            case "TUBUS.EDUVID.ORG":
-            case "INVIDIOUS.KAVIN.ROCKS":
-            case "INVIDIOUS-US.KAVIN.ROCKS":
-            case "PIPED.KAVIN.ROCKS":
-            case "INVIDIOUS.SITE":
-            case "VID.MINT.LGBT":
-            case "INVIDIOU.SITE":
-            case "INVIDIOUS.FDN.FR":
-            case "INVIDIOUS.048596.XYZ":
-            case "INVIDIOUS.ZEE.LI":
-            case "VID.PUFFYAN.US":
-            case "YTPRIVATE.COM":
-            case "INVIDIOUS.NAMAZSO.EU":
-            case "INVIDIOUS.SILKKY.CLOUD":
-            case "INVIDIOUS.EXONIP.DE":
-            case "INV.RIVERSIDE.ROCKS":
-            case "INVIDIOUS.BLAMEFRAN.NET":
-            case "INVIDIOUS.MOOMOO.ME":
-            case "YTB.TROM.TF":
-            case "YT.CYBERHOST.UK":
-            case "Y.COM.CM": { // code-block for hooktube.com and Invidious instances
-                if (path.equals("watch")) {
-                    final String viewQueryValue = Utils.getQueryValue(url, "v");
-                    if (viewQueryValue != null) {
-                        return assertIsId(viewQueryValue);
-                    }
-                }
-                final String maybeId = getIdFromSubpathsInPath(path);
-                if (maybeId != null) {
-                    return maybeId;
-                }
-
-                final String viewQueryValue = Utils.getQueryValue(url, "v");
-                if (viewQueryValue != null) {
-                    return assertIsId(viewQueryValue);
-                }
-
-                return assertIsId(path);
-            }
-        }
-
-        throw new ParsingException("Error: no suitable URL: " + urlString);
+        return parseWebUrl(YoutubeRouteSupport.parse(value), value);
     }
 
-    @Override
-    public boolean onAcceptUrl(final String url) throws FoundAdException {
+    private static String parseWebUrl(final URL url, final String original)
+            throws ParsingException {
+        if (url == null) throw new ParsingException("Video URL is invalid");
+        final String host = url.getHost();
+        if ("googleads.g.doubleclick.net".equalsIgnoreCase(host)) {
+            throw new FoundAdException("The URL points to an advertisement");
+        }
+        if (!YoutubeRouteSupport.isYoutubeOrMirror(url)) {
+            throw new ParsingException("URL is not a supported video page: " + original);
+        }
+        if (YoutubePlaylistLinkHandlerFactory.getInstance().acceptUrl(original)) {
+            throw new ParsingException("URL identifies a playlist rather than a video");
+        }
+
+        final String path = url.getPath();
+        if ("attribution_link".equals(stripSlash(path))) {
+            final String destination = YoutubeRouteSupport.queryValue(url, "u");
+            if (destination != null) {
+                final URL nested = YoutubeRouteSupport.parse("https://www.youtube.com" + destination);
+                final String nestedId = YoutubeRouteSupport.queryValue(nested, "v");
+                if (nestedId != null) return requireId(nestedId);
+            }
+            throw new ParsingException("Attribution URL has no video ID");
+        }
+
+        final boolean youtubeDomain = YoutubeParsingHelper.isYoutubeURL(url);
+        final boolean shortLink = "youtu.be".equalsIgnoreCase(host)
+                || "y2u.be".equalsIgnoreCase(host);
+        final boolean embedOnly = host.toLowerCase(java.util.Locale.ROOT).endsWith("youtube-nocookie.com");
+        if (embedOnly) return requirePathId(path, "/embed/");
+        if (shortLink) {
+            final String queryId = YoutubeRouteSupport.queryValue(url, "v");
+            return requireId(queryId == null ? stripSlash(path) : queryId);
+        }
+        for (final String prefix : ID_PATHS) {
+            if (path.startsWith(prefix)) return requireId(path.substring(prefix.length()));
+        }
+        final String queryId = YoutubeRouteSupport.queryValue(url, "v");
+        if (queryId != null) return requireId(queryId);
+        if (!youtubeDomain) return requireId(stripSlash(path));
+        throw new ParsingException("Video URL has no video ID");
+    }
+
+    private static String requirePathId(final String path, final String prefix)
+            throws ParsingException {
+        if (!path.startsWith(prefix)) throw new ParsingException("Embed URL has no video ID");
+        return requireId(path.substring(prefix.length()));
+    }
+
+    private static String stripSlash(final String path) {
+        return path.startsWith("/") ? path.substring(1) : path;
+    }
+
+    private static String extractId(final String value) {
+        if (value == null) return null;
+        final Matcher matcher = VIDEO_ID.matcher(value);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private static String requireId(final String value) throws ParsingException {
+        final String id = extractId(value);
+        if (id == null) throw new ParsingException("String does not begin with an 11-character video ID");
+        return id;
+    }
+
+    @Override public boolean onAcceptUrl(final String url) throws FoundAdException {
         try {
             getId(url);
             return true;
-        } catch (final FoundAdException fe) {
-            throw fe;
+        } catch (final FoundAdException e) {
+            throw e;
         } catch (final ParsingException e) {
             return false;
         }
-    }
-
-    @Nullable
-    private String getIdFromSubpathsInPath(@Nonnull final String path) throws ParsingException {
-        for (final String subpath : SUBPATHS) {
-            if (path.startsWith(subpath)) {
-                final String id = path.substring(subpath.length());
-                return assertIsId(id);
-            }
-        }
-        return null;
     }
 }

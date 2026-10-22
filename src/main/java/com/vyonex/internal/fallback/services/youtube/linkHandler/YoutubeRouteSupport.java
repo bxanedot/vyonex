@@ -9,12 +9,15 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 final class YoutubeRouteSupport {
     private YoutubeRouteSupport() { }
 
     static URL parse(final String value) {
+        if (value == null || value.isBlank()) return null;
         try {
             final URI uri = new URI(value);
             final String scheme = uri.getScheme();
@@ -28,7 +31,10 @@ final class YoutubeRouteSupport {
 
     static boolean isYoutubeOrMirror(final URL url) {
         return url != null && (YoutubeParsingHelper.isYoutubeURL(url)
-                || YoutubeParsingHelper.isInvidiousURL(url));
+                || YoutubeParsingHelper.isYoutubeServiceURL(url)
+                || YoutubeParsingHelper.isHooktubeURL(url)
+                || YoutubeParsingHelper.isInvidiousURL(url)
+                || YoutubeParsingHelper.isY2ubeURL(url));
     }
 
     static boolean hasPath(final URL url, final String path) {
@@ -41,5 +47,18 @@ final class YoutubeRouteSupport {
 
     static boolean isChartsHost(final URL url) {
         return url != null && "charts.youtube.com".equals(url.getHost().toLowerCase(Locale.ROOT));
+    }
+
+    static String queryValue(final URL url, final String name) {
+        if (url == null || url.getQuery() == null) return null;
+        for (final String part : url.getQuery().split("&")) {
+            final int separator = part.indexOf('=');
+            final String key = separator < 0 ? part : part.substring(0, separator);
+            if (URLDecoder.decode(key, StandardCharsets.UTF_8).equals(name)) {
+                return URLDecoder.decode(separator < 0 ? "" : part.substring(separator + 1),
+                        StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 }
