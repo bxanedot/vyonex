@@ -34,3 +34,7 @@ VyonEx source is licensed under Apache-2.0; see [LICENSE](LICENSE). Its upstream
 | kotlinx.serialization JSON | 1.11.0 | [Kotlin/kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Apache-2.0 |
 
 The consuming Vyon applications retain dependency notices and the license texts required for their redistributed dependencies.
+
+## Contributors
+
+1. **bxane** — project owner and maintainer.
