@@ -108,6 +108,13 @@ class YoutubeParsingHelperTest {
         final var collaborator = YoutubeParsingHelper.getFirstCollaborator(navigation);
         assertEquals("Channel", collaborator.getObject("title").getString("simpleText"));
         assertNull(YoutubeParsingHelper.getFirstCollaborator(JsonParser.object().from("{}")));
+
+        final var laterCollaborator = JsonParser.object().from("{\"showDialogCommand\":{"
+                + "\"panelLoadingStrategy\":{\"inlineContent\":{\"dialogViewModel\":{"
+                + "\"customContent\":{\"listViewModel\":{\"listItems\":[{},"
+                + "{\"listItemViewModel\":{\"title\":{\"simpleText\":\"Owner\"}}}]}}}}}}}");
+        assertEquals("Owner", YoutubeParsingHelper.getFirstCollaborator(laterCollaborator)
+                .getObject("title").getString("simpleText"));
     }
 
     @Test

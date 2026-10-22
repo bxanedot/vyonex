@@ -1549,8 +1549,10 @@ public final class YoutubeParsingHelper {
                 .getObject("panelLoadingStrategy").getObject("inlineContent")
                 .getObject("dialogViewModel").getObject("customContent")
                 .getObject("listViewModel").getArray("listItems");
-        if (items.isEmpty()) return null;
-        final JsonObject collaborator = items.getObject(0).getObject("listItemViewModel");
-        return collaborator.isEmpty() ? null : collaborator;
+        for (int index = 0; index < items.size(); index++) {
+            final JsonObject collaborator = items.getObject(index).getObject("listItemViewModel");
+            if (!collaborator.isEmpty()) return collaborator;
+        }
+        return null;
     }
 }
