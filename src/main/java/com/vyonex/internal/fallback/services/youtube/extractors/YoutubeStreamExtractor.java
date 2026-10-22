@@ -778,13 +778,15 @@ public class YoutubeStreamExtractor extends StreamExtractor {
      */
     @Override
     public String getErrorMessage() {
-        try {
-            return getTextFromObject(playerResponse.getObject(PLAYABILITY_STATUS)
-                    .getObject("errorScreen").getObject("playerErrorMessageRenderer")
-                    .getObject("reason"));
-        } catch (final NullPointerException e) {
-            return null; // No error message
-        }
+        return parsePlayerErrorMessage(playerResponse);
+    }
+
+    @Nullable
+    static String parsePlayerErrorMessage(@Nullable final JsonObject playerResponse) {
+        if (playerResponse == null) return null;
+        return getTextFromObject(playerResponse.getObject(PLAYABILITY_STATUS)
+                .getObject("errorScreen").getObject("playerErrorMessageRenderer")
+                .getObject("reason"));
     }
 
     /*//////////////////////////////////////////////////////////////////////////
