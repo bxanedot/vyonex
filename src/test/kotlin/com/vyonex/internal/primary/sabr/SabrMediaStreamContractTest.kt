@@ -193,6 +193,59 @@ class SabrMediaStreamContractTest {
     }
 
     @Test
+    fun carriesPoliciesAndContextsAcrossAValidatedServerRedirect() = runBlocking {
+        val requests = mutableListOf<String>()
+        val diagnostics = mutableListOf<SabrResponseDiagnostics>()
+        val firstResponse =
+            listOf(
+                umpPart(
+                    UmpPartType.NEXT_REQUEST_POLICY,
+                    ProtoWriter().apply {
+                        int64(1, 5_000)
+                        int64(3, 10_000)
+                        int64(4, 250)
+                        int64(5, 1_000)
+                        bytes(7, byteArrayOf(7, 8))
+                    }.toByteArray(),
+                ),
+                umpPart(
+                    UmpPartType.SABR_CONTEXT_UPDATE,
+                    ProtoWriter().apply { int32(1, 9); bytes(3, byteArrayOf(4, 5)); bool(4, true); int32(5, 0) }.toByteArray(),
+                ),
+                umpPart(
+                    UmpPartType.SABR_CONTEXT_SENDING_POLICY,
+                    ProtoWriter().apply { int32(1, 9) }.toByteArray(),
+                ),
+                umpPart(
+                    UmpPartType.SABR_REDIRECT,
+                    ProtoWriter().apply { string(1, REDIRECT_ENDPOINT) }.toByteArray(),
+                ),
+            ).fold(ByteArray(0)) { output, part -> output + part }
+        val client =
+            HttpClient(
+                MockEngine { request ->
+                    requests += request.url.toString()
+                    val body = if (requests.size == 1) firstResponse else completeResponse()
+                    respond(ByteReadChannel(body), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, UMP_CONTENT_TYPE))
+                },
+            )
+        try {
+            val chunks = SabrAudioStream(client, bootstrap(), onResponse = diagnostics::add).chunks().toList()
+
+            assertEquals(2, chunks.size)
+            assertEquals("$ENDPOINT&rn=0", requests[0])
+            assertEquals("$REDIRECT_ENDPOINT&rn=1", requests[1])
+            assertEquals(2, diagnostics.size)
+            assertEquals(setOf(9), diagnostics.last().contextTypes)
+            assertEquals(setOf(9), diagnostics.last().activeContextTypes)
+            assertEquals(2, diagnostics.last().playbackCookieSize)
+            assertEquals(5_000, diagnostics.last().targetAudioReadaheadMs)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
     fun reportsAttestationRequirementFromServerProtectionStatus() {
         val diagnostics = mutableListOf<SabrResponseDiagnostics>()
         val body = umpPart(UmpPartType.STREAM_PROTECTION_STATUS, ProtoWriter().apply { int32(1, 3) }.toByteArray())
@@ -312,6 +365,7 @@ class SabrMediaStreamContractTest {
     private companion object {
         const val VIDEO_ID = "abcdefghijk"
         const val ENDPOINT = "https://r.googlevideo.com/videoplayback?itag=140"
+        const val REDIRECT_ENDPOINT = "https://rr2---sn.googlevideo.com/videoplayback?itag=140"
         const val UMP_CONTENT_TYPE = "application/vnd.yt-ump"
         val AUDIO_FORMAT = SabrFormatId(140, 123)
         val INIT_BYTES = byteArrayOf(10, 11)
