@@ -26,7 +26,6 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 
 public final class PeertubeCommentsExtractor extends CommentsExtractor {
     private static final String CHILDREN = "children";
-    private Boolean reply;
 
     public PeertubeCommentsExtractor(final StreamingService service, final ListLinkHandler handler) {
         super(service, handler);
@@ -51,7 +50,8 @@ public final class PeertubeCommentsExtractor extends CommentsExtractor {
         PeertubeParsingHelper.validate(data);
 
         final CommentsInfoItemsCollector items = new CommentsInfoItemsCollector(getServiceId());
-        final boolean isReplyPage = embedded || data.has(CHILDREN) || isReply();
+        final boolean isReplyPage = embedded || page.getId() != null
+                || data.has(CHILDREN) || isReply();
         final Page next;
         if (isReplyPage) {
             final JsonArray children = data.getArray(CHILDREN);
@@ -93,7 +93,6 @@ public final class PeertubeCommentsExtractor extends CommentsExtractor {
 
     private void collectReplies(final CommentsInfoItemsCollector items,
                                 final JsonArray replies) throws ParsingException {
-        reply = true;
         for (final Object value : replies) {
             if (!(value instanceof JsonObject)) continue;
             final JsonObject node = (JsonObject) value;
@@ -106,8 +105,7 @@ public final class PeertubeCommentsExtractor extends CommentsExtractor {
     }
 
     private boolean isReply() throws ParsingException {
-        if (reply == null) reply = getOriginalUrl().contains("/comment-threads/");
-        return reply;
+        return getOriginalUrl().contains("/comment-threads/");
     }
 
     @Override public void onFetchPage(final Downloader downloader) { }
