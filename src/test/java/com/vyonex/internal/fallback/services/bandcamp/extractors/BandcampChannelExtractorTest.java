@@ -64,7 +64,11 @@ class BandcampChannelExtractorTest {
                             tabs.get(1).getContentFilters().get(0)));
             final var trackTab = service.getChannelTabExtractor(tabs.get(0));
             trackTab.onFetchPage(offline);
-            assertEquals("Song", trackTab.getInitialPage().getItems().get(0).getName());
+            final var track = trackTab.getInitialPage().getItems().get(0);
+            assertEquals("Song", track.getName());
+            assertEquals("https://artist.bandcamp.com/track/song", track.getUrl());
+            assertEquals("https://f4.bcbits.com/img/a30_10.jpg",
+                    track.getThumbnails().get(0).getUrl());
             final var albumTab = service.getChannelTabExtractor(tabs.get(1));
             albumTab.onFetchPage(offline);
             assertEquals("Record", albumTab.getInitialPage().getItems().get(0).getName());
