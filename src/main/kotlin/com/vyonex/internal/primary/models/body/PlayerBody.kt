@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.primary.models.body
 
@@ -17,9 +19,7 @@ internal data class PlayerBody(
     val videoCheckOk: Boolean? = null,
 ) {
     @Serializable
-    data class PlaybackContext(
-        val contentPlaybackContext: ContentPlaybackContext,
-    ) {
+    data class PlaybackContext(val contentPlaybackContext: ContentPlaybackContext) {
         @Serializable
         data class ContentPlaybackContext(
             val html5Preference: String? = null,
@@ -29,12 +29,8 @@ internal data class PlayerBody(
     }
 
     @Serializable
-    data class ServiceIntegrityDimensions(
-        val poToken: String,
-    )
+    data class ServiceIntegrityDimensions(val poToken: String)
 
     @Serializable
-    data class ThirdParty(
-        val embedUrl: String,
-    )
+    data class ThirdParty(val embedUrl: String)
 }
