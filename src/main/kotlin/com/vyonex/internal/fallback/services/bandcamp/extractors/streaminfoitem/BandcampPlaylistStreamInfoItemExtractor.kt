@@ -30,7 +30,8 @@ public class BandcampPlaylistStreamInfoItemExtractor(
         if (titleLink.isNullOrBlank()) return null
         return try {
             val baseUrl = getUploaderUrl() ?: throw URISyntaxException("", "Missing artist URL")
-            URI(baseUrl).resolve(titleLink).toString().replaceFirst("^http://", "https://")
+            URI(baseUrl).resolve(titleLink).toString()
+                .replaceFirst(Regex("^http://"), "https://")
         } catch (error: URISyntaxException) {
             throw ParsingException("Bandcamp track has an invalid URL", error)
         }
