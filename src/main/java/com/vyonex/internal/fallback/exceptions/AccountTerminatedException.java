@@ -1,12 +1,13 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.exceptions;
 
 public class AccountTerminatedException extends ContentNotAvailableException {
-
-    private Reason reason = Reason.UNKNOWN;
+    private final Reason reason;
 
     public AccountTerminatedException(final String message) {
-        super(message);
+        this(message, Reason.UNKNOWN);
     }
 
     public AccountTerminatedException(final String message, final Reason reason) {
@@ -16,14 +17,10 @@ public class AccountTerminatedException extends ContentNotAvailableException {
 
     public AccountTerminatedException(final String message, final Throwable cause) {
         super(message, cause);
+        this.reason = Reason.UNKNOWN;
     }
 
-    /**
-     * The reason for the violation. There should also be more info in the exception's message.
-     */
-    public Reason getReason() {
-        return reason;
-    }
+    public Reason getReason() { return reason; }
 
     public enum Reason {
         UNKNOWN,

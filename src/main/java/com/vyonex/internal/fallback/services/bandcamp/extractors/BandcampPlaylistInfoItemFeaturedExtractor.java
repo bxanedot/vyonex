@@ -1,59 +1,48 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
-import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.getImagesFromImageId;
-
 public class BandcampPlaylistInfoItemFeaturedExtractor implements PlaylistInfoItemExtractor {
+    private final JsonObject story;
 
-    private final JsonObject featuredStory;
-
-    public BandcampPlaylistInfoItemFeaturedExtractor(final JsonObject featuredStory) {
-        this.featuredStory = featuredStory;
+    public BandcampPlaylistInfoItemFeaturedExtractor(final JsonObject story) {
+        this.story = story;
     }
 
     @Override
-    public String getUploaderName() {
-        return featuredStory.getString("band_name");
-    }
+    public String getUploaderName() { return story.getString("band_name", ""); }
 
     @Override
-    public String getUploaderUrl() {
-        return null;
-    }
+    public String getUploaderUrl() { return null; }
 
     @Override
-    public boolean isUploaderVerified() {
-        return false;
-    }
+    public boolean isUploaderVerified() { return false; }
 
     @Override
-    public long getStreamCount() {
-        return featuredStory.getInt("num_streamable_tracks");
-    }
+    public long getStreamCount() { return story.getLong("num_streamable_tracks", -1); }
 
     @Override
-    public String getName() {
-        return featuredStory.getString("album_title");
-    }
+    public String getName() { return story.getString("album_title", ""); }
 
     @Override
-    public String getUrl() {
-        return Utils.replaceHttpWithHttps(featuredStory.getString("item_url"));
-    }
+    public String getUrl() { return https(story.getString("item_url", "")); }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return featuredStory.has("art_id")
-                ? getImagesFromImageId(featuredStory.getLong("art_id"), true)
-                : getImagesFromImageId(featuredStory.getLong("item_art_id"), true);
+        final String key = story.isNumber("art_id") ? "art_id" : "item_art_id";
+        return BandcampExtractorHelper.getImagesFromImageId(story.getLong(key), true);
+    }
+
+    private static String https(final String value) {
+        return value.startsWith("http://") ? "https://" + value.substring(7) : value;
     }
 }

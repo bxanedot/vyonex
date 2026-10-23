@@ -1,45 +1,31 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import static com.vyonex.internal.fallback.Image.HEIGHT_UNKNOWN;
-import static com.vyonex.internal.fallback.Image.WIDTH_UNKNOWN;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.getArtistDetails;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.getImagesFromImageId;
-import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-
-import org.jsoup.Jsoup;
 import com.vyonex.internal.fallback.Image;
-import com.vyonex.internal.fallback.Image.ResolutionLevel;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabExtractor;
+import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
-import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
-import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.linkhandler.ReadyChannelTabListLinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampChannelTabLinkHandlerFactory;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BandcampChannelExtractor extends ChannelExtractor {
-
-    private JsonObject channelInfo;
+    private JsonObject artist;
 
     public BandcampChannelExtractor(final StreamingService service,
                                     final ListLinkHandler linkHandler) {
@@ -49,137 +35,102 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     @Nonnull
     @Override
     public List<Image> getAvatars() {
-        return getImagesFromImageId(channelInfo.getLong("bio_image_id"), false);
+        return BandcampExtractorHelper.getImagesFromImageId(artist.getLong("bio_image_id"), false);
     }
 
     @Nonnull
     @Override
     public List<Image> getBanners() throws ParsingException {
-        /*
-         * Mobile API does not return the header or not the correct header.
-         * Therefore, we need to query the website
-         */
+        final String url = artist.getString("bandcamp_url");
+        if (url == null || url.isBlank()) return List.of();
         try {
-            final String html = getDownloader()
-                    .get(replaceHttpWithHttps(channelInfo.getString("bandcamp_url")))
-                    .responseBody();
-
-            return Stream.of(Jsoup.parse(html).getElementById("customHeader"))
-                    .filter(Objects::nonNull)
-                    .flatMap(element -> element.getElementsByTag("img").stream())
-                    .map(element -> element.attr("src"))
-                    .filter(url -> !url.isEmpty())
-                    .map(url -> new Image(
-                            replaceHttpWithHttps(url), HEIGHT_UNKNOWN, WIDTH_UNKNOWN,
-                            ResolutionLevel.UNKNOWN))
-                    .collect(Collectors.toUnmodifiableList());
-
-        } catch (final IOException | ReCaptchaException e) {
-            throw new ParsingException("Could not download artist web site", e);
+            final String html = getDownloader().get(https(url)).responseBody();
+            final List<Image> banners = new ArrayList<>();
+            for (final Element image : Jsoup.parse(html).select("#customHeader img[src]")) {
+                banners.addAll(BandcampExtractorHelper.getImagesFromImageUrl(image.attr("src")));
+            }
+            return List.copyOf(banners);
+        } catch (final IOException | com.vyonex.internal.fallback.exceptions.ReCaptchaException e) {
+            throw new ParsingException("Could not load the artist banner", e);
         }
     }
 
-    /**
-     * Bandcamp discontinued their RSS feeds because it hadn't been used enough.
-     */
     @Override
-    public String getFeedUrl() {
-        return null;
-    }
+    public String getFeedUrl() { return null; }
 
     @Override
-    public long getSubscriberCount() {
-        return -1;
-    }
+    public long getSubscriberCount() { return -1; }
 
     @Override
-    public String getDescription() {
-        return channelInfo.getString("bio");
-    }
+    public String getDescription() { return artist.getString("bio", ""); }
 
     @Override
-    public String getParentChannelName() {
-        return null;
-    }
+    public String getParentChannelName() { return null; }
 
     @Override
-    public String getParentChannelUrl() {
-        return null;
-    }
+    public String getParentChannelUrl() { return null; }
 
     @Nonnull
     @Override
-    public List<Image> getParentChannelAvatars() {
-        return List.of();
-    }
+    public List<Image> getParentChannelAvatars() { return List.of(); }
 
     @Override
-    public boolean isVerified() throws ParsingException {
-        return false;
-    }
+    public boolean isVerified() { return false; }
 
     @Nonnull
     @Override
     public List<ListLinkHandler> getTabs() throws ParsingException {
-        final JsonArray discography = channelInfo.getArray("discography");
-        final TabExtractorBuilder builder = new TabExtractorBuilder(discography);
+        final JsonArray discography = artist.getArray("discography");
+        final ReadyTabBuilder builder = new ReadyTabBuilder(discography);
+        boolean tracks = false;
+        boolean albums = false;
+        final List<ListLinkHandler> tabs = new ArrayList<>(2);
 
-        final List<ListLinkHandler> tabs = new ArrayList<>();
-
-        boolean foundTrackItem = false;
-        boolean foundAlbumItem = false;
-
-        for (final Object discographyItem : discography) {
-            if (foundTrackItem && foundAlbumItem) {
-                break;
+        for (final Object value : discography) {
+            if (!(value instanceof JsonObject item)) continue;
+            final String type = item.getString("item_type");
+            if (!tracks && "track".equals(type)) {
+                tracks = true;
+                tabs.add(tab(ChannelTabs.TRACKS, builder));
             }
-
-            if (!(discographyItem instanceof JsonObject)) {
-                continue;
+            if (!albums && "album".equals(type)) {
+                albums = true;
+                tabs.add(tab(ChannelTabs.ALBUMS, builder));
             }
-
-            final JsonObject discographyJsonItem = (JsonObject) discographyItem;
-            final String itemType = discographyJsonItem.getString("item_type");
-
-            if (!foundTrackItem && "track".equals(itemType)) {
-                foundTrackItem = true;
-                tabs.add(new ReadyChannelTabListLinkHandler(getUrl()
-                        + BandcampChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.TRACKS),
-                        getId(),
-                        ChannelTabs.TRACKS,
-                        builder));
-            }
-
-            if (!foundAlbumItem && "album".equals(itemType)) {
-                foundAlbumItem = true;
-                tabs.add(new ReadyChannelTabListLinkHandler(getUrl()
-                        + BandcampChannelTabLinkHandlerFactory.getUrlSuffix(ChannelTabs.ALBUMS),
-                        getId(),
-                        ChannelTabs.ALBUMS,
-                        builder));
-            }
+            if (tracks && albums) break;
         }
-
-        return Collections.unmodifiableList(tabs);
+        return List.copyOf(tabs);
     }
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        channelInfo = getArtistDetails(getId());
+        artist = BandcampExtractorHelper.getArtistDetails(getId());
     }
 
     @Nonnull
     @Override
-    public String getName() {
-        return channelInfo.getString("name");
+    public String getName() throws ParsingException {
+        final String name = artist.getString("name");
+        if (name == null || name.isBlank()) throw new ParsingException("Artist has no name");
+        return name;
     }
 
-    private static final class TabExtractorBuilder
+    private ListLinkHandler tab(final String type, final ReadyTabBuilder builder)
+            throws ParsingException {
+        return new ReadyChannelTabListLinkHandler(getUrl()
+                + BandcampChannelTabLinkHandlerFactory.getUrlSuffix(type), getId(), type, builder);
+    }
+
+    private static String https(final String value) {
+        return value.startsWith("http://") ? "https://" + value.substring(7) : value;
+    }
+
+    private static final class ReadyTabBuilder
             implements ReadyChannelTabListLinkHandler.ChannelTabExtractorBuilder {
         private final JsonArray discography;
 
-        TabExtractorBuilder(final JsonArray discography) {
+        private ReadyTabBuilder(final JsonArray discography) {
             this.discography = discography;
         }
 

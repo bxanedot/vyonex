@@ -1,60 +1,43 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
 
 import com.vyonex.internal.fallback.ServiceList;
-import com.vyonex.internal.fallback.exceptions.FoundAdException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Parser;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.util.List;
 
 public final class PeertubeStreamLinkHandlerFactory extends LinkHandlerFactory {
-
-    private static final PeertubeStreamLinkHandlerFactory INSTANCE
-            = new PeertubeStreamLinkHandlerFactory();
-    private static final String ID_PATTERN = "(/w/|(/videos/(watch/|embed/)?))(?!p/)([^/?&#]*)";
-    // we exclude p/ because /w/p/ is playlist, not video
     public static final String VIDEO_API_ENDPOINT = "/api/v1/videos/";
+    private static final PeertubeStreamLinkHandlerFactory INSTANCE =
+            new PeertubeStreamLinkHandlerFactory();
 
-    // From PeerTube 3.3.0, the default path is /w/.
-    // We still use /videos/watch/ for compatibility reasons:
-    // /videos/watch/ is still accepted by >=3.3.0 but /w/ isn't by <3.3.0
-    private static final String VIDEO_PATH = "/videos/watch/";
+    private PeertubeStreamLinkHandlerFactory() { }
+    public static PeertubeStreamLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    private PeertubeStreamLinkHandlerFactory() {
-    }
-
-    public static PeertubeStreamLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
-
-    @Override
-    public String getUrl(final String id) throws ParsingException, UnsupportedOperationException {
+    @Override public String getUrl(final String id) {
         return getUrl(id, ServiceList.PeerTube.getBaseUrl());
     }
-
-    @Override
-    public String getUrl(final String id, final String baseUrl) {
-        return baseUrl + VIDEO_PATH + id;
+    @Override public String getUrl(final String id, final String baseUrl) {
+        return baseUrl + "/videos/watch/" + id;
     }
-
-    @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        return Parser.matchGroup(ID_PATTERN, url, 4);
-    }
-
-    @Override
-    public boolean onAcceptUrl(final String url) throws FoundAdException {
-        if (url.contains("/playlist/")) {
-            return false;
+    @Override public String getId(final String url) throws ParsingException {
+        final List<String> path = PeertubeUrl.segments(url);
+        if (path.size() == 2 && ("w".equals(path.get(0)) || "videos".equals(path.get(0)))) {
+            return path.get(1);
         }
+        if (path.size() == 3 && "videos".equals(path.get(0))
+                && ("watch".equals(path.get(1)) || "embed".equals(path.get(1)))) {
+            return path.get(2);
+        }
+        throw new ParsingException("URL does not identify a PeerTube video");
+    }
+    @Override public boolean onAcceptUrl(final String url) {
         try {
-            new URL(url);
             getId(url);
             return true;
-        } catch (final ParsingException | MalformedURLException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
     }

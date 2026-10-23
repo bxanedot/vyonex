@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.channel.tabs;
 
@@ -8,13 +10,9 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 
 import javax.annotation.Nonnull;
 
-/**
- * A {@link ListExtractor} of {@link InfoItem}s for tabs of channels.
- */
 public abstract class ChannelTabExtractor extends ListExtractor<InfoItem> {
-
-    protected ChannelTabExtractor(@Nonnull final StreamingService service,
-                                  @Nonnull final ListLinkHandler linkHandler) {
+    protected ChannelTabExtractor(final StreamingService service,
+                                  final ListLinkHandler linkHandler) {
         super(service, linkHandler);
     }
 

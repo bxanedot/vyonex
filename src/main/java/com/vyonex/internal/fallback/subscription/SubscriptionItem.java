@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.subscription;
 
@@ -14,17 +16,9 @@ public class SubscriptionItem implements Serializable {
         this.name = name;
     }
 
-    public int getServiceId() {
-        return serviceId;
-    }
-
-    public String getUrl() {
-        return url;
-    }
-
-    public String getName() {
-        return name;
-    }
+    public int getServiceId() { return serviceId; }
+    public String getUrl() { return url; }
+    public String getName() { return name; }
 
     @Override
     public String toString() {

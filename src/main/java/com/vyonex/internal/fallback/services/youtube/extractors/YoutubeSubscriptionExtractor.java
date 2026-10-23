@@ -1,166 +1,167 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
 
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.services.youtube.YoutubeService;
 import com.vyonex.internal.fallback.subscription.SubscriptionExtractor;
 import com.vyonex.internal.fallback.subscription.SubscriptionItem;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
+import javax.annotation.Nonnull;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import javax.annotation.Nonnull;
-
 import static com.vyonex.internal.fallback.subscription.SubscriptionExtractor.ContentSource.INPUT_STREAM;
 
-/**
- * Extract subscriptions from a Google takeout export
- */
+/** Imports YouTube channel subscriptions from exported JSON, CSV, or ZIP data. */
 public class YoutubeSubscriptionExtractor extends SubscriptionExtractor {
-    private static final String BASE_CHANNEL_URL = "https://www.youtube.com/channel/";
+    private static final String CHANNEL_URL = "https://www.youtube.com/channel/";
 
     public YoutubeSubscriptionExtractor(final YoutubeService youtubeService) {
         super(youtubeService, Collections.singletonList(INPUT_STREAM));
     }
 
-    @Override
-    public String getRelatedUrl() {
+    @Override public String getRelatedUrl() {
         return "https://takeout.google.com/takeout/custom/youtube";
     }
 
     @Override
-    public List<SubscriptionItem> fromInputStream(@Nonnull final InputStream contentInputStream)
+    public List<SubscriptionItem> fromInputStream(@Nonnull final InputStream content)
             throws ExtractionException {
-        return fromJsonInputStream(contentInputStream);
+        return fromJsonInputStream(content);
     }
 
     @Override
-    public List<SubscriptionItem> fromInputStream(@Nonnull final InputStream contentInputStream,
+    public List<SubscriptionItem> fromInputStream(@Nonnull final InputStream content,
                                                   @Nonnull final String contentType)
             throws ExtractionException {
-        switch (contentType) {
-            case "json":
-            case "application/json":
-                return fromJsonInputStream(contentInputStream);
-            case "csv":
-            case "text/csv":
-            case "text/comma-separated-values":
-                return fromCsvInputStream(contentInputStream);
-            case "zip":
-            case "application/zip":
-                return fromZipInputStream(contentInputStream);
-            default:
-                throw new InvalidSourceException("Unsupported content type: " + contentType);
-        }
+        final String type = Objects.requireNonNull(contentType, "content type is required")
+                .trim().toLowerCase(Locale.ROOT);
+        return switch (type) {
+            case "json", "application/json" -> fromJsonInputStream(content);
+            case "csv", "text/csv", "text/comma-separated-values" -> fromCsvInputStream(content);
+            case "zip", "application/zip" -> fromZipInputStream(content);
+            default -> throw new InvalidSourceException("Unsupported content type: " + contentType);
+        };
     }
 
-    public List<SubscriptionItem> fromJsonInputStream(@Nonnull final InputStream contentInputStream)
+    public List<SubscriptionItem> fromJsonInputStream(@Nonnull final InputStream content)
             throws ExtractionException {
-        final JsonArray subscriptions;
+        final JsonArray entries;
         try {
-            subscriptions = JsonParser.array().from(contentInputStream);
-        } catch (final JsonParserException e) {
-            throw new InvalidSourceException("Invalid json input stream", e);
+            entries = JsonParser.array().from(content);
+        } catch (final JsonParserException error) {
+            throw new InvalidSourceException("Invalid JSON input", error);
         }
 
-        boolean foundInvalidSubscription = false;
-        final List<SubscriptionItem> subscriptionItems = new ArrayList<>();
-        for (final Object subscriptionObject : subscriptions) {
-            if (!(subscriptionObject instanceof JsonObject)) {
-                foundInvalidSubscription = true;
+        final List<SubscriptionItem> subscriptions = new ArrayList<>();
+        boolean invalidEntry = false;
+        for (final Object value : entries) {
+            if (!(value instanceof JsonObject entry)) {
+                invalidEntry = true;
                 continue;
             }
-
-            final JsonObject subscription = ((JsonObject) subscriptionObject).getObject("snippet");
-            final String id = subscription.getObject("resourceId").getString("channelId", "");
-            if (id.length() != 24) { // e.g. UCsXVk37bltHxD1rDPwtNM8Q
-                foundInvalidSubscription = true;
+            final JsonObject snippet = entry.getObject("snippet");
+            final String id = snippet.getObject("resourceId").getString("channelId");
+            if (id == null || id.length() != 24) {
+                invalidEntry = true;
                 continue;
             }
-
-            subscriptionItems.add(new SubscriptionItem(service.getServiceId(),
-                    BASE_CHANNEL_URL + id, subscription.getString("title", "")));
+            subscriptions.add(new SubscriptionItem(service.getServiceId(), CHANNEL_URL + id,
+                    snippet.getString("title", "")));
         }
 
-        if (foundInvalidSubscription && subscriptionItems.isEmpty()) {
-            throw new InvalidSourceException("Found only invalid channel ids");
+        if (invalidEntry && subscriptions.isEmpty()) {
+            throw new InvalidSourceException("No valid channel IDs were found");
         }
-        return subscriptionItems;
+        return List.copyOf(subscriptions);
     }
 
-    public List<SubscriptionItem> fromZipInputStream(@Nonnull final InputStream contentInputStream)
+    public List<SubscriptionItem> fromZipInputStream(@Nonnull final InputStream content)
             throws ExtractionException {
-        try (ZipInputStream zipInputStream = new ZipInputStream(contentInputStream)) {
-            ZipEntry zipEntry;
-            while ((zipEntry = zipInputStream.getNextEntry()) != null) {
-                if (zipEntry.getName().toLowerCase().endsWith(".csv")) {
-                    try {
-                        final List<SubscriptionItem> csvItems = fromCsvInputStream(zipInputStream);
+        try (ZipInputStream zip = new ZipInputStream(content, StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.getName().toLowerCase(Locale.ROOT).endsWith(".csv")) continue;
 
-                        // Return it only if it has items (it exits early if it's the wrong file
-                        // format), otherwise try the next file
-                        if (!csvItems.isEmpty()) {
-                            return csvItems;
-                        }
-                    } catch (final ExtractionException e) {
-                        // Ignore error and go to next file
-                    }
+                final byte[] csvBytes = zip.readAllBytes();
+                try {
+                    final List<SubscriptionItem> subscriptions = fromCsvInputStream(
+                            new ByteArrayInputStream(csvBytes));
+                    if (!subscriptions.isEmpty()) return subscriptions;
+                } catch (final ExtractionException ignored) {
+                    // Continue through the archive; unrelated CSV exports are common.
                 }
             }
-        } catch (final IOException e) {
-            throw new InvalidSourceException("Error reading contents of zip file", e);
+        } catch (final IOException error) {
+            throw new InvalidSourceException("Could not read subscription archive", error);
         }
-
-        throw new InvalidSourceException("Unable to find a valid subscriptions.csv file"
-                + " (try extracting and selecting the csv file)");
+        throw new InvalidSourceException("Archive contains no usable subscriptions CSV");
     }
 
-    public List<SubscriptionItem> fromCsvInputStream(@Nonnull final InputStream contentInputStream)
+    public List<SubscriptionItem> fromCsvInputStream(@Nonnull final InputStream content)
             throws ExtractionException {
-        // Expected format of CSV file:
-        // Channel Id,Channel Url,Channel Title
-        //UC1JTQBa5QxZCpXrFSkMxmPw,http://www.youtube.com/channel/UC1JTQBa5QxZCpXrFSkMxmPw,Raycevick
-        //UCFl7yKfcRcFmIUbKeCA-SJQ,http://www.youtube.com/channel/UCFl7yKfcRcFmIUbKeCA-SJQ,Joji
-        //
-        // Notes:
-        //      It's always 3 columns
-        //      The first line is always a header
-        //      Header names are different based on the locale
-        //      Fortunately the data is always the same order no matter what locale
-        try (var reader = new BufferedReader(new InputStreamReader(contentInputStream))) {
-            return reader.lines()
-                    .skip(1) // ignore header and skip first line
-                    .map(line -> line.split(","))
-                    .filter(values -> values.length >= 3)
-                    .map(values -> {
-                        // Channel URL from second entry
-                        final String channelUrl = values[1].replace("http://", "https://");
-                        return channelUrl.startsWith(BASE_CHANNEL_URL)
-                            ? new SubscriptionItem(
-                            service.getServiceId(),
-                            channelUrl,
-                            values[2]) // Channel title from third entry
-                            : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toUnmodifiableList());
-        } catch (final UncheckedIOException | IOException e) {
-            throw new InvalidSourceException("Error reading CSV file", e);
+        final List<SubscriptionItem> subscriptions = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(content,
+                StandardCharsets.UTF_8))) {
+            reader.readLine(); // The first record is the localized export header.
+            String line;
+            while ((line = reader.readLine()) != null) {
+                final List<String> columns = parseCsvLine(line);
+                if (columns == null || columns.size() < 3) continue;
+                String channelUrl = columns.get(1).trim();
+                if (channelUrl.startsWith("http://")) {
+                    channelUrl = "https://" + channelUrl.substring("http://".length());
+                }
+                if (!channelUrl.startsWith(CHANNEL_URL)) continue;
+                subscriptions.add(new SubscriptionItem(service.getServiceId(), channelUrl,
+                        columns.get(2)));
+            }
+        } catch (final IOException error) {
+            throw new InvalidSourceException("Could not read subscriptions CSV", error);
         }
+        return List.copyOf(subscriptions);
+    }
+
+    // shortcut: CSV records with embedded newlines are unsupported; add a record reader if Takeout emits them.
+    private static List<String> parseCsvLine(final String line) {
+        final List<String> columns = new ArrayList<>();
+        final StringBuilder value = new StringBuilder();
+        boolean quoted = false;
+        for (int index = 0; index < line.length(); index++) {
+            final char character = line.charAt(index);
+            if (character == '"') {
+                if (quoted && index + 1 < line.length() && line.charAt(index + 1) == '"') {
+                    value.append('"');
+                    index++;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (character == ',' && !quoted) {
+                columns.add(value.toString());
+                value.setLength(0);
+            } else {
+                value.append(character);
+            }
+        }
+        if (quoted) return null;
+        columns.add(value.toString());
+        return columns;
     }
 }

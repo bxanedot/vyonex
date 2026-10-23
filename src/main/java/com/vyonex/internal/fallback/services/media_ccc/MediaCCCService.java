@@ -1,8 +1,6 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.media_ccc;
-
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.AUDIO;
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.VIDEO;
 
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
@@ -40,143 +38,75 @@ import com.vyonex.internal.fallback.suggestion.SuggestionExtractor;
 
 import java.util.EnumSet;
 
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.AUDIO;
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.VIDEO;
+
 public class MediaCCCService extends StreamingService {
     public MediaCCCService(final int id) {
         super(id, "media.ccc.de", EnumSet.of(AUDIO, VIDEO));
     }
 
-    @Override
-    public SearchExtractor getSearchExtractor(final SearchQueryHandler query) {
+    @Override public SearchExtractor getSearchExtractor(final SearchQueryHandler query) {
         return new MediaCCCSearchExtractor(this, query);
     }
-
-    @Override
-    public LinkHandlerFactory getStreamLHFactory() {
+    @Override public LinkHandlerFactory getStreamLHFactory() {
         return MediaCCCStreamLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getChannelLHFactory() {
+    @Override public ListLinkHandlerFactory getChannelLHFactory() {
         return MediaCCCConferenceLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getChannelTabLHFactory() {
-        // there is just one channel tab in MediaCCC, the one containing conferences, so there is
-        // no need for a specific channel tab link handler, but we can just use the channel one
+    @Override public ListLinkHandlerFactory getChannelTabLHFactory() {
         return MediaCCCConferenceLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getPlaylistLHFactory() {
-        return null;
-    }
-
-    @Override
-    public SearchQueryHandlerFactory getSearchQHFactory() {
+    @Override public ListLinkHandlerFactory getPlaylistLHFactory() { return null; }
+    @Override public SearchQueryHandlerFactory getSearchQHFactory() {
         return MediaCCCSearchQueryHandlerFactory.getInstance();
     }
-
-    @Override
-    public StreamExtractor getStreamExtractor(final LinkHandler linkHandler) {
-        if (MediaCCCParsingHelper.isLiveStreamId(linkHandler.getId())) {
-            return new MediaCCCLiveStreamExtractor(this, linkHandler);
+    @Override public StreamExtractor getStreamExtractor(final LinkHandler link) {
+        if (MediaCCCParsingHelper.isLiveStreamId(link.getId())) {
+            return new MediaCCCLiveStreamExtractor(this, link);
         }
-        return new MediaCCCStreamExtractor(this, linkHandler);
+        return new MediaCCCStreamExtractor(this, link);
     }
-
-    @Override
-    public ChannelExtractor getChannelExtractor(final ListLinkHandler linkHandler) {
-        return new MediaCCCConferenceExtractor(this, linkHandler);
+    @Override public ChannelExtractor getChannelExtractor(final ListLinkHandler link) {
+        return new MediaCCCConferenceExtractor(this, link);
     }
-
-    @Override
-    public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler linkHandler) {
-        if (linkHandler instanceof ReadyChannelTabListLinkHandler) {
-            // conference data has already been fetched, let the ReadyChannelTabListLinkHandler
-            // create a MediaCCCChannelTabExtractor with that data
-            return ((ReadyChannelTabListLinkHandler) linkHandler).getChannelTabExtractor(this);
-        } else {
-            // conference data has not been fetched yet, so pass null instead
-            return new MediaCCCChannelTabExtractor(this, linkHandler, null);
+    @Override public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler link) {
+        if (link instanceof ReadyChannelTabListLinkHandler) {
+            return ((ReadyChannelTabListLinkHandler) link).getChannelTabExtractor(this);
         }
+        return new MediaCCCChannelTabExtractor(this, link, null);
     }
-
-    @Override
-    public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler linkHandler) {
-        return null;
-    }
-
-    @Override
-    public SuggestionExtractor getSuggestionExtractor() {
-        return null;
-    }
+    @Override public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler link) { return null; }
+    @Override public SuggestionExtractor getSuggestionExtractor() { return null; }
+    @Override public SubscriptionExtractor getSubscriptionExtractor() { return null; }
+    @Override public ListLinkHandlerFactory getCommentsLHFactory() { return null; }
+    @Override public CommentsExtractor getCommentsExtractor(final ListLinkHandler link) { return null; }
+    @Override public String getBaseUrl() { return "https://media.ccc.de"; }
 
     @Override
     public KioskList getKioskList() throws ExtractionException {
-        final KioskList list = new KioskList(this);
-        final var conferencesLHF = MediaCCCConferencesListLinkHandlerFactory.getInstance();
-        final var recentLHF = MediaCCCRecentListLinkHandlerFactory.getInstance();
-        final var liveLHF = MediaCCCLiveListLinkHandlerFactory.getInstance();
-
-        // add kiosks here e.g.:
+        final KioskList kiosks = new KioskList(this);
+        final MediaCCCConferencesListLinkHandlerFactory conferences =
+                MediaCCCConferencesListLinkHandlerFactory.getInstance();
+        final MediaCCCRecentListLinkHandlerFactory recent =
+                MediaCCCRecentListLinkHandlerFactory.getInstance();
+        final MediaCCCLiveListLinkHandlerFactory live =
+                MediaCCCLiveListLinkHandlerFactory.getInstance();
         try {
-            list.addKioskEntry(
-                    (streamingService, url, kioskId) -> new MediaCCCConferenceKiosk(
-                            MediaCCCService.this,
-                            conferencesLHF.fromUrl(url),
-                            kioskId
-                    ),
-                    conferencesLHF,
-                    MediaCCCConferenceKiosk.KIOSK_ID
-            );
-
-            list.addKioskEntry(
-                    (streamingService, url, kioskId) -> new MediaCCCRecentKiosk(
-                            MediaCCCService.this,
-                            recentLHF.fromUrl(url),
-                            kioskId
-                    ),
-                    recentLHF,
-                    MediaCCCRecentKiosk.KIOSK_ID
-            );
-
-            list.addKioskEntry(
-                    (streamingService, url, kioskId) -> new MediaCCCLiveStreamKiosk(
-                            MediaCCCService.this,
-                            liveLHF.fromUrl(url),
-                            kioskId
-                    ),
-                    liveLHF,
-                    MediaCCCLiveStreamKiosk.KIOSK_ID
-            );
-
-            list.setDefaultKiosk(MediaCCCRecentKiosk.KIOSK_ID);
-        } catch (final Exception e) {
-            throw new ExtractionException(e);
+            kiosks.addKioskEntry((service, url, id) ->
+                            new MediaCCCConferenceKiosk(service, conferences.fromUrl(url), id),
+                    conferences, MediaCCCConferenceKiosk.KIOSK_ID);
+            kiosks.addKioskEntry((service, url, id) ->
+                            new MediaCCCRecentKiosk(service, recent.fromUrl(url), id),
+                    recent, MediaCCCRecentKiosk.KIOSK_ID);
+            kiosks.addKioskEntry((service, url, id) ->
+                            new MediaCCCLiveStreamKiosk(service, live.fromUrl(url), id),
+                    live, MediaCCCLiveStreamKiosk.KIOSK_ID);
+        } catch (final Exception error) {
+            throw new ExtractionException(error);
         }
-
-        return list;
+        kiosks.setDefaultKiosk(MediaCCCRecentKiosk.KIOSK_ID);
+        return kiosks;
     }
-
-    @Override
-    public SubscriptionExtractor getSubscriptionExtractor() {
-        return null;
-    }
-
-    @Override
-    public ListLinkHandlerFactory getCommentsLHFactory() {
-        return null;
-    }
-
-    @Override
-    public CommentsExtractor getCommentsExtractor(final ListLinkHandler linkHandler) {
-        return null;
-    }
-
-    @Override
-    public String getBaseUrl() {
-        return "https://media.ccc.de";
-    }
-
 }

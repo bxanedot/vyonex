@@ -1,12 +1,9 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;
-import com.vyonex.internal.fallback.InfoItemExtractor;
 import com.vyonex.internal.fallback.InfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
@@ -15,289 +12,157 @@ import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeChannel
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubePlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeSepiaStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeStreamInfoItemExtractor;
-import com.vyonex.internal.fallback.utils.JsonUtils;
-import com.vyonex.internal.fallback.utils.Parser;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
-import javax.annotation.Nonnull;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
-
-import static com.vyonex.internal.fallback.Image.HEIGHT_UNKNOWN;
-import static com.vyonex.internal.fallback.Image.WIDTH_UNKNOWN;
-import static com.vyonex.internal.fallback.utils.Utils.isBlank;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class PeertubeParsingHelper {
     public static final String START_KEY = "start";
     public static final String COUNT_KEY = "count";
     public static final int ITEMS_PER_PAGE = 12;
-    public static final String START_PATTERN = "start=(\\d*)";
+    private static final Pattern START_PARAM = Pattern.compile("([?&]start=)(\\d+)(?=&|#|$)");
 
-    private PeertubeParsingHelper() {
+    private PeertubeParsingHelper() { }
+
+    public static void validate(final JsonObject response) throws ContentNotAvailableException {
+        final String message = response.getString("error");
+        if (message != null && !message.isBlank()) throw new ContentNotAvailableException(message);
     }
 
-    public static void validate(final JsonObject json) throws ContentNotAvailableException {
-        final String error = json.getString("error");
-        if (!isBlank(error)) {
-            throw new ContentNotAvailableException(error);
-        }
-    }
-
-    public static Page getNextPage(final String prevPageUrl, final long total) {
-        final String prevStart;
+    public static Page getNextPage(final String previousUrl, final long total) {
+        final Matcher start = START_PARAM.matcher(previousUrl);
+        if (!start.find()) return null;
         try {
-            prevStart = Parser.matchGroup1(START_PATTERN, prevPageUrl);
-        } catch (final Parser.RegexException e) {
+            final long nextStart = Math.addExact(Long.parseLong(start.group(2)), ITEMS_PER_PAGE);
+            if (nextStart >= total) return null;
+            final String replacement = start.group(1) + nextStart;
+            return new Page(start.replaceFirst(Matcher.quoteReplacement(replacement)));
+        } catch (final ArithmeticException | NumberFormatException ignored) {
             return null;
-        }
-        if (isBlank(prevStart)) {
-            return null;
-        }
-
-        final long nextStart;
-        try {
-            nextStart = Long.parseLong(prevStart) + ITEMS_PER_PAGE;
-        } catch (final NumberFormatException e) {
-            return null;
-        }
-
-        if (nextStart >= total) {
-            return null;
-        } else {
-            return new Page(prevPageUrl.replace(
-                    START_KEY + "=" + prevStart, START_KEY + "=" + nextStart));
         }
     }
 
+    @SuppressWarnings("rawtypes")
     public static void collectItemsFrom(final InfoItemsCollector collector,
-                                        final JsonObject json,
+                                        final JsonObject response,
                                         final String baseUrl) throws ParsingException {
-        collectItemsFrom(collector, json, baseUrl, false);
+        collectItemsFrom(collector, response, baseUrl, false);
     }
 
-    /**
-     * Collect items from the given JSON object with the given collector.
-     *
-     * <p>
-     * Supported info item types are streams with their Sepia variant, channels and playlists.
-     * </p>
-     *
-     * @param collector the collector used to collect information
-     * @param json      the JSOn response to retrieve data from
-     * @param baseUrl   the base URL of the instance
-     * @param sepia     if we should use {@code PeertubeSepiaStreamInfoItemExtractor} to extract
-     *                  streams or {@code PeertubeStreamInfoItemExtractor} otherwise
-     */
+    @SuppressWarnings("rawtypes")
     public static void collectItemsFrom(final InfoItemsCollector collector,
-                                        final JsonObject json,
+                                        final JsonObject response,
                                         final String baseUrl,
                                         final boolean sepia) throws ParsingException {
-        final JsonArray contents;
-        try {
-            contents = (JsonArray) JsonUtils.getValue(json, "data");
-        } catch (final Exception e) {
-            throw new ParsingException("Unable to extract list info", e);
-        }
+        final Object data = response.get("data");
+        if (!(data instanceof JsonArray)) throw new ParsingException("Response data is not an array");
 
-        for (final Object c : contents) {
-            if (c instanceof JsonObject) {
-                JsonObject item = (JsonObject) c;
+        for (final Object entry : (JsonArray) data) {
+            if (!(entry instanceof JsonObject)) continue;
+            JsonObject item = (JsonObject) entry;
+            if (item.get("video") instanceof JsonObject) item = item.getObject("video");
 
-                // PeerTube playlists have the stream info encapsulated in an "video" object
-                if (item.has("video")) {
-                    item = item.getObject("video");
-                }
-                final boolean isPlaylistInfoItem = item.has("videosLength");
-                final boolean isChannelInfoItem = item.has("followersCount");
-
-                final InfoItemExtractor extractor;
-                if (sepia) {
-                    extractor = new PeertubeSepiaStreamInfoItemExtractor(item, baseUrl);
-                } else if (isPlaylistInfoItem) {
-                    extractor = new PeertubePlaylistInfoItemExtractor(item, baseUrl);
-                } else if (isChannelInfoItem) {
-                    extractor = new PeertubeChannelInfoItemExtractor(item, baseUrl);
-                } else {
-                    extractor = new PeertubeStreamInfoItemExtractor(item, baseUrl);
-                }
-                collector.commit(extractor);
+            if (sepia) {
+                collector.commit(new PeertubeSepiaStreamInfoItemExtractor(item, baseUrl));
+            } else if (item.has("videosLength")) {
+                collector.commit(new PeertubePlaylistInfoItemExtractor(item, baseUrl));
+            } else if (item.has("followersCount")) {
+                collector.commit(new PeertubeChannelInfoItemExtractor(item, baseUrl));
+            } else {
+                collector.commit(new PeertubeStreamInfoItemExtractor(item, baseUrl));
             }
         }
     }
 
-    /**
-     * Get avatars from a {@code ownerAccount} or a {@code videoChannel} {@link JsonObject}.
-     *
-     * <p>
-     * If the {@code avatars} {@link JsonArray} is present and non null or empty, avatars will be
-     * extracted from this array using {@link #getImagesFromAvatarOrBannerArray(String, JsonArray)}.
-     * </p>
-     *
-     * <p>
-     * If that's not the case, an avatar will extracted using the {@code avatar} {@link JsonObject}.
-     * </p>
-     *
-     * <p>
-     * Note that only images for which paths are not null and not empty will be added to the
-     * unmodifiable {@link Image} list returned.
-     * </p>
-     *
-     * @param baseUrl                          the base URL of the PeerTube instance
-     * @param ownerAccountOrVideoChannelObject the {@code ownerAccount} or {@code videoChannel}
-     *                                         {@link JsonObject}
-     * @return an unmodifiable list of {@link Image}s, which may be empty but never null
-     */
-    @Nonnull
+    public static String requiredString(final JsonObject item, final String path)
+            throws ParsingException {
+        final Object value = valueAt(item, path);
+        if (value instanceof String) return (String) value;
+        throw new ParsingException("Missing string field: " + path);
+    }
+
+    public static String optionalString(final JsonObject item, final String path) {
+        final Object value = valueAt(item, path);
+        return value instanceof String ? (String) value : null;
+    }
+
+    public static Number requiredNumber(final JsonObject item, final String path)
+            throws ParsingException {
+        final Object value = valueAt(item, path);
+        if (value instanceof Number) return (Number) value;
+        throw new ParsingException("Missing numeric field: " + path);
+    }
+
     public static List<Image> getAvatarsFromOwnerAccountOrVideoChannelObject(
-            @Nonnull final String baseUrl,
-            @Nonnull final JsonObject ownerAccountOrVideoChannelObject) {
-        return getImagesFromAvatarsOrBanners(baseUrl, ownerAccountOrVideoChannelObject,
-                "avatars", "avatar");
+            final String baseUrl, final JsonObject item) {
+        return profileImages(baseUrl, item, "avatars", "avatar");
     }
 
-    /**
-     * Get banners from a {@code ownerAccount} or a {@code videoChannel} {@link JsonObject}.
-     *
-     * <p>
-     * If the {@code banners} {@link JsonArray} is present and non null or empty, banners will be
-     * extracted from this array using {@link #getImagesFromAvatarOrBannerArray(String, JsonArray)}.
-     * </p>
-     *
-     * <p>
-     * If that's not the case, a banner will extracted using the {@code banner} {@link JsonObject}.
-     * </p>
-     *
-     * <p>
-     * Note that only images for which paths are not null and not empty will be added to the
-     * unmodifiable {@link Image} list returned.
-     * </p>
-     *
-     * @param baseUrl                          the base URL of the PeerTube instance
-     * @param ownerAccountOrVideoChannelObject the {@code ownerAccount} or {@code videoChannel}
-     *                                         {@link JsonObject}
-     * @return an unmodifiable list of {@link Image}s, which may be empty but never null
-     */
-    @Nonnull
     public static List<Image> getBannersFromAccountOrVideoChannelObject(
-            @Nonnull final String baseUrl,
-            @Nonnull final JsonObject ownerAccountOrVideoChannelObject) {
-        return getImagesFromAvatarsOrBanners(baseUrl, ownerAccountOrVideoChannelObject,
-                "banners", "banner");
+            final String baseUrl, final JsonObject item) {
+        return profileImages(baseUrl, item, "banners", "banner");
     }
 
-    /**
-     * Get thumbnails from a playlist or a video item {@link JsonObject}.
-     *
-     * <p>
-     * PeerTube provides two thumbnails in its API: a low one, represented by the value of the
-     * {@code thumbnailPath} key, and a medium one, represented by the value of the
-     * {@code previewPath} key.
-     * </p>
-     *
-     * <p>
-     * If a value is not null or empty, an {@link Image} will be added to the list returned with
-     * the URL to the thumbnail ({@code baseUrl + value}), a height and a width unknown and the
-     * corresponding resolution level (see above).
-     * </p>
-     *
-     * @param baseUrl                   the base URL of the PeerTube instance
-     * @param playlistOrVideoItemObject the playlist or the video item {@link JsonObject}, which
-     *                                  must not be null
-     * @return an unmodifiable list of {@link Image}s, which is never null but can be empty
-     */
-    @Nonnull
     public static List<Image> getThumbnailsFromPlaylistOrVideoItem(
-            @Nonnull final String baseUrl,
-            @Nonnull final JsonObject playlistOrVideoItemObject) {
-        final List<Image> imageList = new ArrayList<>(2);
-
-        final String thumbnailPath = playlistOrVideoItemObject.getString("thumbnailPath");
-        if (!isNullOrEmpty(thumbnailPath)) {
-            imageList.add(new Image(baseUrl + thumbnailPath, HEIGHT_UNKNOWN, WIDTH_UNKNOWN,
-                    ResolutionLevel.LOW));
-        }
-
-        final String previewPath = playlistOrVideoItemObject.getString("previewPath");
-        if (!isNullOrEmpty(previewPath)) {
-            imageList.add(new Image(baseUrl + previewPath, HEIGHT_UNKNOWN, WIDTH_UNKNOWN,
-                    ResolutionLevel.MEDIUM));
-        }
-
-        return Collections.unmodifiableList(imageList);
+            final String baseUrl, final JsonObject item) {
+        final List<Image> thumbnails = new ArrayList<>(2);
+        addThumbnail(thumbnails, baseUrl, item.getString("thumbnailPath"), ResolutionLevel.LOW);
+        addThumbnail(thumbnails, baseUrl, item.getString("previewPath"), ResolutionLevel.MEDIUM);
+        return Collections.unmodifiableList(thumbnails);
     }
 
-    /**
-     * Utility method to get avatars and banners from video channels and accounts from given name
-     * keys.
-     *
-     * <p>
-     * Only images for which paths are not null and not empty will be added to the unmodifiable
-     * {@link Image} list returned and only the width of avatars or banners is provided by the API,
-     * and so is the only image dimension known.
-     * </p>
-     *
-     * @param baseUrl                          the base URL of the PeerTube instance
-     * @param ownerAccountOrVideoChannelObject the {@code ownerAccount} or {@code videoChannel}
-     *                                         {@link JsonObject}
-     * @param jsonArrayName                    the key name of the {@link JsonArray} to which
-     *                                         extract all images available ({@code avatars} or
-     *                                         {@code banners})
-     * @param jsonObjectName                   the key name of the {@link JsonObject} to which
-     *                                         extract a single image ({@code avatar} or
-     *                                         {@code banner}), used as a fallback if the images
-     *                                         {@link JsonArray} is null or empty
-     * @return an unmodifiable list of {@link Image}s, which may be empty but never null
-     */
-    @Nonnull
-    private static List<Image> getImagesFromAvatarsOrBanners(
-            @Nonnull final String baseUrl,
-            @Nonnull final JsonObject ownerAccountOrVideoChannelObject,
-            @Nonnull final String jsonArrayName,
-            @Nonnull final String jsonObjectName) {
-        final JsonArray images = ownerAccountOrVideoChannelObject.getArray(jsonArrayName);
-
-        if (!isNullOrEmpty(images))  {
-            return getImagesFromAvatarOrBannerArray(baseUrl, images);
+    private static List<Image> profileImages(final String baseUrl, final JsonObject item,
+                                             final String listKey, final String fallbackKey) {
+        final JsonArray values = item.getArray(listKey);
+        final List<Image> images = new ArrayList<>(values.isEmpty() ? 1 : values.size());
+        if (values.isEmpty()) {
+            addProfileImage(images, baseUrl, item.getObject(fallbackKey));
+        } else {
+            for (final Object value : values) {
+                if (value instanceof JsonObject) addProfileImage(images, baseUrl, (JsonObject) value);
+            }
         }
-
-        final JsonObject image = ownerAccountOrVideoChannelObject.getObject(jsonObjectName);
-        final String path = image.getString("path");
-        if (!isNullOrEmpty(path)) {
-            return List.of(new Image(baseUrl + path, HEIGHT_UNKNOWN,
-                    image.getInt("width", WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN));
-        }
-
-        return List.of();
+        return Collections.unmodifiableList(images);
     }
 
-    /**
-     * Get {@link Image}s from an {@code avatars} or a {@code banners} {@link JsonArray}.
-     *
-     * <p>
-     * Only images for which paths are not null and not empty will be added to the
-     * unmodifiable {@link Image} list returned.
-     * </p>
-     *
-     * <p>
-     * Note that only the width of avatars or banners is provided by the API, and so only is the
-     * only dimension known of images.
-     * </p>
-     *
-     * @param baseUrl               the base URL of the PeerTube instance from which the
-     *                              {@code avatarsOrBannersArray} {@link JsonArray} comes from
-     * @param avatarsOrBannersArray an {@code avatars} or {@code banners} {@link JsonArray}
-     * @return an unmodifiable list of {@link Image}s, which may be empty but never null
-     */
-    @Nonnull
-    private static List<Image> getImagesFromAvatarOrBannerArray(
-            @Nonnull final String baseUrl,
-            @Nonnull final JsonArray avatarsOrBannersArray) {
-        return avatarsOrBannersArray.streamAsJsonObjects()
-                .filter(image -> !isNullOrEmpty(image.getString("path")))
-                .map(image -> new Image(baseUrl + image.getString("path"), HEIGHT_UNKNOWN,
-                        image.getInt("width", WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN))
-                .collect(Collectors.toUnmodifiableList());
+    private static void addProfileImage(final List<Image> images, final String baseUrl,
+                                        final JsonObject value) {
+        final String path = value.getString("path");
+        if (path != null && !path.isBlank()) {
+            images.add(new Image(resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
+                    value.getInt("width", Image.WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN));
+        }
+    }
+
+    private static void addThumbnail(final List<Image> images, final String baseUrl,
+                                     final String path, final ResolutionLevel quality) {
+        if (path != null && !path.isBlank()) {
+            images.add(new Image(resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
+                    Image.WIDTH_UNKNOWN, quality));
+        }
+    }
+
+    private static String resolve(final String baseUrl, final String path) {
+        try {
+            final String base = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+            return URI.create(base).resolve(path).toString();
+        } catch (final IllegalArgumentException ignored) {
+            return baseUrl + (path.startsWith("/") ? "" : "/") + path;
+        }
+    }
+
+    private static Object valueAt(final JsonObject item, final String path) {
+        Object value = item;
+        for (final String key : path.split("\\.")) {
+            if (!(value instanceof JsonObject)) return null;
+            value = ((JsonObject) value).get(key);
+        }
+        return value;
     }
 }

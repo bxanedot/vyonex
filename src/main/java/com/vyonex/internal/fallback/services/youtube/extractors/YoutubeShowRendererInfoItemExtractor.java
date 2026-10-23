@@ -1,58 +1,51 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromObject;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-/**
- * A {@link YoutubeBaseShowInfoItemExtractor} implementation for {@code showRenderer}s.
- */
+/** Adds uploader details to the shared VyonEx show-card mapping. */
 class YoutubeShowRendererInfoItemExtractor extends YoutubeBaseShowInfoItemExtractor {
+    private final JsonObject shortByline;
+    private final JsonObject longByline;
 
-    @Nonnull
-    private final JsonObject shortBylineText;
-    @Nonnull
-    private final JsonObject longBylineText;
-
-    YoutubeShowRendererInfoItemExtractor(@Nonnull final JsonObject showRenderer) {
-        super(showRenderer);
-        this.shortBylineText = showRenderer.getObject("shortBylineText");
-        this.longBylineText = showRenderer.getObject("longBylineText");
+    YoutubeShowRendererInfoItemExtractor(@Nonnull final JsonObject renderer) {
+        super(renderer);
+        this.shortByline = renderer.getObject("shortBylineText");
+        this.longByline = renderer.getObject("longBylineText");
     }
 
     @Override
     public String getUploaderName() throws ParsingException {
-        String name = getTextFromObject(longBylineText);
-        if (isNullOrEmpty(name)) {
-            name = getTextFromObject(shortBylineText);
-            if (isNullOrEmpty(name)) {
-                throw new ParsingException("Could not get uploader name");
-            }
+        final String name = getTextFromObject(longByline);
+        if (name != null && !name.isBlank()) return name;
+        final String fallback = getTextFromObject(shortByline);
+        if (fallback == null || fallback.isBlank()) {
+            throw new ParsingException("Show uploader name is missing");
         }
-        return name;
+        return fallback;
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        String uploaderUrl = getUrlFromObject(longBylineText);
-        if (uploaderUrl == null) {
-            uploaderUrl = getUrlFromObject(shortBylineText);
-            if (uploaderUrl == null) {
-                throw new ParsingException("Could not get uploader URL");
-            }
+        final String url = getUrlFromObject(longByline);
+        if (url != null && !url.isBlank()) return url;
+        final String fallback = getUrlFromObject(shortByline);
+        if (fallback == null || fallback.isBlank()) {
+            throw new ParsingException("Show uploader URL is missing");
         }
-        return uploaderUrl;
+        return fallback;
     }
 
     @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        // We do not have this information in showRenderers
+    public boolean isUploaderVerified() {
         return false;
     }
 }

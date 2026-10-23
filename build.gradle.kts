@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("java-library")
-    id("com.google.protobuf")
     id("maven-publish")
 }
 
@@ -34,6 +33,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.22.2")
     implementation("com.google.code.findbugs:jsr305:3.0.2")
     implementation("com.google.protobuf:protobuf-javalite:4.35.0")
+    implementation("com.ibm.icu:icu4j:78.3")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("org.mozilla:rhino-engine:1.8.1")
     testImplementation("io.ktor:ktor-client-mock:3.5.2")
@@ -44,7 +44,7 @@ dependencies {
 tasks.test { useJUnitPlatform() }
 
 tasks.jar {
-    from(files("LICENSE", "LICENSE-APACHE", "ATTRIBUTION.md")) { into("META-INF") }
+    from(files("LICENSE", "ATTRIBUTION.md")) { into("META-INF") }
 }
 
 publishing {
@@ -78,12 +78,4 @@ publishing {
     }
 }
 
-protobuf {
-    protoc { artifact = "com.google.protobuf:protoc:4.35.0" }
-    generateProtoTasks {
-        all().forEach { task ->
-            task.builtins { named("java") { option("lite") } }
-        }
-    }
-}
 // bxane

@@ -1,234 +1,173 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.comments.CommentsInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
+import com.vyonex.internal.fallback.services.youtube.YoutubeDescriptionHelper;
+import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Objects;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeDescriptionHelper.attributedDescriptionToHtml;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-/**
- * A {@link CommentsInfoItemExtractor} for YouTube comment data returned in a view model and entity
- * updates.
- */
+/** Maps YouTube's entity-update comment data into VyonEx's comment API. */
 class YoutubeCommentsEUVMInfoItemExtractor implements CommentsInfoItemExtractor {
-
-    private static final String AUTHOR = "author";
-    private static final String PROPERTIES = "properties";
-
-    @Nonnull
-    private final JsonObject commentViewModel;
-    @Nullable
-    private final JsonObject commentRepliesRenderer;
-    @Nonnull
-    private final JsonObject commentEntityPayload;
-    @Nonnull
-    private final JsonObject engagementToolbarStateEntityPayload;
-    @Nonnull
+    private final JsonObject viewModel;
+    @Nullable private final JsonObject replies;
+    private final JsonObject entity;
+    private final JsonObject engagement;
     private final String videoUrl;
-    @Nonnull
     private final TimeAgoParser timeAgoParser;
 
-    YoutubeCommentsEUVMInfoItemExtractor(
-            @Nonnull final JsonObject commentViewModel,
-            @Nullable final JsonObject commentRepliesRenderer,
-            @Nonnull final JsonObject commentEntityPayload,
-            @Nonnull final JsonObject engagementToolbarStateEntityPayload,
-            @Nonnull final String videoUrl,
-            @Nonnull final TimeAgoParser timeAgoParser) {
-        this.commentViewModel = commentViewModel;
-        this.commentRepliesRenderer = commentRepliesRenderer;
-        this.commentEntityPayload = commentEntityPayload;
-        this.engagementToolbarStateEntityPayload = engagementToolbarStateEntityPayload;
-        this.videoUrl = videoUrl;
-        this.timeAgoParser = timeAgoParser;
+    YoutubeCommentsEUVMInfoItemExtractor(@Nonnull final JsonObject viewModel,
+                                         @Nullable final JsonObject replies,
+                                         @Nonnull final JsonObject entity,
+                                         @Nonnull final JsonObject engagement,
+                                         @Nonnull final String videoUrl,
+                                         @Nonnull final TimeAgoParser timeAgoParser) {
+        this.viewModel = Objects.requireNonNull(viewModel, "comment view model is required");
+        this.replies = replies;
+        this.entity = Objects.requireNonNull(entity, "comment entity is required");
+        this.engagement = Objects.requireNonNull(engagement, "engagement state is required");
+        this.videoUrl = Objects.requireNonNull(videoUrl, "video URL is required");
+        this.timeAgoParser = Objects.requireNonNull(timeAgoParser, "date parser is required");
     }
 
-    @Override
-    public String getName() throws ParsingException {
-        return getUploaderName();
-    }
-
-    @Override
-    public String getUrl() throws ParsingException {
-        return videoUrl;
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() throws ParsingException {
+    @Override public String getName() { return getUploaderName(); }
+    @Override public String getUrl() { return videoUrl; }
+    @Nonnull @Override public List<Image> getThumbnails() throws ParsingException {
         return getUploaderAvatars();
     }
 
     @Override
     public int getLikeCount() throws ParsingException {
-        final String textualLikeCount = getTextualLikeCount();
+        final String label = getTextualLikeCount();
+        if (label == null || label.isBlank()) return 0;
         try {
-            if (Utils.isBlank(textualLikeCount)) {
-                return 0;
-            }
-
-            return (int) Utils.mixedNumberWordToLong(textualLikeCount);
-        } catch (final Exception e) {
-            throw new ParsingException(
-                    "Unexpected error while converting textual like count to like count", e);
+            return Math.toIntExact(Utils.mixedNumberWordToLong(label));
+        } catch (final ParsingException | NumberFormatException | ArithmeticException error) {
+            throw new ParsingException("Could not parse comment likes", error);
         }
     }
 
     @Override
     public String getTextualLikeCount() {
-        return commentEntityPayload.getObject("toolbar")
-                .getString("likeCountNotliked");
+        return entity.getObject("toolbar").getString("likeCountNotliked");
+    }
+
+    @Nonnull
+    @Override
+    public Description getCommentText() {
+        final String html = YoutubeDescriptionHelper.attributedDescriptionToHtml(
+                entity.getObject("properties").getObject("content"));
+        return new Description(html, Description.HTML);
     }
 
     @Override
-    public Description getCommentText() throws ParsingException {
-        // Comments' text work in the same way as an attributed video description
-        return new Description(
-                attributedDescriptionToHtml(commentEntityPayload.getObject(PROPERTIES)
-                        .getObject("content")), Description.HTML);
-    }
-
-    @Override
-    public String getTextualUploadDate() throws ParsingException {
-        return commentEntityPayload.getObject(PROPERTIES)
-                .getString("publishedTime");
+    public String getTextualUploadDate() {
+        return entity.getObject("properties").getString("publishedTime");
     }
 
     @Nullable
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        final String textualPublishedTime = getTextualUploadDate();
-        if (isNullOrEmpty(textualPublishedTime)) {
-            return null;
-        }
-
-        return timeAgoParser.parse(textualPublishedTime);
+        final String label = getTextualUploadDate();
+        return label == null || label.isBlank() ? null : timeAgoParser.parse(label);
     }
 
     @Override
     public String getCommentId() throws ParsingException {
-        String commentId = commentEntityPayload.getObject(PROPERTIES)
-                .getString("commentId");
-        if (isNullOrEmpty(commentId)) {
-            commentId = commentViewModel.getString("commentId");
-            if (isNullOrEmpty(commentId)) {
-                throw new ParsingException("Could not get comment ID");
-            }
-        }
-        return commentId;
+        String id = entity.getObject("properties").getString("commentId");
+        if (id == null || id.isBlank()) id = viewModel.getString("commentId");
+        if (id == null || id.isBlank()) throw new ParsingException("Comment ID is missing");
+        return id;
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        final JsonObject author = commentEntityPayload.getObject(AUTHOR);
+        final JsonObject author = entity.getObject("author");
         String channelId = author.getString("channelId");
-        if (isNullOrEmpty(channelId)) {
-            channelId = author.getObject("channelCommand")
-                    .getObject("innertubeCommand")
-                    .getObject("browseEndpoint")
+        if (channelId == null || channelId.isBlank()) {
+            channelId = author.getObject("channelCommand").getObject("innertubeCommand")
+                    .getObject("browseEndpoint").getString("browseId");
+        }
+        if (channelId == null || channelId.isBlank()) {
+            channelId = author.getObject("avatar").getObject("endpoint")
+                    .getObject("innertubeCommand").getObject("browseEndpoint")
                     .getString("browseId");
-            if (isNullOrEmpty(channelId)) {
-                channelId = author.getObject("avatar")
-                        .getObject("endpoint")
-                        .getObject("innertubeCommand")
-                        .getObject("browseEndpoint")
-                        .getString("browseId");
-                if (isNullOrEmpty(channelId)) {
-                    throw new ParsingException("Could not get channel ID");
-                }
-            }
+        }
+        if (channelId == null || channelId.isBlank()) {
+            throw new ParsingException("Comment author channel ID is missing");
         }
         return "https://www.youtube.com/channel/" + channelId;
     }
 
-    @Override
-    public String getUploaderName() throws ParsingException {
-        return commentEntityPayload.getObject(AUTHOR)
-                .getString("displayName");
+    @Override public String getUploaderName() {
+        return entity.getObject("author").getString("displayName");
     }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() throws ParsingException {
-        return getImagesFromThumbnailsArray(commentEntityPayload.getObject("avatar")
-                .getObject("image")
-                .getArray("sources"));
+        final JsonArray sources = entity.getObject("avatar").getObject("image")
+                .getArray("sources");
+        return YoutubeParsingHelper.getImagesFromThumbnailsArray(sources);
     }
 
     @Override
     public boolean isHeartedByUploader() {
-        return "TOOLBAR_HEART_STATE_HEARTED".equals(
-                engagementToolbarStateEntityPayload.getString("heartState"));
+        return "TOOLBAR_HEART_STATE_HEARTED".equals(engagement.getString("heartState"));
     }
 
-    @Override
-    public boolean isPinned() {
-        return commentViewModel.has("pinnedText");
-    }
+    @Override public boolean isPinned() { return viewModel.has("pinnedText"); }
 
     @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        final JsonObject author = commentEntityPayload.getObject(AUTHOR);
+    public boolean isUploaderVerified() {
+        final JsonObject author = entity.getObject("author");
         return author.getBoolean("isVerified") || author.getBoolean("isArtist");
     }
 
     @Override
     public int getReplyCount() throws ParsingException {
-        // As YouTube allows replies up to 750 comments, we cannot check if the count returned is a
-        // mixed number or a real number
-        // Assume it is a mixed one, as it matches how numbers of most properties are returned
-        final String replyCountString = commentEntityPayload.getObject("toolbar")
-                .getString("replyCount");
-        if (isNullOrEmpty(replyCountString)) {
-            return 0;
+        final String label = entity.getObject("toolbar").getString("replyCount");
+        if (label == null || label.isBlank()) return 0;
+        try {
+            return Math.toIntExact(Utils.mixedNumberWordToLong(label));
+        } catch (final ParsingException | NumberFormatException | ArithmeticException error) {
+            throw new ParsingException("Could not parse comment reply count", error);
         }
-        return (int) Utils.mixedNumberWordToLong(replyCountString);
     }
 
     @Nullable
     @Override
     public Page getReplies() throws ParsingException {
-        if (isNullOrEmpty(commentRepliesRenderer)) {
-            return null;
+        if (replies == null) return null;
+        for (final JsonObject content : replies.getArray("contents").streamAsJsonObjects().toList()) {
+            final String token = content.getObject("continuationItemRenderer")
+                    .getObject("continuationEndpoint").getObject("continuationCommand")
+                    .getString("token");
+            if (token != null && !token.isBlank()) return new Page(videoUrl, token);
         }
-
-        final String continuation = commentRepliesRenderer.getArray("contents")
-                .streamAsJsonObjects()
-                .map(content -> content.getObject("continuationItemRenderer", null))
-                .filter(Objects::nonNull)
-                .findFirst()
-                .map(continuationItemRenderer ->
-                                continuationItemRenderer.getObject("continuationEndpoint")
-                                        .getObject("continuationCommand")
-                                        .getString("token"))
-                .orElseThrow(() ->
-                        new ParsingException("Could not get comment replies continuation"));
-        return new Page(videoUrl, continuation);
+        throw new ParsingException("Comment replies continuation is missing");
     }
 
     @Override
     public boolean isChannelOwner() {
-        return commentEntityPayload.getObject(AUTHOR)
-                .getBoolean("isCreator");
+        return entity.getObject("author").getBoolean("isCreator");
     }
 
-    @Override
-    public boolean hasCreatorReply() {
-        return commentRepliesRenderer != null
-                && commentRepliesRenderer.has("viewRepliesCreatorThumbnail");
+    @Override public boolean hasCreatorReply() {
+        return replies != null && replies.has("viewRepliesCreatorThumbnail");
     }
 }

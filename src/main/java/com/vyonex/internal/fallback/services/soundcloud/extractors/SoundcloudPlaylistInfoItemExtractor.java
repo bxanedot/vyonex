@@ -1,104 +1,53 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.json.JsonObject;
 
-import javax.annotation.Nonnull;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
+public final class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
+    private final JsonObject playlist;
 
-public class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private static final String USER_KEY = "user";
-    private static final String AVATAR_URL_KEY = "avatar_url";
-    private static final String ARTWORK_URL_KEY = "artwork_url";
+    public SoundcloudPlaylistInfoItemExtractor(final JsonObject playlist) { this.playlist = playlist; }
 
-    private final JsonObject itemObject;
-
-    public SoundcloudPlaylistInfoItemExtractor(final JsonObject itemObject) {
-        this.itemObject = itemObject;
+    @Override public String getName() { return playlist.getString("title", ""); }
+    @Override public String getUrl() {
+        return SoundcloudParsingHelper.toHttpsUrl(playlist.getString("permalink_url", ""));
     }
-
-    @Override
-    public String getName() {
-        return itemObject.getString("title");
-    }
-
-    @Override
-    public String getUrl() {
-        return replaceHttpWithHttps(itemObject.getString("permalink_url"));
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        // Over-engineering at its finest
-        if (itemObject.isString(ARTWORK_URL_KEY)) {
-            final String artworkUrl = itemObject.getString(ARTWORK_URL_KEY);
-            if (!isNullOrEmpty(artworkUrl)) {
-                return getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
+    @Override public List<Image> getThumbnails() throws ParsingException {
+        String url = playlist.getString("artwork_url");
+        if (url == null || url.isBlank()) {
+            for (final Object value : playlist.getArray("tracks")) {
+                if (!(value instanceof JsonObject)) continue;
+                final JsonObject track = (JsonObject) value;
+                url = track.getString("artwork_url");
+                if (url == null || url.isBlank()) {
+                    url = track.getObject("user").getString("avatar_url");
+                }
+                if (url != null && !url.isBlank()) break;
             }
         }
-
-        try {
-            // Look for artwork URL inside the track list
-            for (final Object track : itemObject.getArray("tracks")) {
-                final JsonObject trackObject = (JsonObject) track;
-
-                // First look for track artwork URL
-                if (trackObject.isString(ARTWORK_URL_KEY)) {
-                    final String artworkUrl = trackObject.getString(ARTWORK_URL_KEY);
-                    if (!isNullOrEmpty(artworkUrl)) {
-                        return getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
-                    }
-                }
-
-                // Then look for track creator avatar URL
-                final JsonObject creator = trackObject.getObject(USER_KEY);
-                final String creatorAvatar = creator.getString(AVATAR_URL_KEY);
-                if (!isNullOrEmpty(creatorAvatar)) {
-                    return getAllImagesFromArtworkOrAvatarUrl(creatorAvatar);
-                }
-            }
-        } catch (final Exception ignored) {
-            // Try other method
+        if (url == null || url.isBlank()) {
+            url = playlist.getObject("user").getString("avatar_url");
         }
-
-        try {
-            // Last resort, use user avatar URL. If still not found, then throw an exception.
-            return getAllImagesFromArtworkOrAvatarUrl(
-                    itemObject.getObject(USER_KEY).getString(AVATAR_URL_KEY));
-        } catch (final Exception e) {
-            throw new ParsingException("Failed to extract playlist thumbnails", e);
-        }
+        if (url == null || url.isBlank()) throw new ParsingException("Playlist has no image");
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(url);
     }
-
-    @Override
-    public String getUploaderName() throws ParsingException {
-        try {
-            return itemObject.getObject(USER_KEY).getString("username");
-        } catch (final Exception e) {
-            throw new ParsingException("Failed to extract playlist uploader", e);
-        }
+    @Override public String getUploaderName() {
+        return playlist.getObject("user").getString("username", "");
     }
-
-    @Override
-    public String getUploaderUrl() {
-        return itemObject.getObject(USER_KEY).getString("permalink_url");
+    @Override public String getUploaderUrl() {
+        return SoundcloudParsingHelper.toHttpsUrl(
+                playlist.getObject("user").getString("permalink_url", ""));
     }
-
-    @Override
-    public boolean isUploaderVerified() {
-        return itemObject.getObject(USER_KEY).getBoolean("verified");
+    @Override public boolean isUploaderVerified() {
+        return playlist.getObject("user").getBoolean("verified");
     }
-
-    @Override
-    public long getStreamCount() {
-        return itemObject.getLong("track_count");
-    }
+    @Override public long getStreamCount() { return playlist.getLong("track_count"); }
 }

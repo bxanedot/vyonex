@@ -1,5 +1,17 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.dashmanifestcreators;
+
+import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.services.youtube.DeliveryType;
+import com.vyonex.internal.fallback.services.youtube.ItagItem;
+import com.vyonex.internal.fallback.utils.ManifestCreatorCache;
+import org.w3c.dom.DOMException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import javax.annotation.Nonnull;
 
 import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators.YoutubeDashManifestCreatorsUtils.ALR_YES;
 import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators.YoutubeDashManifestCreatorsUtils.RN_0;
@@ -11,204 +23,85 @@ import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators
 import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators.YoutubeDashManifestCreatorsUtils.generateSegmentTimelineElement;
 import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators.YoutubeDashManifestCreatorsUtils.getInitializationResponse;
 import static com.vyonex.internal.fallback.services.youtube.dashmanifestcreators.YoutubeDashManifestCreatorsUtils.setAttribute;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.vyonex.internal.fallback.downloader.Response;
-import com.vyonex.internal.fallback.services.youtube.DeliveryType;
-import com.vyonex.internal.fallback.services.youtube.ItagItem;
-import com.vyonex.internal.fallback.utils.ManifestCreatorCache;
-import org.w3c.dom.DOMException;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import javax.annotation.Nonnull;
-
-/**
- * Class which generates DASH manifests of YouTube post-live DVR streams (which use the
- * {@link DeliveryType#LIVE LIVE delivery type}).
- */
 public final class YoutubePostLiveStreamDvrDashManifestCreator {
+    private static final String DURATION_HEADER = "X-Head-Time-Millis";
+    private static final String SEGMENT_COUNT_HEADER = "X-Head-Seqnum";
+    private static final ManifestCreatorCache<String, String> CACHE =
+            new ManifestCreatorCache<>();
 
-    /**
-     * Cache of DASH manifests generated for post-live-DVR streams.
-     */
-    private static final ManifestCreatorCache<String, String> POST_LIVE_DVR_STREAMS_CACHE
-            = new ManifestCreatorCache<>();
+    private YoutubePostLiveStreamDvrDashManifestCreator() { }
 
-    private YoutubePostLiveStreamDvrDashManifestCreator() {
-    }
-
-    /**
-     * Create DASH manifests from a YouTube post-live-DVR stream/ended livestream.
-     *
-     * <p>
-     * Post-live-DVR streams/ended livestreams are one of the YouTube DASH specific streams which
-     * works with sequences and without the need to get a manifest (even if one is provided but not
-     * used by main clients (and is not complete for big ended livestreams because it doesn't
-     * return the full stream)).
-     * </p>
-     *
-     * <p>
-     * They can be found only on livestreams which have ended very recently (a few hours, most of
-     * the time)
-     * </p>
-     *
-     * This method needs:
-     * <ul>
-     *     <li>the base URL of the stream (which, if you try to access to it, returns HTTP
-     *     status code 404 after redirects, and if the URL is valid);</li>
-     *     <li>an {@link ItagItem}, which needs to contain the following information:
-     *         <ul>
-     *             <li>its type (see {@link ItagItem.ItagType}), to identify if the content is
-     *             an audio or a video stream;</li>
-     *             <li>its bitrate;</li>
-     *             <li>its mime type;</li>
-     *             <li>its codec(s);</li>
-     *             <li>for an audio stream: its audio channels;</li>
-     *             <li>for a video stream: its width and height.</li>
-     *         </ul>
-     *     </li>
-     *     <li>the duration of the video, which will be used if the duration could not be
-     *     parsed from the first sequence of the stream.</li>
-     * </ul>
-     *
-     * In order to generate the DASH manifest, this method will:
-     * <ul>
-     *     <li>request the first sequence of the stream (the base URL on which the first
-     *     sequence parameter is appended (see {@link YoutubeDashManifestCreatorsUtils#SQ_0}))
-     *     with a {@code POST} or {@code GET} request (depending of the client on which the
-     *     streaming URL comes from is a mobile one ({@code POST}) or not ({@code GET}));</li>
-     *     <li>follow its redirection(s), if any;</li>
-     *     <li>save the last URL, remove the first sequence parameters;</li>
-     *     <li>use the information provided in the {@link ItagItem} to generate all elements
-     *     of the DASH manifest.</li>
-     * </ul>
-     *
-     * <p>
-     * If the duration cannot be extracted, the {@code durationSecondsFallback} value will be used
-     * as the stream duration.
-     * </p>
-     *
-     * @param postLiveStreamDvrStreamingUrl the base URL of the post-live-DVR stream/ended
-     *                                      livestream, which must not be null
-     * @param itagItem                      the {@link ItagItem} corresponding to the stream, which
-     *                                      must not be null
-     * @param targetDurationSec             the target duration of each sequence, in seconds (this
-     *                                      value is returned with the {@code targetDurationSec}
-     *                                      field for each stream in YouTube's player response)
-     * @param durationSecondsFallback       the duration of the ended livestream, which will be
-     *                                      used if the duration could not be extracted from the
-     *                                      first sequence
-     * @return the manifest generated into a string
-     */
     @Nonnull
     public static String fromPostLiveStreamDvrStreamingUrl(
-            @Nonnull final String postLiveStreamDvrStreamingUrl,
-            @Nonnull final ItagItem itagItem,
+            @Nonnull final String baseUrl,
+            @Nonnull final ItagItem itag,
             final int targetDurationSec,
             final long durationSecondsFallback) throws CreationException {
-        if (POST_LIVE_DVR_STREAMS_CACHE.containsKey(postLiveStreamDvrStreamingUrl)) {
-            return Objects.requireNonNull(
-                    POST_LIVE_DVR_STREAMS_CACHE.get(postLiveStreamDvrStreamingUrl)).getSecond();
-        }
-
-        String realPostLiveStreamDvrStreamingUrl = postLiveStreamDvrStreamingUrl;
-        final String streamDurationString;
-        final String segmentCount;
-
+        final var cached = CACHE.get(baseUrl);
+        if (cached != null) return cached.getSecond();
         if (targetDurationSec <= 0) {
             throw new CreationException("targetDurationSec value is <= 0: " + targetDurationSec);
         }
 
-        try {
-            // Try to avoid redirects when streaming the content by saving the latest URL we get
-            // from video servers.
-            final Response response = getInitializationResponse(realPostLiveStreamDvrStreamingUrl,
-                    itagItem, DeliveryType.LIVE);
-            realPostLiveStreamDvrStreamingUrl = response.latestUrl().replace(SQ_0, "")
-                    .replace(RN_0, "").replace(ALR_YES, "");
-
-            final int responseCode = response.responseCode();
-            if (responseCode != 200) {
-                throw new CreationException(
-                        "Could not get the initialization sequence: response code " + responseCode);
-            }
-
-            final Map<String, List<String>> responseHeaders = response.responseHeaders();
-            streamDurationString = responseHeaders.get("X-Head-Time-Millis").get(0);
-            segmentCount = responseHeaders.get("X-Head-Seqnum").get(0);
-        } catch (final IndexOutOfBoundsException e) {
-            throw new CreationException(
-                    "Could not get the value of the X-Head-Time-Millis or the X-Head-Seqnum header",
-                    e);
+        final Response response = getInitializationResponse(baseUrl, itag, DeliveryType.LIVE);
+        if (response.responseCode() != 200) {
+            throw new CreationException("Could not get the initialization sequence: response code "
+                    + response.responseCode());
         }
 
-        if (isNullOrEmpty(segmentCount)) {
+        final String durationHeader = response.getHeader(DURATION_HEADER);
+        final String segmentCount = response.getHeader(SEGMENT_COUNT_HEADER);
+        if (durationHeader == null || segmentCount == null) {
+            throw new CreationException("Could not get the value of the " + DURATION_HEADER
+                    + " or the " + SEGMENT_COUNT_HEADER + " header");
+        }
+        if (segmentCount.isBlank()) {
             throw new CreationException("Could not get the number of segments");
         }
 
-        long streamDuration;
+        long durationMs;
         try {
-            streamDuration = Long.parseLong(streamDurationString);
+            durationMs = Long.parseLong(durationHeader);
         } catch (final NumberFormatException e) {
-            streamDuration = durationSecondsFallback;
+            if (durationSecondsFallback <= 0) {
+                throw new CreationException("Could not parse stream duration or use fallback", e);
+            }
+            durationMs = durationSecondsFallback * 1000;
         }
 
-        final Document doc = generateDocumentAndDoCommonElementsGeneration(itagItem,
-                streamDuration);
-
-        generateSegmentTemplateElement(doc, realPostLiveStreamDvrStreamingUrl,
-                DeliveryType.LIVE);
-        generateSegmentTimelineElement(doc);
-        generateSegmentElementForPostLiveDvrStreams(doc, targetDurationSec, segmentCount);
-
-        return buildAndCacheResult(postLiveStreamDvrStreamingUrl, doc,
-                POST_LIVE_DVR_STREAMS_CACHE);
+        return createManifest(baseUrl, cleanedUrl(response), itag, targetDurationSec, durationMs,
+                segmentCount);
     }
 
-    /**
-     * @return the cache of DASH manifests generated for post-live-DVR streams
-     */
     @Nonnull
     public static ManifestCreatorCache<String, String> getCache() {
-        return POST_LIVE_DVR_STREAMS_CACHE;
+        return CACHE;
     }
 
-    /**
-     * Generate the segment ({@code <S>}) element.
-     *
-     * <p>
-     * We don't know the exact duration of segments for post-live-DVR streams but an
-     * average instead (which is the {@code targetDurationSec} value), so we can use the following
-     * structure to generate the segment timeline for DASH manifests of ended livestreams:
-     * <br>
-     * {@code <S d="targetDurationSecValue" r="segmentCount" />}
-     * </p>
-     *
-     * @param doc                   the {@link Document} on which the {@code <S>} element will
-     *                              be appended
-     * @param targetDurationSeconds the {@code targetDurationSec} value from YouTube player
-     *                              response's stream
-     * @param segmentCount          the number of segments, extracted by {@link
-     *                              #fromPostLiveStreamDvrStreamingUrl(String, ItagItem, int, long)}
-     */
-    private static void generateSegmentElementForPostLiveDvrStreams(
-            @Nonnull final Document doc,
-            final int targetDurationSeconds,
-            @Nonnull final String segmentCount) throws CreationException {
+    private static String cleanedUrl(final Response response) {
+        return response.latestUrl().replace(SQ_0, "").replace(RN_0, "").replace(ALR_YES, "");
+    }
+
+    private static String createManifest(final String originalUrl, final String streamUrl,
+                                         final ItagItem itag, final int targetDurationSec,
+                                         final long durationMs, final String segmentCount) {
+        final Document document = generateDocumentAndDoCommonElementsGeneration(itag, durationMs);
+        generateSegmentTemplateElement(document, streamUrl, DeliveryType.LIVE);
+        generateSegmentTimelineElement(document);
+        appendSegment(document, targetDurationSec, segmentCount);
+        return buildAndCacheResult(originalUrl, document, CACHE);
+    }
+
+    private static void appendSegment(final Document document, final int targetDurationSec,
+                                      final String segmentCount) {
         try {
-            final Element segmentTimelineElement = (Element) doc.getElementsByTagName(
+            final Element timeline = (Element) document.getElementsByTagName(
                     SEGMENT_TIMELINE).item(0);
-            final Element sElement = doc.createElement("S");
-
-            setAttribute(sElement, doc, "d", String.valueOf(targetDurationSeconds * 1000));
-            setAttribute(sElement, doc, "r", segmentCount);
-
-            segmentTimelineElement.appendChild(sElement);
+            final Element segment = document.createElement("S");
+            setAttribute(segment, document, "d", String.valueOf((long) targetDurationSec * 1000));
+            setAttribute(segment, document, "r", segmentCount);
+            timeline.appendChild(segment);
         } catch (final DOMException e) {
             throw CreationException.couldNotAddElement("segment (S)", e);
         }

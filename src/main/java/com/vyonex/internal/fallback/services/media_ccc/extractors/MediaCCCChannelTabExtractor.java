@@ -1,7 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
-
-import com.grack.nanojson.JsonObject;
 
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.ListExtractor;
@@ -13,56 +13,39 @@ import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
-
-import java.io.IOException;
-import java.util.Objects;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.IOException;
 
-/**
- * MediaCCC does not really have channel tabs, but rather a list of videos for each conference,
- * so this class just acts as a videos channel tab extractor.
- */
 public class MediaCCCChannelTabExtractor extends ChannelTabExtractor {
-    @Nullable
-    private JsonObject conferenceData;
+    @Nullable private JsonObject conference;
 
-    /**
-     * @param conferenceData will be not-null if conference data has already been fetched by
-     *                       {@link MediaCCCConferenceExtractor}. Otherwise, if this parameter is
-     *                       {@code null}, conference data will be fetched anew.
-     */
     public MediaCCCChannelTabExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler,
-                                       @Nullable final JsonObject conferenceData) {
+                                       @Nullable final JsonObject conference) {
         super(service, linkHandler);
-        this.conferenceData = conferenceData;
+        this.conference = conference;
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws ExtractionException, IOException {
-        if (conferenceData == null) {
-            // only fetch conference data if we don't have it already
-            conferenceData = MediaCCCConferenceExtractor.fetchConferenceData(downloader, getId());
+        if (conference == null) {
+            conference = MediaCCCConferenceExtractor.fetchConferenceData(downloader, getId());
         }
     }
 
-    @Nonnull
-    @Override
-    public ListExtractor.InfoItemsPage<InfoItem> getInitialPage() {
-        final MultiInfoItemsCollector collector =
-                new MultiInfoItemsCollector(getServiceId());
-        Objects.requireNonNull(conferenceData) // will surely be != null after onFetchPage
-                .getArray("events")
-                .streamAsJsonObjects()
-                .forEach(event -> collector.commit(new MediaCCCStreamInfoItemExtractor(event)));
-        return new ListExtractor.InfoItemsPage<>(collector, null);
+    @Nonnull @Override public ListExtractor.InfoItemsPage<InfoItem> getInitialPage() {
+        if (conference == null) throw new IllegalStateException("Conference was not fetched");
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        conference.getArray("events").streamAsJsonObjects()
+                .map(MediaCCCStreamInfoItemExtractor::new)
+                .forEach(items::commit);
+        return new ListExtractor.InfoItemsPage<>(items, null);
     }
 
-    @Override
-    public ListExtractor.InfoItemsPage<InfoItem> getPage(final Page page) {
+    @Override public ListExtractor.InfoItemsPage<InfoItem> getPage(final Page page) {
         return ListExtractor.InfoItemsPage.emptyPage();
     }
 }

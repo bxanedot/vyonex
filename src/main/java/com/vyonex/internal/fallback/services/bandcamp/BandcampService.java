@@ -1,15 +1,7 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp;
-
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.AUDIO;
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.COMMENTS;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_URL;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampFeaturedExtractor.FEATURED_API_URL;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampFeaturedExtractor.KIOSK_FEATURED;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampRadioExtractor.KIOSK_RADIO;
-import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampRadioExtractor.RADIO_API_URL;
 
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
@@ -50,16 +42,19 @@ import com.vyonex.internal.fallback.suggestion.SuggestionExtractor;
 
 import java.util.EnumSet;
 
-public class BandcampService extends StreamingService {
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.AUDIO;
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.COMMENTS;
+import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_URL;
+import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampFeaturedExtractor.KIOSK_FEATURED;
+import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampRadioExtractor.KIOSK_RADIO;
 
+public class BandcampService extends StreamingService {
     public BandcampService(final int id) {
         super(id, "Bandcamp", EnumSet.of(AUDIO, COMMENTS));
     }
 
     @Override
-    public String getBaseUrl() {
-        return BASE_URL;
-    }
+    public String getBaseUrl() { return BASE_URL; }
 
     @Override
     public LinkHandlerFactory getStreamLHFactory() {
@@ -92,8 +87,8 @@ public class BandcampService extends StreamingService {
     }
 
     @Override
-    public SearchExtractor getSearchExtractor(final SearchQueryHandler queryHandler) {
-        return new BandcampSearchExtractor(this, queryHandler);
+    public SearchExtractor getSearchExtractor(final SearchQueryHandler query) {
+        return new BandcampSearchExtractor(this, query);
     }
 
     @Override
@@ -102,43 +97,22 @@ public class BandcampService extends StreamingService {
     }
 
     @Override
-    public SubscriptionExtractor getSubscriptionExtractor() {
-        return null;
-    }
+    public SubscriptionExtractor getSubscriptionExtractor() { return null; }
 
     @Override
     public KioskList getKioskList() throws ExtractionException {
-        final KioskList kioskList = new KioskList(this);
-        final ListLinkHandlerFactory h = BandcampFeaturedLinkHandlerFactory.getInstance();
-
+        final KioskList kiosks = new KioskList(this);
+        final var handlers = BandcampFeaturedLinkHandlerFactory.getInstance();
         try {
-            kioskList.addKioskEntry(
-                    (streamingService, url, kioskId) -> new BandcampFeaturedExtractor(
-                            BandcampService.this,
-                            h.fromUrl(FEATURED_API_URL),
-                            kioskId
-                    ),
-                    h,
-                    KIOSK_FEATURED
-            );
-
-            kioskList.addKioskEntry(
-                    (streamingService, url, kioskId) -> new BandcampRadioExtractor(
-                            BandcampService.this,
-                            h.fromUrl(RADIO_API_URL),
-                            kioskId
-                    ),
-                    h,
-                    KIOSK_RADIO
-            );
-
-            kioskList.setDefaultKiosk(KIOSK_FEATURED);
-
-        } catch (final Exception e) {
+            kiosks.addKioskEntry((service, url, id) -> new BandcampFeaturedExtractor(
+                            service, handlers.fromUrl(url), id), handlers, KIOSK_FEATURED);
+            kiosks.addKioskEntry((service, url, id) -> new BandcampRadioExtractor(
+                            service, handlers.fromUrl(url), id), handlers, KIOSK_RADIO);
+        } catch (Exception e) {
             throw new ExtractionException(e);
         }
-
-        return kioskList;
+        kiosks.setDefaultKiosk(KIOSK_FEATURED);
+        return kiosks;
     }
 
     @Override
@@ -148,11 +122,10 @@ public class BandcampService extends StreamingService {
 
     @Override
     public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler linkHandler) {
-        if (linkHandler instanceof ReadyChannelTabListLinkHandler) {
-            return ((ReadyChannelTabListLinkHandler) linkHandler).getChannelTabExtractor(this);
-        } else {
-            return new BandcampChannelTabExtractor(this, linkHandler);
+        if (linkHandler instanceof ReadyChannelTabListLinkHandler ready) {
+            return ready.getChannelTabExtractor(this);
         }
+        return new BandcampChannelTabExtractor(this, linkHandler);
     }
 
     @Override
@@ -162,10 +135,9 @@ public class BandcampService extends StreamingService {
 
     @Override
     public StreamExtractor getStreamExtractor(final LinkHandler linkHandler) {
-        if (BandcampExtractorHelper.isRadioUrl(linkHandler.getUrl())) {
-            return new BandcampRadioStreamExtractor(this, linkHandler);
-        }
-        return new BandcampStreamExtractor(this, linkHandler);
+        return BandcampExtractorHelper.isRadioUrl(linkHandler.getUrl())
+                ? new BandcampRadioStreamExtractor(this, linkHandler)
+                : new BandcampStreamExtractor(this, linkHandler);
     }
 
     @Override

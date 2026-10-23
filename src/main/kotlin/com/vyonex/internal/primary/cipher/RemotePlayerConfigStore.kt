@@ -18,7 +18,7 @@ import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 
 internal const val DEFAULT_PLAYER_CONFIG_URL =
-    "https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json"
+    "https://raw.githubusercontent.com/bxanedot/vyonex/main/player_configs.json"
 
 /**
  * Runtime store for validated remote player configs.

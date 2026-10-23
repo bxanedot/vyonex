@@ -1,6 +1,7 @@
 // bxane
 package com.vyonex.internal.primary
 
+import java.io.ByteArrayOutputStream
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
@@ -18,27 +19,22 @@ public suspend fun HttpResponse.bodyAsTextLimited(maxBytes: Int): String {
     }
 
     val readBuffer = ByteArray(minOf(DEFAULT_READ_BUFFER_SIZE, maxBytes))
-    var bytes = ByteArray(minOf(declaredLength?.toInt() ?: DEFAULT_READ_BUFFER_SIZE, maxBytes))
-    var size = 0
+    val output = ByteArrayOutputStream(minOf(DEFAULT_READ_BUFFER_SIZE, maxBytes))
     try {
         while (true) {
             val count = channel.readAvailable(readBuffer, 0, readBuffer.size)
             if (count == -1) break
             if (count == 0) continue
-            if (size > maxBytes - count) {
+            if (output.size() > maxBytes - count) {
                 throw IllegalStateException("Response exceeded the $maxBytes byte limit")
             }
-            if (size + count > bytes.size) {
-                bytes = bytes.copyOf(minOf(maxBytes, maxOf(size + count, bytes.size * 2)))
-            }
-            readBuffer.copyInto(bytes, destinationOffset = size, endIndex = count)
-            size += count
+            output.write(readBuffer, 0, count)
         }
     } catch (error: Throwable) {
         channel.cancel(error)
         throw error
     }
-    return bytes.decodeToString(endIndex = size)
+    return output.toString(Charsets.UTF_8)
 }
 
 private const val DEFAULT_READ_BUFFER_SIZE = 8 * 1024

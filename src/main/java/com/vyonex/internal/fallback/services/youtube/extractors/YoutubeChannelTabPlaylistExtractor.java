@@ -1,8 +1,9 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
+import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabExtractor;
@@ -16,156 +17,87 @@ import com.vyonex.internal.fallback.playlist.PlaylistExtractor;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubePlaylistLinkHandlerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 
-/**
- * A {@link ChannelTabExtractor} for YouTube system playlists using a
- * {@link YoutubePlaylistExtractor} instance.
- *
- * <p>
- * It is currently used to bypass age-restrictions on channels marked as age-restricted by their
- * owner(s).
- * </p>
- */
 public class YoutubeChannelTabPlaylistExtractor extends ChannelTabExtractor {
+    private final PlaylistExtractor playlist;
+    private boolean available;
 
-    private final PlaylistExtractor playlistExtractorInstance;
-    private boolean playlistExisting;
-
-    /**
-     * Construct a {@link YoutubeChannelTabPlaylistExtractor} instance.
-     *
-     * @param service     a {@link StreamingService} implementation, which must be the YouTube
-     *                    one
-     * @param linkHandler a {@link ListLinkHandler} which must have a valid channel ID (starting
-     *                    with `UC`) and one of the given and supported content filters:
-     *                    {@link ChannelTabs#VIDEOS}, {@link ChannelTabs#SHORTS},
-     *                    {@link ChannelTabs#LIVESTREAMS}
-     * @throws IllegalArgumentException if the given {@link ListLinkHandler} doesn't have the
-     * required arguments
-     * @throws SystemPlaylistUrlCreationException if the system playlist URL could not be created,
-     * which should never happen
-     */
     public YoutubeChannelTabPlaylistExtractor(@Nonnull final StreamingService service,
                                               @Nonnull final ListLinkHandler linkHandler)
             throws IllegalArgumentException, SystemPlaylistUrlCreationException {
         super(service, linkHandler);
-        final ListLinkHandler playlistLinkHandler = getPlaylistLinkHandler(linkHandler);
-        this.playlistExtractorInstance = new YoutubePlaylistExtractor(service, playlistLinkHandler);
+        playlist = new YoutubePlaylistExtractor(service, systemPlaylistLink(linkHandler));
     }
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
+        available = false;
         try {
-            playlistExtractorInstance.onFetchPage(downloader);
-            if (!playlistExisting) {
-                playlistExisting = true;
-            }
-        } catch (final ContentNotAvailableException e) {
-            // If a channel has no content of the type requested, the corresponding system playlist
-            // won't exist, so a ContentNotAvailableException would be thrown
-            // Ignore such issues in this case
+            playlist.onFetchPage(downloader);
+            available = true;
+        } catch (final ContentNotAvailableException ignored) {
+            // An empty channel tab has no backing system playlist.
         }
     }
 
     @Nonnull
     @Override
-    public InfoItemsPage getInitialPage() throws IOException, ExtractionException {
-        if (!playlistExisting) {
-            return InfoItemsPage.emptyPage();
-        }
-        return playlistExtractorInstance.getInitialPage();
+    public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
+        return available ? asInfoItemsPage(playlist.getInitialPage()) : InfoItemsPage.emptyPage();
     }
 
     @Override
-    public InfoItemsPage getPage(final Page page) throws IOException, ExtractionException {
-        if (!playlistExisting) {
-            return InfoItemsPage.emptyPage();
-        }
-        return playlistExtractorInstance.getPage(page);
+    public InfoItemsPage<InfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
+        return available ? asInfoItemsPage(playlist.getPage(page)) : InfoItemsPage.emptyPage();
     }
 
-    /**
-     * Get a playlist {@link ListLinkHandler} from a channel tab one.
-     *
-     * <p>
-     * This method converts a channel ID without its {@code UC} prefix into a YouTube system
-     * playlist, depending on the first content filter provided in the given
-     * {@link ListLinkHandler}.
-     * </p>
-     *
-     * <p>
-     * The first content filter must be a channel tabs one among the
-     * {@link ChannelTabs#VIDEOS videos}, {@link ChannelTabs#SHORTS shorts} and
-     * {@link ChannelTabs#LIVESTREAMS} ones, which would be converted respectively into playlists
-     * with the ID {@code UULF}, {@code UUSH} and {@code UULV} on which the channel ID without the
-     * {@code UC} part is appended.
-     * </p>
-     *
-     * @param originalLinkHandler the original {@link ListLinkHandler} with which a
-     * {@link YoutubeChannelTabPlaylistExtractor} instance is being constructed
-     *
-     * @return a {@link ListLinkHandler} to use for the {@link YoutubePlaylistExtractor} instance
-     * needed to extract channel tabs data from a system playlist
-     * @throws IllegalArgumentException if the original {@link ListLinkHandler} does not meet the
-     * required criteria above
-     * @throws SystemPlaylistUrlCreationException if the system playlist URL could not be created,
-     * which should never happen
-     */
-    @Nonnull
-    private ListLinkHandler getPlaylistLinkHandler(
-            @Nonnull final ListLinkHandler originalLinkHandler)
-            throws IllegalArgumentException, SystemPlaylistUrlCreationException {
-        final List<String> contentFilters = originalLinkHandler.getContentFilters();
-        if (contentFilters.isEmpty()) {
-            throw new IllegalArgumentException("A content filter is required");
-        }
+    private static InfoItemsPage<InfoItem> asInfoItemsPage(
+            final InfoItemsPage<? extends InfoItem> page) {
+        return new InfoItemsPage<>(new ArrayList<InfoItem>(page.getItems()), page.getNextPage(),
+                page.getErrors());
+    }
 
-        final String channelId = originalLinkHandler.getId();
-        if (isNullOrEmpty(channelId) || !channelId.startsWith("UC")) {
+    static String systemPlaylistId(final String channelId, final String tab) {
+        if (channelId == null || !channelId.startsWith("UC")) {
             throw new IllegalArgumentException("Invalid channel ID");
         }
 
-        final String channelIdWithoutUc = channelId.substring(2);
+        final String prefix;
+        if (ChannelTabs.VIDEOS.equals(tab)) {
+            prefix = "UULF";
+        } else if (ChannelTabs.SHORTS.equals(tab)) {
+            prefix = "UUSH";
+        } else if (ChannelTabs.LIVESTREAMS.equals(tab)) {
+            prefix = "UULV";
+        } else {
+            throw new IllegalArgumentException(
+                    "Only Videos, Shorts and Livestreams tabs can extracted as playlists");
+        }
+        return prefix + channelId.substring(2);
+    }
 
-        final String playlistId;
-        switch (contentFilters.get(0)) {
-            case ChannelTabs.VIDEOS:
-                playlistId = "UULF" + channelIdWithoutUc;
-                break;
-            case ChannelTabs.SHORTS:
-                playlistId = "UUSH" + channelIdWithoutUc;
-                break;
-            case ChannelTabs.LIVESTREAMS:
-                playlistId = "UULV" + channelIdWithoutUc;
-                break;
-            default:
-                throw new IllegalArgumentException(
-                        "Only Videos, Shorts and Livestreams tabs can extracted as playlists");
+    private static ListLinkHandler systemPlaylistLink(final ListLinkHandler channelTab) {
+        final List<String> filters = channelTab.getContentFilters();
+        if (filters.isEmpty()) {
+            throw new IllegalArgumentException("A content filter is required");
         }
 
+        final String id = systemPlaylistId(channelTab.getId(), filters.get(0));
         try {
-            final String newUrl = YoutubePlaylistLinkHandlerFactory.getInstance()
-                    .getUrl(playlistId);
-            return new ListLinkHandler(newUrl, newUrl, playlistId, List.of(), "");
+            final String url = YoutubePlaylistLinkHandlerFactory.getInstance().getUrl(id);
+            return new ListLinkHandler(url, url, id, List.of(), "");
         } catch (final ParsingException e) {
-            // This should be not reachable, as the given playlist ID should be valid and
-            // YoutubePlaylistLinkHandlerFactory doesn't throw any exception
             throw new SystemPlaylistUrlCreationException(
                     "Could not create a YouTube playlist from a valid playlist ID", e);
         }
     }
 
-    /**
-     * Exception thrown when a YouTube system playlist URL could not be created.
-     *
-     * <p>
-     * This exception should be never thrown, as given playlist IDs should be always valid.
-     * </p>
-     */
     public static final class SystemPlaylistUrlCreationException extends RuntimeException {
         SystemPlaylistUrlCreationException(final String message, final Throwable cause) {
             super(message, cause);

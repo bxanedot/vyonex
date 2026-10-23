@@ -1,22 +1,10 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud;
 
-import static com.vyonex.internal.fallback.Image.ResolutionLevel.LOW;
-import static com.vyonex.internal.fallback.Image.ResolutionLevel.MEDIUM;
-import static com.vyonex.internal.fallback.ServiceList.SoundCloud;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemsCollector;
 import com.vyonex.internal.fallback.downloader.Downloader;
@@ -26,471 +14,305 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudChannelInfoItemExtractor;
-import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudLikesInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.fallback.utils.ImageSuffix;
-import com.vyonex.internal.fallback.utils.JsonUtils;
-import com.vyonex.internal.fallback.utils.Parser;
-import com.vyonex.internal.fallback.utils.Parser.RegexException;
-import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class SoundcloudParsingHelper {
-    // CHECKSTYLE:OFF
-    // From https://web.archive.org/web/20210214185000/https://developers.soundcloud.com/docs/api/reference#tracks
-    // and researches on images used by the websites
-    // CHECKSTYLE:ON
-    /*
-    SoundCloud avatars and artworks are almost always squares.
-
-    When we get non-square pictures, all these images variants are still squares, except the
-    original and the crop versions provides images which are respecting aspect ratios.
-    The websites only use the square variants.
-
-    t2400x2400 and t3000x3000 variants also exists, but are not returned as several images are
-    uploaded with a lower size than these variants: in this case, these variants return an upscaled
-    version of the original image.
-    */
-    private static final List<ImageSuffix> ALBUMS_AND_ARTWORKS_IMAGE_SUFFIXES =
-            List.of(new ImageSuffix("mini", 16, 16, LOW),
-                    new ImageSuffix("t20x20", 20, 20, LOW),
-                    new ImageSuffix("small", 32, 32, LOW),
-                    new ImageSuffix("badge", 47, 47, LOW),
-                    new ImageSuffix("t50x50", 50, 50, LOW),
-                    new ImageSuffix("t60x60", 60, 60, LOW),
-                    // Seems to work also on avatars, even if it is written to be not the case in
-                    // the old API docs
-                    new ImageSuffix("t67x67", 67, 67, LOW),
-                    new ImageSuffix("t80x80", 80, 80, LOW),
-                    new ImageSuffix("large", 100, 100, LOW),
-                    new ImageSuffix("t120x120", 120, 120, LOW),
-                    new ImageSuffix("t200x200", 200, 200, MEDIUM),
-                    new ImageSuffix("t240x240", 240, 240, MEDIUM),
-                    new ImageSuffix("t250x250", 250, 250, MEDIUM),
-                    new ImageSuffix("t300x300", 300, 300, MEDIUM),
-                    new ImageSuffix("t500x500", 500, 500, MEDIUM));
-
-    private static final List<ImageSuffix> VISUALS_IMAGE_SUFFIXES =
-            List.of(new ImageSuffix("t1240x260", 1240, 260, MEDIUM),
-                    new ImageSuffix("t2480x520", 2480, 520, MEDIUM));
-
-    private static String clientId;
     public static final String SOUNDCLOUD_API_V2_URL = "https://api-v2.soundcloud.com/";
+    private static final String SITE = "https://soundcloud.com";
+    private static final Pattern CLIENT_ID = Pattern.compile(
+            "client_id\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']");
+    private static final Pattern SHORT_URL = Pattern.compile(
+            "https?://on\\.soundcloud\\.com/[A-Za-z0-9]+/?", Pattern.CASE_INSENSITIVE);
+    private static volatile String cachedClientId;
 
-    private static final Pattern ON_URL_PATTERN = Pattern.compile(
-        "^https?://on.soundcloud.com/[0-9a-zA-Z]+$"
-    );
+    private SoundcloudParsingHelper() { }
 
-    private SoundcloudParsingHelper() {
-    }
-
-    public static synchronized String clientId() throws ExtractionException, IOException {
-        if (!isNullOrEmpty(clientId)) {
-            return clientId;
-        }
-
-        final Downloader dl = VyonEx.getDownloader();
-
-        final Response download = dl.get("https://soundcloud.com");
-        final String responseBody = download.responseBody();
-        final String clientIdPattern = ",client_id:\"(.*?)\"";
-
-        final Document doc = Jsoup.parse(responseBody);
-        final Elements possibleScripts = doc.select(
-                "script[src*=\"sndcdn.com/assets/\"][src$=\".js\"]");
-        // The one containing the client id will likely be the last one
-        Collections.reverse(possibleScripts);
-
-        final var headers = Map.of("Range", List.of("bytes=0-50000"));
-
-        for (final Element element : possibleScripts) {
-            final String srcUrl = element.attr("src");
-            if (!isNullOrEmpty(srcUrl)) {
-                try {
-                    clientId = Parser.matchGroup1(clientIdPattern, dl.get(srcUrl, headers)
-                            .responseBody());
-                    return clientId;
-                } catch (final RegexException ignored) {
-                    // Ignore it and proceed to try searching other script
+    public static String clientId() throws ExtractionException, IOException {
+        if (cachedClientId != null) return cachedClientId;
+        synchronized (SoundcloudParsingHelper.class) {
+            if (cachedClientId != null) return cachedClientId;
+            final Downloader downloader = VyonEx.getDownloader();
+            final Response homepage = downloader.get(SITE);
+            if (homepage == null || homepage.responseBody().isBlank()) {
+                throw new ExtractionException("SoundCloud homepage returned no HTML");
+            }
+            final List<String> scripts = new ArrayList<>();
+            for (final Element script : Jsoup.parse(homepage.responseBody()).select("script[src]")) {
+                final String source = script.absUrl("src");
+                if (source.contains("sndcdn.com/assets/") && source.endsWith(".js")) {
+                    scripts.add(source);
                 }
             }
+            final Map<String, List<String>> headers = Map.of("Range", List.of("bytes=0-50000"));
+            for (int i = scripts.size() - 1; i >= 0; i--) {
+                try {
+                    final Response response = downloader.get(scripts.get(i), headers);
+                    if (response == null) continue;
+                    final Matcher match = CLIENT_ID.matcher(response.responseBody());
+                    if (match.find()) return cachedClientId = match.group(1);
+                } catch (final IOException | ReCaptchaException ignored) {
+                    // A later application bundle may still contain the public client key.
+                }
+            }
+            throw new ExtractionException("Could not find SoundCloud client ID in its scripts");
         }
-
-        // Officially give up
-        throw new ExtractionException("Couldn't extract client id");
     }
 
-    @Nullable
-    public static DateWrapper parseDate(final String uploadDate) throws ParsingException {
+    public static DateWrapper parseDate(final String value) throws ParsingException {
         try {
-            return DateWrapper.fromInstant(uploadDate);
+            return DateWrapper.fromInstant(value);
         } catch (final DateTimeParseException e) {
             try {
-                return new DateWrapper(OffsetDateTime.parse(uploadDate,
-                        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss +0000")));
-            } catch (final DateTimeParseException e1) {
-                e1.addSuppressed(e);
-                throw new ParsingException("Could not parse date: \"" + uploadDate + "\"", e1);
+                return new DateWrapper(OffsetDateTime.parse(value,
+                        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss Z")));
+            } catch (final DateTimeParseException fallback) {
+                fallback.addSuppressed(e);
+                throw new ParsingException("Invalid SoundCloud date: " + value, fallback);
             }
         }
     }
 
-    /**
-     * Call the endpoint "/resolve" of the API.<p>
-     * <p>
-     * See https://developers.soundcloud.com/docs/api/reference#resolve
-     */
-    public static JsonObject resolveFor(@Nonnull final Downloader downloader, final String url)
+    public static JsonObject resolveFor(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
-        final String apiUrl = SOUNDCLOUD_API_V2_URL + "resolve"
-                + "?url=" + Utils.encodeUrlUtf8(url)
-                + "&client_id=" + clientId();
+        return requestObject(downloader, SOUNDCLOUD_API_V2_URL + "resolve?url="
+                + encode(url) + "&client_id=" + clientId());
+    }
 
-        try {
-            final String response = downloader.get(apiUrl, SoundCloud.getLocalization())
-                    .responseBody();
-            return JsonParser.object().from(response);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
+    public static String resolveUrlWithEmbedPlayer(final String apiUrl)
+            throws IOException, ReCaptchaException {
+        final Response response = VyonEx.getDownloader().get(
+                "https://w.soundcloud.com/player/?url=" + encode(apiUrl));
+        if (response == null) throw new IOException("SoundCloud embed returned no response");
+        final Element canonical = Jsoup.parse(response.responseBody())
+                .selectFirst("link[rel=canonical]");
+        if (canonical == null || canonical.absUrl("href").isBlank()) {
+            throw new IOException("SoundCloud embed has no canonical URL");
         }
+        return canonical.absUrl("href");
     }
 
-    /**
-     * Fetch the embed player with the apiUrl and return the canonical url (like the permalink_url
-     * from the json API).
-     *
-     * @return the url resolved
-     */
-    public static String resolveUrlWithEmbedPlayer(final String apiUrl) throws IOException,
-            ReCaptchaException {
-
-        final String response = VyonEx.getDownloader().get("https://w.soundcloud.com/player/?url="
-                + Utils.encodeUrlUtf8(apiUrl), SoundCloud.getLocalization()).responseBody();
-
-        return Jsoup.parse(response).select("link[rel=\"canonical\"]").first()
-                .attr("abs:href");
-    }
-
-    /**
-     * Fetch the widget API with the url and return the id (like the id from the json API).
-     *
-     * @return the resolved id
-     */
-    public static String resolveIdWithWidgetApi(final String urlString) throws IOException,
-            ParsingException {
-        String fixedUrl = urlString;
-
-        // if URL is an on.soundcloud link, do a request to resolve the redirect
-
-        if (ON_URL_PATTERN.matcher(fixedUrl).find()) {
+    public static String resolveIdWithWidgetApi(final String originalUrl)
+            throws IOException, ParsingException {
+        String url = originalUrl;
+        if (SHORT_URL.matcher(url).matches()) {
             try {
-                fixedUrl = VyonEx.getDownloader().head(fixedUrl).latestUrl();
-                // remove tracking params which are in the query string
-                fixedUrl = fixedUrl.split("\\?")[0];
-            } catch (final ExtractionException e) {
-                throw new ParsingException("Could not follow on.soundcloud.com redirect", e);
+                final Response redirect = VyonEx.getDownloader().head(url);
+                if (redirect == null || redirect.latestUrl() == null) {
+                    throw new ParsingException("SoundCloud short link did not redirect");
+                }
+                url = redirect.latestUrl();
+            } catch (final ReCaptchaException e) {
+                throw new ParsingException("Unable to follow SoundCloud short link", e);
             }
         }
-
-        // Remove the tailing slash from URLs due to issues with the SoundCloud API
-        if (fixedUrl.charAt(fixedUrl.length() - 1) == '/') {
-            fixedUrl = fixedUrl.substring(0, fixedUrl.length() - 1);
-        }
-        // Make URL lower case and remove m. and www. if it exists.
-        // Without doing this, the widget API does not recognize the URL.
-        fixedUrl = Utils.removeMAndWWWFromUrl(fixedUrl.toLowerCase());
-
-        final URL url;
-        try {
-            url = Utils.stringToURL(fixedUrl);
-        } catch (final MalformedURLException e) {
-            throw new IllegalArgumentException("The given URL is not valid");
-        }
-
+        final String normalized = normalizeUserUrl(url);
+        final JsonObject response;
         try {
             final String widgetUrl = "https://api-widget.soundcloud.com/resolve?url="
-                    + Utils.encodeUrlUtf8(url.toString())
-                    + "&format=json&client_id=" + SoundcloudParsingHelper.clientId();
-            final String response = VyonEx.getDownloader().get(widgetUrl,
-                    SoundCloud.getLocalization()).responseBody();
-            final JsonObject o = JsonParser.object().from(response);
-            return String.valueOf(JsonUtils.getValue(o, "id"));
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse JSON response", e);
+                    + encode(normalized) + "&format=json&client_id=" + clientId();
+            response = requestObject(VyonEx.getDownloader(), widgetUrl);
         } catch (final ExtractionException e) {
-            throw new ParsingException(
-                    "Could not resolve id with embedded player. ClientId not extracted", e);
+            throw new ParsingException("Unable to resolve SoundCloud URL", e);
         }
+        final Object id = response.get("id");
+        if (id == null) throw new ParsingException("SoundCloud resolution has no ID");
+        return id.toString();
     }
 
-    /**
-     * Fetch the users from the given API and commit each of them to the collector.
-     * <p>
-     * This differ from {@link #getUsersFromApi(ChannelInfoItemsCollector, String)} in the sense
-     * that they will always get MIN_ITEMS or more.
-     *
-     * @param minItems the method will return only when it have extracted that many items
-     *                 (equal or more)
-     */
-    public static String getUsersFromApiMinItems(final int minItems,
+    public static String getUsersFromApiMinItems(final int minimum,
                                                  final ChannelInfoItemsCollector collector,
-                                                 final String apiUrl) throws IOException,
-            ReCaptchaException, ParsingException {
-        String nextPageUrl = SoundcloudParsingHelper.getUsersFromApi(collector, apiUrl);
-
-        while (!nextPageUrl.isEmpty() && collector.getItems().size() < minItems) {
-            nextPageUrl = SoundcloudParsingHelper.getUsersFromApi(collector, nextPageUrl);
+                                                 final String apiUrl)
+            throws IOException, ReCaptchaException, ParsingException {
+        String next = getUsersFromApi(collector, apiUrl);
+        final Set<String> visited = new HashSet<>();
+        visited.add(apiUrl);
+        while (!next.isEmpty() && collector.getItems().size() < minimum) {
+            if (!visited.add(next)) return "";
+            next = getUsersFromApi(collector, next);
         }
-
-        return nextPageUrl;
+        return next;
     }
 
-    /**
-     * Fetch the user items from the given API and commit each of them to the collector.
-     *
-     * @return the next streams url, empty if don't have
-     */
-    @Nonnull
     public static String getUsersFromApi(final ChannelInfoItemsCollector collector,
-                                         final String apiUrl) throws IOException,
-            ReCaptchaException, ParsingException {
-        final String response = VyonEx.getDownloader().get(apiUrl, SoundCloud.getLocalization())
-                .responseBody();
-        final JsonObject responseObject;
-
-        try {
-            responseObject = JsonParser.object().from(response);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
-        }
-
-        final JsonArray responseCollection = responseObject.getArray("collection");
-        for (final Object o : responseCollection) {
-            if (o instanceof JsonObject) {
-                final JsonObject object = (JsonObject) o;
-                collector.commit(new SoundcloudChannelInfoItemExtractor(object));
+                                         final String apiUrl)
+            throws IOException, ReCaptchaException, ParsingException {
+        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
+        for (final Object value : response.getArray("collection")) {
+            if (value instanceof JsonObject) {
+                collector.commit(new SoundcloudChannelInfoItemExtractor((JsonObject) value));
             }
         }
-
-        return getNextPageUrl(responseObject);
+        return nextPage(response);
     }
 
-    /**
-     * Fetch the streams from the given API and commit each of them to the collector.
-     * <p>
-     * This differ from {@link #getStreamsFromApi(StreamInfoItemsCollector, String)} in the sense
-     * that they will always get MIN_ITEMS or more items.
-     *
-     * @param minItems the method will return only when it have extracted that many items
-     *                 (equal or more)
-     */
-    public static String getStreamsFromApiMinItems(final int minItems,
+    public static String getStreamsFromApiMinItems(final int minimum,
                                                    final StreamInfoItemsCollector collector,
-                                                   final String apiUrl) throws IOException,
-            ReCaptchaException, ParsingException {
-        String nextPageUrl = SoundcloudParsingHelper.getStreamsFromApi(collector, apiUrl);
-
-        while (!nextPageUrl.isEmpty() && collector.getItems().size() < minItems) {
-            nextPageUrl = SoundcloudParsingHelper.getStreamsFromApi(collector, nextPageUrl);
+                                                   final String apiUrl)
+            throws IOException, ReCaptchaException, ParsingException {
+        String next = getStreamsFromApi(collector, apiUrl);
+        final Set<String> visited = new HashSet<>();
+        visited.add(apiUrl);
+        while (!next.isEmpty() && collector.getItems().size() < minimum) {
+            if (!visited.add(next)) return "";
+            next = getStreamsFromApi(collector, next);
         }
-
-        return nextPageUrl;
-    }
-
-    /**
-     * Fetch the streams from the given API and commit each of them to the collector.
-     *
-     * @return the next streams url, empty if don't have
-     */
-    @Nonnull
-    public static String getStreamsFromApi(final StreamInfoItemsCollector collector,
-                                           final String apiUrl,
-                                           final boolean charts) throws IOException,
-            ReCaptchaException, ParsingException {
-        final Response response = VyonEx.getDownloader().get(apiUrl, SoundCloud
-                .getLocalization());
-        if (response.responseCode() >= 400) {
-            throw new IOException("Could not get streams from API, HTTP " + response
-                    .responseCode());
-        }
-
-        final JsonObject responseObject;
-        try {
-            responseObject = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
-        }
-
-        final JsonArray responseCollection = responseObject.getArray("collection");
-        for (final Object o : responseCollection) {
-            if (o instanceof JsonObject) {
-                final JsonObject object = (JsonObject) o;
-                collector.commit(new SoundcloudStreamInfoItemExtractor(charts
-                        ? object.getObject("track") : object));
-            }
-        }
-
-        return getNextPageUrl(responseObject);
-    }
-
-    @Nonnull
-    private static String getNextPageUrl(@Nonnull final JsonObject response) {
-        try {
-            String nextPageUrl = response.getString("next_href");
-            if (!nextPageUrl.contains("client_id=")) {
-                nextPageUrl += "&client_id=" + SoundcloudParsingHelper.clientId();
-            }
-            return nextPageUrl;
-        } catch (final Exception ignored) {
-            return "";
-        }
+        return next;
     }
 
     public static String getStreamsFromApi(final StreamInfoItemsCollector collector,
-                                           final String apiUrl) throws ReCaptchaException,
-            ParsingException, IOException {
+                                           final String apiUrl)
+            throws IOException, ReCaptchaException, ParsingException {
         return getStreamsFromApi(collector, apiUrl, false);
     }
 
+    public static String getStreamsFromApi(final StreamInfoItemsCollector collector,
+                                           final String apiUrl, final boolean charts)
+            throws IOException, ReCaptchaException, ParsingException {
+        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
+        for (final Object value : response.getArray("collection")) {
+            if (!(value instanceof JsonObject)) continue;
+            final JsonObject item = (JsonObject) value;
+            collector.commit(new SoundcloudStreamInfoItemExtractor(
+                    charts ? item.getObject("track") : item));
+        }
+        return nextPage(response);
+    }
+
     public static String getInfoItemsFromApi(final MultiInfoItemsCollector collector,
-                                             final String apiUrl) throws ReCaptchaException,
-            ParsingException, IOException {
-        final Response response = VyonEx.getDownloader().get(apiUrl, SoundCloud.getLocalization());
-        if (response.responseCode() >= 400) {
-            throw new IOException("Could not get streams from API, HTTP "
-                    + response.responseCode());
-        }
-
-        final JsonObject responseObject;
-        try {
-            responseObject = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse json response", e);
-        }
-
-        responseObject.getArray("collection")
-                .streamAsJsonObjects()
-                .forEach(searchResult -> {
-                    final String kind = searchResult.getString("kind", "");
-                    switch (kind) {
-                        case "user":
-                            collector.commit(new SoundcloudChannelInfoItemExtractor(searchResult));
-                            break;
-                        case "track":
-                            collector.commit(new SoundcloudStreamInfoItemExtractor(searchResult));
-                            break;
-                        case "playlist":
-                            collector.commit(new SoundcloudPlaylistInfoItemExtractor(searchResult));
-                            break;
-                        case "like":
-                            // Soundcloud users can like tracks or playlists and all end up in the
-                            // `Likes` feed, so they should be handled by the correct extractor.
-                            final JsonObject likedPlaylist =
-                                    searchResult.getObject("playlist", null);
-                            collector.commit(likedPlaylist == null
-                                ? new SoundcloudLikesInfoItemExtractor(searchResult)
-                                : new SoundcloudPlaylistInfoItemExtractor(likedPlaylist)
-                            );
-                            break;
-                    }
-                });
-
-        String nextPageUrl;
-        try {
-            nextPageUrl = responseObject.getString("next_href");
-            if (!nextPageUrl.contains("client_id=")) {
-                nextPageUrl += "&client_id=" + SoundcloudParsingHelper.clientId();
+                                             final String apiUrl)
+            throws IOException, ReCaptchaException, ParsingException {
+        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
+        for (final Object value : response.getArray("collection")) {
+            if (!(value instanceof JsonObject)) continue;
+            final JsonObject item = (JsonObject) value;
+            switch (item.getString("kind", "")) {
+                case "user" -> collector.commit(new SoundcloudChannelInfoItemExtractor(item));
+                case "track" -> collector.commit(new SoundcloudStreamInfoItemExtractor(item));
+                case "playlist" -> collector.commit(new SoundcloudPlaylistInfoItemExtractor(item));
+                case "like" -> {
+                    final JsonObject playlist = item.getObject("playlist", null);
+                    collector.commit(playlist == null
+                            ? new SoundcloudLikesInfoItemExtractor(item)
+                            : new SoundcloudPlaylistInfoItemExtractor(playlist));
+                }
+                default -> { }
             }
-        } catch (final Exception ignored) {
-            nextPageUrl = "";
         }
-
-        return nextPageUrl;
+        return nextPage(response);
     }
 
-    @Nonnull
     public static String getUploaderUrl(final JsonObject object) {
-        final String url = object.getObject("user").getString("permalink_url", "");
-        return replaceHttpWithHttps(url);
+        return https(object.getObject("user").getString("permalink_url", ""));
     }
 
-    @Nonnull
     public static String getAvatarUrl(final JsonObject object) {
-        final String url = object.getObject("user").getString("avatar_url", "");
-        return replaceHttpWithHttps(url);
+        return https(object.getObject("user").getString("avatar_url", ""));
     }
 
-    @Nonnull
     public static String getUploaderName(final JsonObject object) {
         return object.getObject("user").getString("username", "");
     }
 
-    @Nonnull
-    public static List<Image> getAllImagesFromTrackObject(@Nonnull final JsonObject trackObject)
+    public static String toHttpsUrl(final String value) { return https(value); }
+
+    public static List<Image> getAllImagesFromTrackObject(final JsonObject track)
             throws ParsingException {
-        final String artworkUrl = trackObject.getString("artwork_url");
-        if (artworkUrl != null) {
-            return getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
-        }
-        final String avatarUrl = trackObject.getObject("user").getString("avatar_url");
-        if (avatarUrl != null) {
-            return getAllImagesFromArtworkOrAvatarUrl(avatarUrl);
-        }
-
-        throw new ParsingException("Could not get track or track user's thumbnails");
+        String url = track.getString("artwork_url");
+        if (url == null) url = track.getObject("user").getString("avatar_url");
+        if (url == null || url.isBlank()) throw new ParsingException("Track has no artwork");
+        return image(url);
     }
 
-    @Nonnull
-    public static List<Image> getAllImagesFromArtworkOrAvatarUrl(
-            @Nullable final String originalArtworkOrAvatarUrl) {
-        if (isNullOrEmpty(originalArtworkOrAvatarUrl)) {
-            return List.of();
-        }
-
-        return getAllImagesFromImageUrlReturned(
-                // Artwork and avatars are originally returned with the "large" resolution, which
-                // is 100px wide
-                originalArtworkOrAvatarUrl.replace("-large.", "-%s."),
-                ALBUMS_AND_ARTWORKS_IMAGE_SUFFIXES);
+    public static List<Image> getAllImagesFromArtworkOrAvatarUrl(final String url) {
+        return image(url);
     }
 
-    @Nonnull
-    public static List<Image> getAllImagesFromVisualUrl(
-            @Nullable final String originalVisualUrl) {
-        if (isNullOrEmpty(originalVisualUrl)) {
-            return List.of();
-        }
-
-        return getAllImagesFromImageUrlReturned(
-                // Images are originally returned with the "original" resolution, which may be
-                // huge so don't include it for size purposes
-                originalVisualUrl.replace("-original.", "-%s."),
-                VISUALS_IMAGE_SUFFIXES);
+    public static List<Image> getAllImagesFromVisualUrl(final String url) {
+        return image(url);
     }
 
-    private static List<Image> getAllImagesFromImageUrlReturned(
-            @Nonnull final String baseImageUrlFormat,
-            @Nonnull final List<ImageSuffix> imageSuffixes) {
-        return imageSuffixes.stream()
-                .map(imageSuffix -> new Image(
-                        String.format(baseImageUrlFormat, imageSuffix.getSuffix()),
-                        imageSuffix.getHeight(), imageSuffix.getWidth(),
-                        imageSuffix.getResolutionLevel()))
-                .collect(Collectors.toUnmodifiableList());
+    private static List<Image> image(final String url) {
+        // shortcut: image dimensions are unknown; add variants after validating current service URLs.
+        return url == null || url.isBlank() ? List.of() : List.of(new Image(https(url),
+                Image.HEIGHT_UNKNOWN, Image.WIDTH_UNKNOWN, Image.ResolutionLevel.UNKNOWN));
+    }
+
+    private static JsonObject requestObject(final Downloader downloader, final String url)
+            throws IOException, ReCaptchaException, ParsingException {
+        final Response response = downloader.get(url);
+        if (response == null || response.responseBody().isBlank()) {
+            throw new ParsingException("SoundCloud returned an empty response");
+        }
+        if (response.responseCode() >= 400) {
+            throw new IOException("SoundCloud request failed with HTTP " + response.responseCode());
+        }
+        try {
+            return JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
+        }
+    }
+
+    private static String nextPage(final JsonObject response) {
+        final String next = response.getString("next_href");
+        if (next == null || next.isBlank()) return "";
+        if (next.contains("client_id=")) return next;
+        try {
+            return next + (next.contains("?") ? "&" : "?") + "client_id=" + clientId();
+        } catch (final Exception e) {
+            return "";
+        }
+    }
+
+    private static String normalizeUserUrl(final String value) throws ParsingException {
+        if (value == null || value.isBlank()) throw new ParsingException("SoundCloud URL is empty");
+        try {
+            final URI input = URI.create(value);
+            final String host = input.getHost();
+            if (host == null || !(host.equalsIgnoreCase("soundcloud.com")
+                    || host.equalsIgnoreCase("www.soundcloud.com")
+                    || host.equalsIgnoreCase("m.soundcloud.com"))) {
+                throw new ParsingException("URL is not a SoundCloud page");
+            }
+            String path = input.getRawPath() == null ? "" : input.getRawPath();
+            while (path.endsWith("/") && !path.isEmpty()) path = path.substring(0, path.length() - 1);
+            return "https://soundcloud.com" + path;
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud page URL", e);
+        }
+    }
+
+    private static String encode(final String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String https(final String value) {
+        if (value == null || value.isBlank()) return "";
+        if (value.startsWith("//")) return "https:" + value;
+        return value.replaceFirst("^http://", "https://");
     }
 }

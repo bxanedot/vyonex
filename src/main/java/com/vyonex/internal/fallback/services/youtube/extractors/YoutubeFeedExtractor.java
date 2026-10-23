@@ -1,10 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
@@ -17,26 +15,24 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-
-import java.io.IOException;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
 
 public class YoutubeFeedExtractor extends FeedExtractor {
-    private static final String WEBSITE_CHANNEL_BASE_URL = "https://www.youtube.com/channel/";
+    private static final String CHANNEL_URL = "https://www.youtube.com/channel/";
+    private Document document;
 
     public YoutubeFeedExtractor(final StreamingService service, final ListLinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    private Document document;
-
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final String channelIdOrUser = getLinkHandler().getId();
-        final String feedUrl = YoutubeParsingHelper.getFeedUrlFrom(channelIdOrUser);
-
+        final String feedUrl = YoutubeParsingHelper.getFeedUrlFrom(getLinkHandler().getId());
         final Response response = downloader.get(feedUrl);
         if (response.responseCode() == 404) {
             throw new ContentNotAvailableException("Could not get feed: 404 - not found");
@@ -44,60 +40,30 @@ public class YoutubeFeedExtractor extends FeedExtractor {
         document = Jsoup.parse(response.responseBody());
     }
 
-    @Nonnull
-    @Override
-    public ListExtractor.InfoItemsPage<StreamInfoItem> getInitialPage() {
-        final Elements entries = document.select("feed > entry");
-        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-
-        for (final Element entryElement : entries) {
-            collector.commit(new YoutubeFeedInfoItemExtractor(entryElement));
+    @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {
+        if (document == null) throw new IllegalStateException("Feed was not fetched");
+        final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
+        for (final Element entry : document.select("feed > entry")) {
+            items.commit(new YoutubeFeedInfoItemExtractor(entry));
         }
-
-        return new InfoItemsPage<>(collector, null);
+        return new InfoItemsPage<>(items, null);
     }
 
-    @Nonnull
-    @Override
-    public String getId() {
-        return getUrl().replace(WEBSITE_CHANNEL_BASE_URL, "");
+    @Nonnull @Override public String getId() { return getUrl().replace(CHANNEL_URL, ""); }
+
+    @Nonnull @Override public String getUrl() {
+        final Element authorUri = document.selectFirst("feed > author > uri");
+        if (authorUri != null && !authorUri.text().isEmpty()) return authorUri.text();
+        final Element alternate = document.selectFirst("feed > link[rel*=alternate]");
+        return alternate == null ? "" : alternate.attr("href");
     }
 
-    @Nonnull
-    @Override
-    public String getUrl() {
-        final Element authorUriElement = document.select("feed > author > uri")
-                .first();
-        if (authorUriElement != null) {
-            final String authorUriElementText = authorUriElement.text();
-            if (!authorUriElementText.equals("")) {
-                return authorUriElementText;
-            }
-        }
-
-        final Element linkElement = document.select("feed > link[rel*=alternate]")
-                .first();
-        if (linkElement != null) {
-            return linkElement.attr("href");
-        }
-
-        return "";
+    @Nonnull @Override public String getName() {
+        final Element name = document.selectFirst("feed > author > name");
+        return name == null ? "" : name.text();
     }
 
-    @Nonnull
-    @Override
-    public String getName() {
-        final Element nameElement = document.select("feed > author > name")
-                .first();
-        if (nameElement == null) {
-            return "";
-        }
-
-        return nameElement.text();
-    }
-
-    @Override
-    public InfoItemsPage<StreamInfoItem> getPage(final Page page) {
+    @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page) {
         return InfoItemsPage.emptyPage();
     }
 }

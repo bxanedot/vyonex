@@ -1,55 +1,31 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler;
 
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
-import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper;
-import com.vyonex.internal.fallback.utils.Utils;
-
 import java.util.List;
 
-/**
- * Just as with streams, the album ids are essentially useless for us.
- */
 public final class BandcampPlaylistLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final BandcampPlaylistLinkHandlerFactory INSTANCE =
+            new BandcampPlaylistLinkHandlerFactory();
 
-    private static final BandcampPlaylistLinkHandlerFactory INSTANCE
-            = new BandcampPlaylistLinkHandlerFactory();
+    private BandcampPlaylistLinkHandlerFactory() { }
 
-    private BandcampPlaylistLinkHandlerFactory() {
-    }
-
-    public static BandcampPlaylistLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
+    public static BandcampPlaylistLinkHandlerFactory getInstance() { return INSTANCE; }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        return getUrl(url);
-    }
+    public String getId(final String url) { return BandcampUrl.https(url); }
 
     @Override
-    public String getUrl(final String url,
-                         final List<String> contentFilter,
-                         final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
-        return Utils.replaceHttpWithHttps(url);
+    public String getUrl(final String id, final List<String> contentFilter,
+                         final String sortFilter) {
+        return BandcampUrl.https(id);
     }
 
-    /**
-     * Accepts all bandcamp URLs that contain /album/ behind their domain name.
-     */
     @Override
     public boolean onAcceptUrl(final String url) throws ParsingException {
-
-        // Exclude URLs which do not lead to an album
-        if (!url.toLowerCase().matches("https?://.+\\..+/album/.+")) {
-            return false;
-        }
-
-        // Test whether domain is supported
-        return BandcampExtractorHelper.isArtistDomain(url);
+        return BandcampUrl.isArtistContent(url, "album");
     }
 }

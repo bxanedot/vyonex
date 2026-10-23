@@ -1,14 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
-
-import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory.ALL;
-import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory.CONFERENCES;
-import static com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory.EVENTS;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.InfoItem;
@@ -24,148 +17,101 @@ import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferencesListLinkHandlerFactory;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
+import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.util.List;
+import java.util.Locale;
 
 public class MediaCCCSearchExtractor extends SearchExtractor {
-    private JsonObject doc;
-    private MediaCCCConferenceKiosk conferenceKiosk;
+    private JsonObject eventResults;
+    private MediaCCCConferenceKiosk conferenceResults;
 
     public MediaCCCSearchExtractor(final StreamingService service,
-                                   final SearchQueryHandler linkHandler) {
-        super(service, linkHandler);
-        try {
-            conferenceKiosk = new MediaCCCConferenceKiosk(service,
-                    MediaCCCConferencesListLinkHandlerFactory.getInstance()
-                            .fromId("conferences"),
-                    "conferences");
-        } catch (final Exception e) {
-            e.printStackTrace();
-        }
+                                   final SearchQueryHandler query) {
+        super(service, query);
     }
 
-    @Nonnull
-    @Override
-    public String getSearchSuggestion() {
-        return "";
-    }
+    @Nonnull @Override public String getSearchSuggestion() { return ""; }
+    @Override public boolean isCorrectedSearch() { return false; }
+    @Nonnull @Override public List<MetaInfo> getMetaInfo() { return List.of(); }
 
-    @Override
-    public boolean isCorrectedSearch() {
-        return false;
-    }
-
-    @Nonnull
-    @Override
-    public List<MetaInfo> getMetaInfo() {
-        return Collections.emptyList();
-    }
-
-    @Nonnull
-    @Override
-    public InfoItemsPage<InfoItem> getInitialPage() {
-        final MultiInfoItemsCollector searchItems = new MultiInfoItemsCollector(getServiceId());
-
-        if (getLinkHandler().getContentFilters().contains(CONFERENCES)
-                || getLinkHandler().getContentFilters().contains(ALL)
-                || getLinkHandler().getContentFilters().isEmpty()) {
-            searchConferences(getSearchString(),
-                    conferenceKiosk.getInitialPage().getItems(),
-                    searchItems);
-        }
-
-        if (getLinkHandler().getContentFilters().contains(EVENTS)
-                || getLinkHandler().getContentFilters().contains(ALL)
-                || getLinkHandler().getContentFilters().isEmpty()) {
-            final JsonArray events = doc.getArray("events");
-            for (int i = 0; i < events.size(); i++) {
-                // Ensure only uploaded talks are shown in the search results.
-                // If the release date is null, the talk has not been held or uploaded yet
-                // and no streams are going to be available anyway.
-                if (events.getObject(i).getString("release_date") != null) {
-                    searchItems.commit(new MediaCCCStreamInfoItemExtractor(
-                            events.getObject(i)));
-                }
+    @Nonnull @Override public InfoItemsPage<InfoItem> getInitialPage() {
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        final List<String> filters = getLinkHandler().getContentFilters();
+        if (includes(filters, MediaCCCSearchQueryHandlerFactory.CONFERENCES)) {
+            if (conferenceResults == null) {
+                throw new IllegalStateException("Conference search was not fetched");
             }
+            addMatchingConferences(items, conferenceResults.getInitialPage().getItems());
         }
-        return new InfoItemsPage<>(searchItems, null);
+        if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
+            if (eventResults == null) throw new IllegalStateException("Event search was not fetched");
+            final JsonArray events = eventResults.getArray("events");
+            events.streamAsJsonObjects()
+                    .filter(event -> event.getString("release_date") != null)
+                    .map(MediaCCCStreamInfoItemExtractor::new)
+                    .forEach(items::commit);
+        }
+        return new InfoItemsPage<>(items, null);
     }
 
-    @Override
-    public InfoItemsPage<InfoItem> getPage(final Page page) {
+    @Override public InfoItemsPage<InfoItem> getPage(final Page page) {
         return InfoItemsPage.emptyPage();
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        if (getLinkHandler().getContentFilters().contains(EVENTS)
-                || getLinkHandler().getContentFilters().contains(ALL)
-                || getLinkHandler().getContentFilters().isEmpty()) {
-            final String site;
+        eventResults = null;
+        conferenceResults = null;
+        final List<String> filters = getLinkHandler().getContentFilters();
+        if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
             final String url = getUrl();
-            site = downloader.get(url, getExtractorLocalization()).responseBody();
             try {
-                doc = JsonParser.object().from(site);
-            } catch (final JsonParserException jpe) {
-                throw new ExtractionException("Could not parse JSON.", jpe);
+                eventResults = JsonParser.object().from(
+                        downloader.get(url, getExtractorLocalization()).responseBody());
+            } catch (final JsonParserException error) {
+                throw new ExtractionException("Could not parse event search response from " + url,
+                        error);
             }
         }
-        if (getLinkHandler().getContentFilters().contains(CONFERENCES)
-                || getLinkHandler().getContentFilters().contains(ALL)
-                || getLinkHandler().getContentFilters().isEmpty()) {
-            conferenceKiosk.fetchPage();
+        if (includes(filters, MediaCCCSearchQueryHandlerFactory.CONFERENCES)) {
+            conferenceResults = new MediaCCCConferenceKiosk(getService(),
+                    MediaCCCConferencesListLinkHandlerFactory.getInstance().fromId("conferences"),
+                    MediaCCCConferenceKiosk.KIOSK_ID);
+            conferenceResults.onFetchPage(downloader);
         }
     }
 
-    private void searchConferences(final String searchString,
-                                   final List<ChannelInfoItem> channelItems,
-                                   final MultiInfoItemsCollector collector) {
-        for (final ChannelInfoItem item : channelItems) {
-            if (item.getName().toUpperCase().contains(
-                    searchString.toUpperCase())) {
-                collector.commit(new ChannelInfoItemExtractor() {
-                    @Override
-                    public String getDescription() {
-                        return item.getDescription();
-                    }
+    private static boolean includes(final List<String> filters, final String wanted) {
+        return filters.isEmpty() || filters.contains(MediaCCCSearchQueryHandlerFactory.ALL)
+                || filters.contains(wanted);
+    }
 
-                    @Override
-                    public long getSubscriberCount() {
-                        return item.getSubscriberCount();
-                    }
-
-                    @Override
-                    public long getStreamCount() {
-                        return item.getStreamCount();
-                    }
-
-                    @Override
-                    public boolean isVerified() {
-                        return false;
-                    }
-
-                    @Override
-                    public String getName() {
-                        return item.getName();
-                    }
-
-                    @Override
-                    public String getUrl() {
-                        return item.getUrl();
-                    }
-
-                    @Nonnull
-                    @Override
-                    public List<Image> getThumbnails() {
-                        return item.getThumbnails();
-                    }
-                });
-            }
+    private void addMatchingConferences(final MultiInfoItemsCollector items,
+                                        final List<ChannelInfoItem> conferences) {
+        final String query = getSearchString().toLowerCase(Locale.ROOT);
+        for (final ChannelInfoItem conference : conferences) {
+            if (conference.getName() == null
+                    || !conference.getName().toLowerCase(Locale.ROOT).contains(query)) continue;
+            items.commit(asExtractor(conference));
         }
+    }
+
+    private static ChannelInfoItemExtractor asExtractor(final ChannelInfoItem item) {
+        return new ChannelInfoItemExtractor() {
+            @Override public String getDescription() { return item.getDescription(); }
+            @Override public long getSubscriberCount() { return item.getSubscriberCount(); }
+            @Override public long getStreamCount() { return item.getStreamCount(); }
+            @Override public boolean isVerified() { return item.isVerified(); }
+            @Override public String getName() { return item.getName(); }
+            @Override public String getUrl() { return item.getUrl(); }
+            @Nonnull @Override public List<Image> getThumbnails() { return item.getThumbnails(); }
+        };
     }
 }

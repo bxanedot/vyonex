@@ -1,6 +1,9 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.linkhandler;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -14,22 +17,22 @@ public class ListLinkHandler extends LinkHandler {
                            final List<String> contentFilters,
                            final String sortFilter) {
         super(originalUrl, url, id);
-        this.contentFilters = Collections.unmodifiableList(contentFilters);
+        this.contentFilters = Collections.unmodifiableList(new ArrayList<>(contentFilters));
         this.sortFilter = sortFilter;
     }
 
     public ListLinkHandler(final ListLinkHandler handler) {
-        this(handler.originalUrl,
-                handler.url,
-                handler.id,
-                handler.contentFilters,
-                handler.sortFilter);
+        this(handler.getOriginalUrl(),
+                handler.getUrl(),
+                handler.getId(),
+                handler.getContentFilters(),
+                handler.getSortFilter());
     }
 
     public ListLinkHandler(final LinkHandler handler) {
-        this(handler.originalUrl,
-                handler.url,
-                handler.id,
+        this(handler.getOriginalUrl(),
+                handler.getUrl(),
+                handler.getId(),
                 Collections.emptyList(),
                 "");
     }

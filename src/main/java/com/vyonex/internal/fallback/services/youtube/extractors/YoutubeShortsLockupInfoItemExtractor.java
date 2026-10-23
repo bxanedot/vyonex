@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
@@ -9,114 +10,85 @@ import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeStreamLi
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-/**
- * A {@link StreamInfoItemExtractor} for YouTube's {@code shortsLockupViewModel}s.
- *
- * <p>
- * {@code shortsLockupViewModel}s are returned on YouTube for their short-form contents on almost
- * every place and every major client. They provide a limited amount of information and do not
- * provide the exact view count, any uploader info (name, URL, avatar, verified status) and the
- * upload date.
- * </p>
- *
- * <p>
- * At the time this documentation has been written, this data UI type is not fully used (rolled
- * out), so {@code reelItemRenderer}s are also returned. See {@link YoutubeReelInfoItemExtractor}
- * for an extractor for this UI data type.
- * </p>
- */
+/** Maps a YouTube Shorts card into VyonEx's stream item API. */
 class YoutubeShortsLockupInfoItemExtractor implements StreamInfoItemExtractor {
+    private final JsonObject card;
 
-    @Nonnull
-    private final JsonObject shortsLockupViewModel;
-
-    YoutubeShortsLockupInfoItemExtractor(@Nonnull final JsonObject shortsLockupViewModel) {
-        this.shortsLockupViewModel = shortsLockupViewModel;
+    YoutubeShortsLockupInfoItemExtractor(@Nonnull final JsonObject card) {
+        this.card = Objects.requireNonNull(card, "Shorts card is required");
     }
 
     @Override
     public String getName() throws ParsingException {
-        return shortsLockupViewModel.getObject("overlayMetadata")
-                .getObject("primaryText")
-                .getString("content");
+        final String title = card.getObject("overlayMetadata")
+                .getObject("primaryText").getString("content");
+        if (title == null || title.isBlank()) {
+            throw new ParsingException("Shorts title is missing");
+        }
+        return title;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        String videoId = shortsLockupViewModel.getObject("onTap")
-                .getObject("innertubeCommand")
-                .getObject("reelWatchEndpoint")
-                .getString("videoId");
-
-        if (isNullOrEmpty(videoId)) {
-            videoId = shortsLockupViewModel.getObject("inlinePlayerData")
-                    .getObject("onVisible")
-                    .getObject("innertubeCommand")
-                    .getObject("watchEndpoint")
+        String videoId = card.getObject("onTap").getObject("innertubeCommand")
+                .getObject("reelWatchEndpoint").getString("videoId");
+        if (videoId == null || videoId.isBlank()) {
+            videoId = card.getObject("inlinePlayerData").getObject("onVisible")
+                    .getObject("innertubeCommand").getObject("watchEndpoint")
                     .getString("videoId");
         }
-
-        if (isNullOrEmpty(videoId)) {
-            throw new ParsingException("Could not get video ID");
+        if (videoId == null || videoId.isBlank()) {
+            throw new ParsingException("Shorts video ID is missing");
         }
-
         try {
             return YoutubeStreamLinkHandlerFactory.getInstance().getUrl(videoId);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get URL", e);
+        } catch (final Exception error) {
+            throw new ParsingException("Could not build Shorts URL", error);
         }
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        if (shortsLockupViewModel.has("thumbnail")) {
-            return getImagesFromThumbnailsArray(shortsLockupViewModel.getObject("thumbnail")
-                .getArray("sources"));
+        final JsonObject thumbnail;
+        if (card.has("thumbnail")) {
+            thumbnail = card.getObject("thumbnail");
+        } else {
+            thumbnail = card.getObject("thumbnailViewModel")
+                    .getObject("thumbnailViewModel").getObject("image");
         }
-
-        return getImagesFromThumbnailsArray(shortsLockupViewModel
-                .getObject("thumbnailViewModel")
-                .getObject("thumbnailViewModel")
-                .getObject("image")
-                .getArray("sources"));
+        return getImagesFromThumbnailsArray(thumbnail.getArray("sources"));
     }
 
     @Override
-    public StreamType getStreamType() throws ParsingException {
+    public StreamType getStreamType() {
         return StreamType.VIDEO_STREAM;
     }
 
     @Override
     public long getViewCount() throws ParsingException {
-        final String viewCountText = shortsLockupViewModel.getObject("overlayMetadata")
-                        .getObject("secondaryText")
-                        .getString("content");
-        if (!isNullOrEmpty(viewCountText)) {
-            if (viewCountText.contains("✪")) {
-                // If secondary text content contains ✪, this short should be a members first or a
-                // members only one, we can't extract its view count in this case
-                return -1;
-            }
-
-            // This approach is language dependent
-            if (viewCountText.toLowerCase().contains("no views")) {
-                return 0;
-            }
-
-            return Utils.mixedNumberWordToLong(viewCountText);
+        final String label = card.getObject("overlayMetadata")
+                .getObject("secondaryText").getString("content");
+        if (label == null || label.isBlank()) {
+            throw new ParsingException("Shorts view count is missing");
         }
-
-        throw new ParsingException("Could not get short view count");
+        if (label.contains("✪")) return -1;
+        if (label.toLowerCase(Locale.ROOT).contains("no views")) return 0;
+        try {
+            return Utils.mixedNumberWordToLong(label);
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse Shorts view count", error);
+        }
     }
 
     @Override
@@ -124,42 +96,11 @@ class YoutubeShortsLockupInfoItemExtractor implements StreamInfoItemExtractor {
         return true;
     }
 
-    // All the following properties cannot be obtained from shortsLockupViewModels
-
-    @Override
-    public boolean isAd() throws ParsingException {
-        return false;
-    }
-
-    @Override
-    public long getDuration() throws ParsingException {
-        return -1;
-    }
-
-    @Override
-    public String getUploaderName() throws ParsingException {
-        return null;
-    }
-
-    @Override
-    public String getUploaderUrl() throws ParsingException {
-        return null;
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
-
-    @Nullable
-    @Override
-    public String getTextualUploadDate() throws ParsingException {
-        return null;
-    }
-
-    @Nullable
-    @Override
-    public DateWrapper getUploadDate() throws ParsingException {
-        return null;
-    }
+    @Override public boolean isAd() { return false; }
+    @Override public long getDuration() { return -1; }
+    @Override public String getUploaderName() throws ParsingException { return null; }
+    @Override public String getUploaderUrl() throws ParsingException { return null; }
+    @Override public boolean isUploaderVerified() { return false; }
+    @Nullable @Override public String getTextualUploadDate() { return null; }
+    @Nullable @Override public DateWrapper getUploadDate() { return null; }
 }

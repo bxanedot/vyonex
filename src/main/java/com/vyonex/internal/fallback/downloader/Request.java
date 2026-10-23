@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.downloader;
 
 import com.vyonex.internal.fallback.localization.Localization;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -11,42 +15,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-/**
- * An object that holds request information used when {@link Downloader#execute(Request) executing}
- * a request.
- */
 public class Request {
     private final String httpMethod;
     private final String url;
     private final Map<String, List<String>> headers;
-    @Nullable
-    private final byte[] dataToSend;
-    @Nullable
-    private final Localization localization;
+    @Nullable private final byte[] dataToSend;
+    @Nullable private final Localization localization;
 
-    public Request(final String httpMethod,
-                   final String url,
+    public Request(final String httpMethod, final String url,
                    @Nullable final Map<String, List<String>> headers,
-                   @Nullable final byte[] dataToSend,
-                   @Nullable final Localization localization,
+                   @Nullable final byte[] dataToSend, @Nullable final Localization localization,
                    final boolean automaticLocalizationHeader) {
         this.httpMethod = Objects.requireNonNull(httpMethod, "Request's httpMethod is null");
         this.url = Objects.requireNonNull(url, "Request's url is null");
         this.dataToSend = dataToSend;
         this.localization = localization;
 
-        final Map<String, List<String>> actualHeaders = new LinkedHashMap<>();
-        if (headers != null) {
-            actualHeaders.putAll(headers);
-        }
+        final Map<String, List<String>> actualHeaders = copyHeaders(headers);
         if (automaticLocalizationHeader && localization != null) {
             actualHeaders.putAll(getHeadersFromLocalization(localization));
         }
-
-        this.headers = Collections.unmodifiableMap(actualHeaders);
+        this.headers = immutableHeaders(actualHeaders);
     }
 
     private Request(final Builder builder) {
@@ -54,54 +43,13 @@ public class Request {
                 builder.localization, builder.automaticLocalizationHeader);
     }
 
-    /**
-     * A http method (i.e. {@code GET, POST, HEAD}).
-     */
-    public String httpMethod() {
-        return httpMethod;
-    }
+    public String httpMethod() { return httpMethod; }
+    public String url() { return url; }
+    public Map<String, List<String>> headers() { return headers; }
+    @Nullable public byte[] dataToSend() { return dataToSend; }
+    @Nullable public Localization localization() { return localization; }
 
-    /**
-     * The URL that is pointing to the wanted resource.
-     */
-    public String url() {
-        return url;
-    }
-
-    /**
-     * A list of headers that will be used in the request.<br>
-     * Any default headers that the implementation may have, <b>should</b> be overridden by these.
-     */
-    public Map<String, List<String>> headers() {
-        return headers;
-    }
-
-    /**
-     * An optional byte array that will be sent when doing the request, very commonly used in
-     * {@code POST} requests.<br>
-     * <br>
-     * The implementation should make note of some recommended headers
-     * (for example, {@code Content-Length} in a post request).
-     */
-    @Nullable
-    public byte[] dataToSend() {
-        return dataToSend;
-    }
-
-    /**
-     * A localization object that should be used when executing a request.<br>
-     * <br>
-     * Usually the {@code Accept-Language} will be set to this value (a helper
-     * method to do this easily: {@link Request#getHeadersFromLocalization(Localization)}).
-     */
-    @Nullable
-    public Localization localization() {
-        return localization;
-    }
-
-    public static Builder newBuilder() {
-        return new Builder();
-    }
+    public static Builder newBuilder() { return new Builder(); }
 
     public static final class Builder {
         private String httpMethod;
@@ -111,164 +59,123 @@ public class Request {
         private Localization localization;
         private boolean automaticLocalizationHeader = true;
 
-        public Builder() {
-        }
+        public Builder() { }
 
-        /**
-         * A http method (i.e. {@code GET, POST, HEAD}).
-         */
-        public Builder httpMethod(final String httpMethodToSet) {
-            this.httpMethod = httpMethodToSet;
+        public Builder httpMethod(final String value) {
+            httpMethod = value;
             return this;
         }
 
-        /**
-         * The URL that is pointing to the wanted resource.
-         */
-        public Builder url(final String urlToSet) {
-            this.url = urlToSet;
+        public Builder url(final String value) {
+            url = value;
             return this;
         }
 
-        /**
-         * A list of headers that will be used in the request.<br>
-         * Any default headers that the implementation may have, <b>should</b> be overridden by
-         * these.
-         */
-        public Builder headers(@Nullable final Map<String, List<String>> headersToSet) {
-            this.headers.clear();
-            if (headersToSet != null) {
-                this.headers.putAll(headersToSet);
-            }
+        public Builder headers(@Nullable final Map<String, List<String>> values) {
+            headers.clear();
+            headers.putAll(copyHeaders(values));
             return this;
         }
 
-        /**
-         * An optional byte array that will be sent when doing the request, very commonly used in
-         * {@code POST} requests.<br>
-         * <br>
-         * The implementation should make note of some recommended headers
-         * (for example, {@code Content-Length} in a post request).
-         */
-        public Builder dataToSend(final byte[] dataToSendToSet) {
-            this.dataToSend = dataToSendToSet;
+        public Builder dataToSend(@Nullable final byte[] value) {
+            dataToSend = value;
             return this;
         }
 
-        /**
-         * A localization object that should be used when executing a request.<br>
-         * <br>
-         * Usually the {@code Accept-Language} will be set to this value (a helper
-         * method to do this easily: {@link Request#getHeadersFromLocalization(Localization)}).
-         */
-        public Builder localization(final Localization localizationToSet) {
-            this.localization = localizationToSet;
+        public Builder localization(@Nullable final Localization value) {
+            localization = value;
             return this;
         }
 
-        /**
-         * If localization headers should automatically be included in the request.
-         */
-        public Builder automaticLocalizationHeader(final boolean automaticLocalizationHeaderToSet) {
-            this.automaticLocalizationHeader = automaticLocalizationHeaderToSet;
+        public Builder automaticLocalizationHeader(final boolean enabled) {
+            automaticLocalizationHeader = enabled;
             return this;
         }
 
+        public Request build() { return new Request(this); }
 
-        public Request build() {
-            return new Request(this);
-        }
-
-        /*//////////////////////////////////////////////////////////////////////////
-        // Http Methods Utils
-        //////////////////////////////////////////////////////////////////////////*/
-
-        public Builder get(final String urlToSet) {
-            this.httpMethod = "GET";
-            this.url = urlToSet;
+        public Builder get(final String value) {
+            httpMethod = "GET";
+            url = value;
             return this;
         }
 
-        public Builder head(final String urlToSet) {
-            this.httpMethod = "HEAD";
-            this.url = urlToSet;
+        public Builder head(final String value) {
+            httpMethod = "HEAD";
+            url = value;
             return this;
         }
 
-        public Builder post(final String urlToSet, @Nullable final byte[] dataToSendToSet) {
-            this.httpMethod = "POST";
-            this.url = urlToSet;
-            this.dataToSend = dataToSendToSet;
+        public Builder post(final String value, @Nullable final byte[] body) {
+            httpMethod = "POST";
+            url = value;
+            dataToSend = body;
             return this;
         }
 
-        /*//////////////////////////////////////////////////////////////////////////
-        // Additional Headers Utils
-        //////////////////////////////////////////////////////////////////////////*/
-
-        public Builder setHeaders(final String headerName, final List<String> headerValueList) {
-            this.headers.remove(headerName);
-            this.headers.put(headerName, headerValueList);
+        public Builder setHeaders(final String name, @Nullable final List<String> values) {
+            headers.put(name, copyValues(values));
             return this;
         }
 
-        public Builder addHeaders(final String headerName, final List<String> headerValueList) {
-            @Nullable List<String> currentHeaderValueList = this.headers.get(headerName);
-            if (currentHeaderValueList == null) {
-                currentHeaderValueList = new ArrayList<>();
-            }
-
-            currentHeaderValueList.addAll(headerValueList);
-            this.headers.put(headerName, headerValueList);
+        public Builder addHeaders(final String name, final List<String> values) {
+            headers.computeIfAbsent(name, ignored -> new ArrayList<>()).addAll(values);
             return this;
         }
 
-        public Builder setHeader(final String headerName, final String headerValue) {
-            return setHeaders(headerName, Collections.singletonList(headerValue));
+        public Builder setHeader(final String name, final String value) {
+            return setHeaders(name, Collections.singletonList(value));
         }
 
-        public Builder addHeader(final String headerName, final String headerValue) {
-            return addHeaders(headerName, Collections.singletonList(headerValue));
+        public Builder addHeader(final String name, final String value) {
+            return addHeaders(name, Collections.singletonList(value));
         }
-
     }
 
-    /*//////////////////////////////////////////////////////////////////////////
-    // Utils
-    //////////////////////////////////////////////////////////////////////////*/
-
-    @SuppressWarnings("WeakerAccess")
     @Nonnull
     public static Map<String, List<String>> getHeadersFromLocalization(
             @Nullable final Localization localization) {
-        if (localization == null) {
-            return Collections.emptyMap();
-        }
-
-        final String languageCode = localization.getLanguageCode();
-        final List<String> languageCodeList = Collections.singletonList(
-                localization.getCountryCode().isEmpty() ? languageCode
-                        : localization.getLocalizationCode() + ", " + languageCode + ";q=0.9");
-        return Collections.singletonMap("Accept-Language", languageCodeList);
+        if (localization == null) return Collections.emptyMap();
+        final String language = localization.getLanguageCode();
+        final String value = localization.getCountryCode().isEmpty() ? language
+                : localization.getLocalizationCode() + ", " + language + ";q=0.9";
+        return Collections.singletonMap("Accept-Language", Collections.singletonList(value));
     }
 
-    /*//////////////////////////////////////////////////////////////////////////
-    // Generated
-    //////////////////////////////////////////////////////////////////////////*/
+    private static Map<String, List<String>> copyHeaders(
+            @Nullable final Map<String, List<String>> source) {
+        final Map<String, List<String>> copy = new LinkedHashMap<>();
+        if (source != null) {
+            for (final Map.Entry<String, List<String>> header : source.entrySet()) {
+                copy.put(header.getKey(), copyValues(header.getValue()));
+            }
+        }
+        return copy;
+    }
+
+    @Nullable
+    private static List<String> copyValues(@Nullable final List<String> values) {
+        return values == null ? null : new ArrayList<>(values);
+    }
+
+    private static Map<String, List<String>> immutableHeaders(
+            final Map<String, List<String>> source) {
+        final Map<String, List<String>> copy = new LinkedHashMap<>();
+        for (final Map.Entry<String, List<String>> header : source.entrySet()) {
+            final List<String> values = header.getValue();
+            copy.put(header.getKey(), values == null ? null
+                    : Collections.unmodifiableList(values));
+        }
+        return Collections.unmodifiableMap(copy);
+    }
 
     @Override
-    public boolean equals(final Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        final Request request = (Request) o;
-        return httpMethod.equals(request.httpMethod)
-                && url.equals(request.url)
-                && headers.equals(request.headers)
-                && Arrays.equals(dataToSend, request.dataToSend)
+    public boolean equals(final Object other) {
+        if (this == other) return true;
+        if (other == null || getClass() != other.getClass()) return false;
+        final Request request = (Request) other;
+        return httpMethod.equals(request.httpMethod) && url.equals(request.url)
+                && headers.equals(request.headers) && Arrays.equals(dataToSend, request.dataToSend)
                 && Objects.equals(localization, request.localization);
     }
 

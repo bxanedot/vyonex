@@ -1,15 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
-
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromStreamItem;
-import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
-import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
@@ -27,203 +19,142 @@ import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-import com.vyonex.internal.fallback.utils.JsonUtils;
 import com.vyonex.internal.fallback.utils.LocaleCompat;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+import static com.vyonex.internal.fallback.stream.AudioStream.UNKNOWN_BITRATE;
+import static com.vyonex.internal.fallback.stream.Stream.ID_UNKNOWN;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromStreamItem;
 
 public class MediaCCCStreamExtractor extends StreamExtractor {
-    private JsonObject data;
-    private JsonObject conferenceData;
+    @Nullable private JsonObject event;
+    @Nullable private JsonObject conference;
 
     public MediaCCCStreamExtractor(final StreamingService service, final LinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    @Nullable
-    @Override
-    public String getTextualUploadDate() {
-        return data.getString("release_date");
+    @Nullable @Override public String getTextualUploadDate() {
+        return event.getString("release_date");
     }
-
-    @Nullable
-    @Override
-    public DateWrapper getUploadDate() throws ParsingException {
+    @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
         return DateWrapper.fromOffsetDateTime(getTextualUploadDate());
     }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() {
-        return getThumbnailsFromStreamItem(data);
+    @Nonnull @Override public List<Image> getThumbnails() {
+        return getThumbnailsFromStreamItem(event);
     }
-
-    @Nonnull
-    @Override
-    public Description getDescription() {
-        return new Description(data.getString("description"), Description.PLAIN_TEXT);
+    @Nonnull @Override public Description getDescription() {
+        return new Description(event.getString("description"), Description.PLAIN_TEXT);
     }
-
-    @Override
-    public long getLength() {
-        return data.getInt("length");
-    }
-
-    @Override
-    public long getViewCount() {
-        return data.getInt("view_count");
-    }
-
-    @Nonnull
-    @Override
-    public String getUploaderUrl() {
+    @Override public long getLength() { return event.getInt("length"); }
+    @Override public long getViewCount() { return event.getInt("view_count"); }
+    @Nonnull @Override public String getUploaderUrl() throws ParsingException {
         return MediaCCCConferenceLinkHandlerFactory.CONFERENCE_PATH + getUploaderName();
     }
-
-    @Nonnull
-    @Override
-    public String getUploaderName() {
-        return data.getString("conference_url")
-                .replaceFirst("https://(api\\.)?media\\.ccc\\.de/public/conferences/", "");
+    @Nonnull @Override public String getUploaderName() throws ParsingException {
+        return MediaCCCConferenceLinkHandlerFactory.getInstance()
+                .getId(event.getString("conference_url"));
+    }
+    @Override public List<Image> getUploaderAvatars() {
+        return getImageListFromLogoImageUrl(conference.getString("logo_url"));
     }
 
-    @Nonnull
-    @Override
-    public List<Image> getUploaderAvatars() {
-        return getImageListFromLogoImageUrl(conferenceData.getString("logo_url"));
-    }
-
-    @Override
-    public List<AudioStream> getAudioStreams() throws ExtractionException {
-        final JsonArray recordings = data.getArray("recordings");
-        final List<AudioStream> audioStreams = new ArrayList<>();
-        for (int i = 0; i < recordings.size(); i++) {
-            final JsonObject recording = recordings.getObject(i);
-            final String mimeType = recording.getString("mime_type");
-            if (mimeType.startsWith("audio")) {
-                // First we need to resolve the actual video data from the CDN
-                final MediaFormat mediaFormat;
-                if (mimeType.endsWith("opus")) {
-                    mediaFormat = MediaFormat.OPUS;
-                } else if (mimeType.endsWith("mpeg")) {
-                    mediaFormat = MediaFormat.MP3;
-                } else if (mimeType.endsWith("ogg")) {
-                    mediaFormat = MediaFormat.OGG;
-                } else {
-                    mediaFormat = null;
-                }
-
-                final AudioStream.Builder builder = new AudioStream.Builder()
-                        .setId(recording.getString("filename", ID_UNKNOWN))
-                        .setContent(recording.getString("recording_url"), true)
-                        .setMediaFormat(mediaFormat)
-                        .setAverageBitrate(UNKNOWN_BITRATE);
-
-                final String language = recording.getString("language");
-                // If the language contains a - symbol, this means that the stream has an audio
-                // track with multiple languages, so there is no specific language for this stream
-                // Don't set the audio language in this case
-                if (language != null && !language.contains("-")) {
-                    builder.setAudioLocale(LocaleCompat.forLanguageTag(language).orElseThrow(() ->
-                        new ParsingException(
-                                "Cannot convert this language to a locale: " + language)
-                    ));
-                }
-
-                // Not checking containsSimilarStream here, since MediaCCC does not provide enough
-                // information to decide whether two streams are similar. Hence that method would
-                // always return false, e.g. even for different language variations.
-                audioStreams.add(builder.build());
+    @Override public List<AudioStream> getAudioStreams() throws ExtractionException {
+        final List<AudioStream> result = new ArrayList<>();
+        for (final JsonObject recording : event.getArray("recordings").streamAsJsonObjects()
+                .toList()) {
+            final String mimeType = recording.getString("mime_type", "");
+            if (!mimeType.startsWith("audio")) continue;
+            final AudioStream.Builder stream = new AudioStream.Builder()
+                    .setId(recording.getString("filename", ID_UNKNOWN))
+                    .setContent(recording.getString("recording_url"), true)
+                    .setMediaFormat(audioFormat(mimeType))
+                    .setAverageBitrate(UNKNOWN_BITRATE);
+            final String language = recording.getString("language");
+            if (language != null && !language.contains("-")) {
+                stream.setAudioLocale(LocaleCompat.forLanguageTag(language).orElseThrow(() ->
+                        new ParsingException("Cannot convert language to a locale: " + language)));
             }
+            result.add(stream.build());
         }
-        return audioStreams;
+        return result;
     }
 
-    @Override
-    public List<VideoStream> getVideoStreams() throws ExtractionException {
-        final JsonArray recordings = data.getArray("recordings");
-        final List<VideoStream> videoStreams = new ArrayList<>();
-        for (int i = 0; i < recordings.size(); i++) {
-            final JsonObject recording = recordings.getObject(i);
-            final String mimeType = recording.getString("mime_type");
-            if (mimeType.startsWith("video")) {
-                // First we need to resolve the actual video data from the CDN
-                final MediaFormat mediaFormat;
-                if (mimeType.endsWith("webm")) {
-                    mediaFormat = MediaFormat.WEBM;
-                } else if (mimeType.endsWith("mp4")) {
-                    mediaFormat = MediaFormat.MPEG_4;
-                } else {
-                    mediaFormat = null;
-                }
+    private static MediaFormat audioFormat(final String mimeType) {
+        if (mimeType.endsWith("opus")) return MediaFormat.OPUS;
+        if (mimeType.endsWith("mpeg")) return MediaFormat.MP3;
+        if (mimeType.endsWith("ogg")) return MediaFormat.OGG;
+        return null;
+    }
 
-                // Not checking containsSimilarStream here, since MediaCCC does not provide enough
-                // information to decide whether two streams are similar. Hence that method would
-                // always return false, e.g. even for different language variations.
-                videoStreams.add(new VideoStream.Builder()
-                        .setId(recording.getString("filename", ID_UNKNOWN))
-                        .setContent(recording.getString("recording_url"), true)
-                        .setIsVideoOnly(false)
-                        .setMediaFormat(mediaFormat)
-                        .setResolution(recording.getInt("height") + "p")
-                        .build());
-            }
+    @Override public List<VideoStream> getVideoStreams() {
+        final List<VideoStream> result = new ArrayList<>();
+        final JsonArray recordings = event.getArray("recordings");
+        for (final JsonObject recording : recordings.streamAsJsonObjects().toList()) {
+            final String mimeType = recording.getString("mime_type", "");
+            if (!mimeType.startsWith("video")) continue;
+            final MediaFormat format = mimeType.endsWith("webm") ? MediaFormat.WEBM
+                    : mimeType.endsWith("mp4") ? MediaFormat.MPEG_4 : null;
+            result.add(new VideoStream.Builder()
+                    .setId(recording.getString("filename", ID_UNKNOWN))
+                    .setContent(recording.getString("recording_url"), true)
+                    .setIsVideoOnly(false)
+                    .setMediaFormat(format)
+                    .setResolution(recording.getInt("height") + "p")
+                    .build());
         }
-
-        return videoStreams;
+        return result;
     }
 
-    @Override
-    public List<VideoStream> getVideoOnlyStreams() {
-        return Collections.emptyList();
-    }
+    @Override public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
+    @Override public StreamType getStreamType() { return StreamType.VIDEO_STREAM; }
 
-    @Override
-    public StreamType getStreamType() {
-        return StreamType.VIDEO_STREAM;
-    }
-
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
+    @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final String videoUrl = MediaCCCStreamLinkHandlerFactory.VIDEO_API_ENDPOINT + getId();
+        final String eventUrl = MediaCCCStreamLinkHandlerFactory.VIDEO_API_ENDPOINT + getId();
         try {
-            data = JsonParser.object().from(downloader.get(videoUrl).responseBody());
-            conferenceData = JsonParser.object()
-                    .from(downloader.get(data.getString("conference_url")).responseBody());
-        } catch (final JsonParserException jpe) {
-            throw new ExtractionException("Could not parse json returned by URL: " + videoUrl,
-                    jpe);
+            event = JsonParser.object().from(downloader.get(eventUrl).responseBody());
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse event response from " + eventUrl, error);
+        }
+
+        final String conferenceUrl = event.getString("conference_url");
+        if (conferenceUrl == null || conferenceUrl.isBlank()) {
+            throw new ExtractionException("The event response has no conference URL.");
+        }
+        try {
+            conference = JsonParser.object().from(downloader.get(conferenceUrl).responseBody());
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse conference response from "
+                    + conferenceUrl, error);
         }
     }
 
-    @Nonnull
-    @Override
-    public String getName() throws ParsingException {
-        return data.getString("title");
+    @Nonnull @Override public String getName() throws ParsingException {
+        return event.getString("title");
     }
-
-    @Nonnull
-    @Override
-    public String getOriginalUrl() {
-        return data.getString("frontend_link");
+    @Nonnull @Override public String getOriginalUrl() {
+        return event.getString("frontend_link");
     }
-
-    @Override
-    public Locale getLanguageInfo() throws ParsingException {
-        return Localization.getLocaleFromThreeLetterCode(data.getString("original_language"));
+    @Override public Locale getLanguageInfo() throws ParsingException {
+        return Localization.getLocaleFromThreeLetterCode(event.getString("original_language"));
     }
-
-    @Nonnull
-    @Override
-    public List<String> getTags() {
-        return JsonUtils.getStringListFromJsonArray(data.getArray("tags"));
+    @Nonnull @Override public List<String> getTags() {
+        final List<String> tags = new ArrayList<>();
+        for (final Object tag : event.getArray("tags")) {
+            if (tag instanceof String) tags.add((String) tag);
+        }
+        return List.copyOf(tags);
     }
 }

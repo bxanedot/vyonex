@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.search;
 
@@ -11,10 +13,9 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.utils.ExtractorHelper;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.List;
-
-import javax.annotation.Nonnull;
 
 public class SearchInfo extends ListInfo<InfoItem> {
     private final String searchString;
@@ -23,17 +24,16 @@ public class SearchInfo extends ListInfo<InfoItem> {
     private List<MetaInfo> metaInfo = List.of();
 
     public SearchInfo(final int serviceId,
-                      final SearchQueryHandler qIHandler,
+                      final SearchQueryHandler queryHandler,
                       final String searchString) {
-        super(serviceId, qIHandler, "Search");
+        super(serviceId, queryHandler, "Search");
         this.searchString = searchString;
     }
 
-
     public static SearchInfo getInfo(final StreamingService service,
-                                     final SearchQueryHandler searchQuery)
+                                     final SearchQueryHandler queryHandler)
             throws ExtractionException, IOException {
-        final SearchExtractor extractor = service.getSearchExtractor(searchQuery);
+        final SearchExtractor extractor = service.getSearchExtractor(queryHandler);
         extractor.fetchPage();
         return getInfo(extractor);
     }
@@ -41,73 +41,54 @@ public class SearchInfo extends ListInfo<InfoItem> {
     public static SearchInfo getInfo(final SearchExtractor extractor)
             throws ExtractionException, IOException {
         final SearchInfo info = new SearchInfo(
-                extractor.getServiceId(),
-                extractor.getLinkHandler(),
-                extractor.getSearchString());
+                extractor.getServiceId(), extractor.getLinkHandler(), extractor.getSearchString());
 
         try {
             info.setOriginalUrl(extractor.getOriginalUrl());
-        } catch (final Exception e) {
-            info.addError(e);
+        } catch (final Exception error) {
+            info.addError(error);
         }
         try {
             info.setSearchSuggestion(extractor.getSearchSuggestion());
-        } catch (final Exception e) {
-            info.addError(e);
+        } catch (final Exception error) {
+            info.addError(error);
         }
         try {
             info.setIsCorrectedSearch(extractor.isCorrectedSearch());
-        } catch (final Exception e) {
-            info.addError(e);
+        } catch (final Exception error) {
+            info.addError(error);
         }
         try {
             info.setMetaInfo(extractor.getMetaInfo());
-        } catch (final Exception e) {
-            info.addError(e);
+        } catch (final Exception error) {
+            info.addError(error);
         }
 
-        final ListExtractor.InfoItemsPage<InfoItem> page
-                = ExtractorHelper.getItemsPageOrLogError(info, extractor);
-        info.setRelatedItems(page.getItems());
-        info.setNextPage(page.getNextPage());
-
+        final ListExtractor.InfoItemsPage<InfoItem> firstPage =
+                ExtractorHelper.getItemsPageOrLogError(info, extractor);
+        info.setRelatedItems(firstPage.getItems());
+        info.setNextPage(firstPage.getNextPage());
         return info;
     }
 
-
-    public static ListExtractor.InfoItemsPage<InfoItem> getMoreItems(final StreamingService service,
-                                                                     final SearchQueryHandler query,
-                                                                     final Page page)
-            throws IOException, ExtractionException {
-        return service.getSearchExtractor(query).getPage(page);
+    public static ListExtractor.InfoItemsPage<InfoItem> getMoreItems(
+            final StreamingService service, final SearchQueryHandler queryHandler,
+            final Page page) throws IOException, ExtractionException {
+        return service.getSearchExtractor(queryHandler).getPage(page);
     }
 
-    // Getter
-    public String getSearchString() {
-        return this.searchString;
+    public String getSearchString() { return searchString; }
+    public String getSearchSuggestion() { return searchSuggestion; }
+    public boolean isCorrectedSearch() { return isCorrectedSearch; }
+    public void setIsCorrectedSearch(final boolean correctedSearch) {
+        this.isCorrectedSearch = correctedSearch;
     }
-
-    public String getSearchSuggestion() {
-        return this.searchSuggestion;
-    }
-
-    public boolean isCorrectedSearch() {
-        return this.isCorrectedSearch;
-    }
-
-    public void setIsCorrectedSearch(final boolean isCorrectedSearch) {
-        this.isCorrectedSearch = isCorrectedSearch;
-    }
-
     public void setSearchSuggestion(final String searchSuggestion) {
         this.searchSuggestion = searchSuggestion;
     }
 
     @Nonnull
-    public List<MetaInfo> getMetaInfo() {
-        return metaInfo;
-    }
-
+    public List<MetaInfo> getMetaInfo() { return metaInfo; }
     public void setMetaInfo(@Nonnull final List<MetaInfo> metaInfo) {
         this.metaInfo = metaInfo;
     }

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
@@ -13,11 +15,6 @@ import static com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeS
 import static com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory.getSearchParameter;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonBuilder;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
-
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MetaInfo;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
@@ -31,54 +28,31 @@ import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.youtube.YoutubeMetaInfoHelper;
-import com.vyonex.internal.fallback.utils.JsonUtils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonBuilder;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Objects;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-/*
- * Created by Christian Schabesberger on 22.07.2018
- *
- * Copyright (C) 2018 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * YoutubeSearchExtractor.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 public class YoutubeSearchExtractor extends SearchExtractor {
-
     @Nullable
     private final String searchType;
     private final boolean extractVideoResults;
     private final boolean extractChannelResults;
     private final boolean extractPlaylistResults;
-
-    private JsonObject initialData;
+    private JsonObject response;
 
     public YoutubeSearchExtractor(final StreamingService service,
                                   final SearchQueryHandler linkHandler) {
         super(service, linkHandler);
-        final List<String> contentFilters = linkHandler.getContentFilters();
-        searchType = isNullOrEmpty(contentFilters) ? null : contentFilters.get(0);
-        // Save whether we should extract video, channel and playlist results depending on the
-        // requested search type, as YouTube returns sometimes videos inside channel search results
-        // If no search type is provided or ALL filter is requested, extract everything
+        final List<String> filters = linkHandler.getContentFilters();
+        searchType = isNullOrEmpty(filters) ? null : filters.get(0);
         extractVideoResults = searchType == null || ALL.equals(searchType)
                 || VIDEOS.equals(searchType);
         extractChannelResults = searchType == null || ALL.equals(searchType)
@@ -88,22 +62,15 @@ public class YoutubeSearchExtractor extends SearchExtractor {
     }
 
     @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws IOException,
-            ExtractionException {
-        final String query = super.getSearchString();
+    public void onFetchPage(@Nonnull final Downloader downloader)
+            throws IOException, ExtractionException {
         final Localization localization = getExtractorLocalization();
+        final JsonBuilder<JsonObject> body = prepareDesktopJsonBuilder(
+                localization, getExtractorContentCountry()).value("query", getSearchString());
         final String params = getSearchParameter(searchType);
-
-        final JsonBuilder<JsonObject> jsonBody = prepareDesktopJsonBuilder(localization,
-                getExtractorContentCountry())
-                .value("query", query);
-        if (!isNullOrEmpty(params)) {
-            jsonBody.value("params", params);
-        }
-
-        final byte[] body = JsonWriter.string(jsonBody.done()).getBytes(StandardCharsets.UTF_8);
-
-        initialData = getJsonPostResponse("search", body, localization);
+        if (!isNullOrEmpty(params)) body.value("params", params);
+        response = getJsonPostResponse("search",
+                JsonWriter.string(body.done()).getBytes(StandardCharsets.UTF_8), localization);
     }
 
     @Nonnull
@@ -115,165 +82,118 @@ public class YoutubeSearchExtractor extends SearchExtractor {
     @Nonnull
     @Override
     public String getSearchSuggestion() throws ParsingException {
-        final JsonObject itemSectionRenderer = initialData.getObject("contents")
-                .getObject("twoColumnSearchResultsRenderer")
-                .getObject("primaryContents")
-                .getObject("sectionListRenderer")
-                .getArray("contents")
-                .getObject(0)
-                .getObject("itemSectionRenderer");
-        final JsonObject didYouMeanRenderer = itemSectionRenderer.getArray("contents")
-                .getObject(0)
-                .getObject("didYouMeanRenderer");
-
-        if (!didYouMeanRenderer.isEmpty()) {
-            return JsonUtils.getString(didYouMeanRenderer,
-                    "correctedQueryEndpoint.searchEndpoint.query");
-        }
-
-        return Objects.requireNonNullElse(
-                getTextFromObject(itemSectionRenderer.getArray("contents")
-                        .getObject(0)
-                        .getObject("showingResultsForRenderer")
-                        .getObject("correctedQuery")), "");
+        final JsonObject first = firstSectionItems().getObject(0);
+        final String suggestion = first.getObject("didYouMeanRenderer")
+                .getObject("correctedQueryEndpoint").getObject("searchEndpoint")
+                .getString("query");
+        if (suggestion != null) return suggestion;
+        final String corrected = getTextFromObject(first.getObject("showingResultsForRenderer")
+                .getObject("correctedQuery"));
+        return corrected == null ? "" : corrected;
     }
 
     @Override
-    public boolean isCorrectedSearch() {
-        final JsonObject showingResultsForRenderer = initialData.getObject("contents")
-                .getObject("twoColumnSearchResultsRenderer").getObject("primaryContents")
-                .getObject("sectionListRenderer").getArray("contents").getObject(0)
-                .getObject("itemSectionRenderer").getArray("contents").getObject(0)
-                .getObject("showingResultsForRenderer");
-        return !showingResultsForRenderer.isEmpty();
+    public boolean isCorrectedSearch() throws ParsingException {
+        return !firstSectionItems().getObject(0)
+                .getObject("showingResultsForRenderer").isEmpty();
     }
 
     @Nonnull
     @Override
     public List<MetaInfo> getMetaInfo() throws ParsingException {
-        return YoutubeMetaInfoHelper.getMetaInfo(
-                initialData.getObject("contents")
-                        .getObject("twoColumnSearchResultsRenderer")
-                        .getObject("primaryContents")
-                        .getObject("sectionListRenderer")
-                        .getArray("contents"));
+        return YoutubeMetaInfoHelper.getMetaInfo(searchSections());
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-
-        final JsonArray sections = initialData.getObject("contents")
-                .getObject("twoColumnSearchResultsRenderer")
-                .getObject("primaryContents")
-                .getObject("sectionListRenderer")
-                .getArray("contents");
-
-        Page nextPage = null;
-
-        for (final Object section : sections) {
-            final JsonObject sectionJsonObject = (JsonObject) section;
-            if (sectionJsonObject.has("itemSectionRenderer")) {
-                final JsonObject itemSectionRenderer =
-                        sectionJsonObject.getObject("itemSectionRenderer");
-
-                collectStreamsFrom(collector, itemSectionRenderer.getArray("contents"));
-            } else if (sectionJsonObject.has("continuationItemRenderer")) {
-                nextPage = getNextPageFrom(
-                        sectionJsonObject.getObject("continuationItemRenderer"));
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        Page next = null;
+        for (final JsonObject section : searchSections().streamAsJsonObjects().toList()) {
+            if (section.has("itemSectionRenderer")) {
+                collectItems(items, section.getObject("itemSectionRenderer").getArray("contents"));
+            } else if (section.has("continuationItemRenderer")) {
+                next = nextPage(section.getObject("continuationItemRenderer"));
             }
         }
-
-        return new InfoItemsPage<>(collector, nextPage);
+        return new InfoItemsPage<>(items, next);
     }
 
     @Override
-    public InfoItemsPage<InfoItem> getPage(final Page page) throws IOException,
-            ExtractionException {
+    public InfoItemsPage<InfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
         if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+            throw new IllegalArgumentException("Page doesn't contain a URL");
         }
-
         final Localization localization = getExtractorLocalization();
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-
-        // @formatter:off
-        final byte[] json = JsonWriter.string(prepareDesktopJsonBuilder(localization,
-                getExtractorContentCountry())
-                .value("continuation", page.getId())
-                .done())
-                .getBytes(StandardCharsets.UTF_8);
-        // @formatter:on
-
-        final JsonObject ajaxJson = getJsonPostResponse("search", json, localization);
-
-        final JsonArray continuationItems = ajaxJson.getArray("onResponseReceivedCommands")
-                .getObject(0)
-                .getObject("appendContinuationItemsAction")
+        final JsonBuilder<JsonObject> body = prepareDesktopJsonBuilder(
+                localization, getExtractorContentCountry()).value("continuation", page.getId());
+        final JsonObject nextResponse = getJsonPostResponse("search",
+                JsonWriter.string(body.done()).getBytes(StandardCharsets.UTF_8), localization);
+        final JsonArray continuationItems = nextResponse.getArray("onResponseReceivedCommands")
+                .getObject(0).getObject("appendContinuationItemsAction")
                 .getArray("continuationItems");
-
         final JsonArray contents = continuationItems.getObject(0)
-                .getObject("itemSectionRenderer")
-                .getArray("contents");
-        collectStreamsFrom(collector, contents);
-
-        return new InfoItemsPage<>(collector, getNextPageFrom(continuationItems.getObject(1)
-                .getObject("continuationItemRenderer")));
+                .getObject("itemSectionRenderer").getArray("contents");
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        collectItems(items, contents);
+        return new InfoItemsPage<>(items,
+                nextPage(continuationItems.getObject(1).getObject("continuationItemRenderer")));
     }
 
-    private void collectStreamsFrom(final MultiInfoItemsCollector collector,
-                                    @Nonnull final JsonArray contents)
-            throws NothingFoundException {
-        final TimeAgoParser timeAgoParser = getTimeAgoParser();
+    private JsonArray searchSections() {
+        return response.getObject("contents").getObject("twoColumnSearchResultsRenderer")
+                .getObject("primaryContents").getObject("sectionListRenderer")
+                .getArray("contents");
+    }
 
-        for (final Object content : contents) {
-            final JsonObject item = (JsonObject) content;
-            if (item.has("backgroundPromoRenderer")) {
-                throw new NothingFoundException(
-                        getTextFromObject(item.getObject("backgroundPromoRenderer")
-                                .getObject("bodyText")));
-            } else if (item.has("videoRenderer") && extractVideoResults) {
-                collector.commit(new YoutubeStreamInfoItemExtractor(
-                        item.getObject("videoRenderer"), timeAgoParser));
-            } else if (item.has("channelRenderer") && extractChannelResults) {
-                collector.commit(new YoutubeChannelInfoItemExtractor(
-                        item.getObject("channelRenderer")));
-            } else if (item.has("playlistRenderer") && extractPlaylistResults) {
-                collector.commit(new YoutubePlaylistInfoItemExtractor(
-                        item.getObject("playlistRenderer")));
-            } else if (item.has("showRenderer") && extractPlaylistResults) {
-                collector.commit(new YoutubeShowRendererInfoItemExtractor(
-                        item.getObject("showRenderer")));
-            } else if (item.has("lockupViewModel")) {
-                final JsonObject lockupViewModel = item.getObject("lockupViewModel");
-                final String contentType = lockupViewModel.getString("contentType");
-                if (("LOCKUP_CONTENT_TYPE_PLAYLIST".equals(contentType)
-                        || "LOCKUP_CONTENT_TYPE_PODCAST".equals(contentType))
-                        && extractPlaylistResults) {
-                    collector.commit(
-                            new YoutubeMixOrPlaylistLockupInfoItemExtractor(lockupViewModel));
-                } else if ("LOCKUP_CONTENT_TYPE_VIDEO".equals(contentType)
-                        && extractVideoResults) {
-                    collector.commit(new YoutubeStreamInfoItemLockupExtractor(
-                            lockupViewModel, timeAgoParser));
-                }
+    private JsonArray firstSectionItems() {
+        return searchSections().getObject(0).getObject("itemSectionRenderer")
+                .getArray("contents");
+    }
+
+    private void collectItems(final MultiInfoItemsCollector items, final JsonArray contents)
+            throws NothingFoundException {
+        final TimeAgoParser dates = getTimeAgoParser();
+        for (final JsonObject entry : contents.streamAsJsonObjects().toList()) {
+            if (entry.has("backgroundPromoRenderer")) {
+                throw new NothingFoundException(getTextFromObject(
+                        entry.getObject("backgroundPromoRenderer").getObject("bodyText")));
             }
+            if (entry.has("videoRenderer") && extractVideoResults) {
+                items.commit(new YoutubeStreamInfoItemExtractor(
+                        entry.getObject("videoRenderer"), dates));
+            } else if (entry.has("channelRenderer") && extractChannelResults) {
+                items.commit(new YoutubeChannelInfoItemExtractor(entry.getObject("channelRenderer")));
+            } else if (entry.has("playlistRenderer") && extractPlaylistResults) {
+                items.commit(new YoutubePlaylistInfoItemExtractor(
+                        entry.getObject("playlistRenderer")));
+            } else if (entry.has("showRenderer") && extractPlaylistResults) {
+                items.commit(new YoutubeShowRendererInfoItemExtractor(entry.getObject("showRenderer")));
+            } else if (entry.has("lockupViewModel")) {
+                collectLockup(items, entry.getObject("lockupViewModel"), dates);
+            }
+        }
+    }
+
+    private void collectLockup(final MultiInfoItemsCollector items,
+                               final JsonObject lockup,
+                               final TimeAgoParser dates) {
+        final String type = lockup.getString("contentType", "");
+        if (("LOCKUP_CONTENT_TYPE_PLAYLIST".equals(type)
+                || "LOCKUP_CONTENT_TYPE_PODCAST".equals(type)) && extractPlaylistResults) {
+            items.commit(new YoutubeMixOrPlaylistLockupInfoItemExtractor(lockup));
+        } else if ("LOCKUP_CONTENT_TYPE_VIDEO".equals(type) && extractVideoResults) {
+            items.commit(new YoutubeStreamInfoItemLockupExtractor(lockup, dates));
         }
     }
 
     @Nullable
-    private Page getNextPageFrom(final JsonObject continuationItemRenderer) {
-        if (isNullOrEmpty(continuationItemRenderer)) {
-            return null;
-        }
-
-        final String token = continuationItemRenderer.getObject("continuationEndpoint")
-                .getObject("continuationCommand")
-                .getString("token");
-
-        final String url = YOUTUBEI_V1_URL + "search?" + DISABLE_PRETTY_PRINT_PARAMETER;
-
-        return new Page(url, token);
+    private Page nextPage(final JsonObject continuation) {
+        if (continuation.isEmpty()) return null;
+        final String token = continuation.getObject("continuationEndpoint")
+                .getObject("continuationCommand").getString("token");
+        if (isNullOrEmpty(token)) return null;
+        return new Page(YOUTUBEI_V1_URL + "search?" + DISABLE_PRETTY_PRINT_PARAMETER, token);
     }
 }

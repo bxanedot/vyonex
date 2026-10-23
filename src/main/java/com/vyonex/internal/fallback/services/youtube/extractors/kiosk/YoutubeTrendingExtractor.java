@@ -1,33 +1,11 @@
-/*
- * Created by Christian Schabesberger on 12.08.17.
- *
- * Copyright (C) 2018 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * YoutubeTrendingExtractor.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx. If not, see <https://www.gnu.org/licenses/>.
- */
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors.kiosk;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getJsonPostResponse;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextAtKey;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
 
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
@@ -40,20 +18,22 @@ import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.stream.Stream;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.annotation.Nonnull;
 
-public class YoutubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
-
+public final class YoutubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "Trending";
-
-    private JsonObject initialData;
-
     private static final String VIDEOS_TAB_PARAMS = "4gIOGgxtb3N0X3BvcHVsYXI%3D";
+
+    private JsonObject response;
 
     public YoutubeTrendingExtractor(final StreamingService service,
                                     final ListLinkHandler linkHandler,
@@ -64,16 +44,13 @@ public class YoutubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        // @formatter:off
-        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(getExtractorLocalization(),
-                getExtractorContentCountry())
+        final JsonObject body = prepareDesktopJsonBuilder(
+                getExtractorLocalization(), getExtractorContentCountry())
                 .value("browseId", "FEtrending")
                 .value("params", VIDEOS_TAB_PARAMS)
-                .done())
-                .getBytes(StandardCharsets.UTF_8);
-        // @formatter:on
-
-        initialData = getJsonPostResponse("browse", body, getExtractorLocalization());
+                .done();
+        response = getJsonPostResponse("browse",
+                JsonWriter.string(body).getBytes(StandardCharsets.UTF_8), getExtractorLocalization());
     }
 
     @Override
@@ -84,17 +61,15 @@ public class YoutubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     @Nonnull
     @Override
     public String getName() throws ParsingException {
-        final JsonObject header = initialData.getObject("header");
-        String name = null;
-        if (header.has("feedTabbedHeaderRenderer")) {
-            name = getTextAtKey(header.getObject("feedTabbedHeaderRenderer"), "title");
-        } else if (header.has("c4TabbedHeaderRenderer")) {
+        final JsonObject header = response.getObject("header");
+        String name = getTextAtKey(header.getObject("feedTabbedHeaderRenderer"), "title");
+        if (name == null || name.isBlank()) {
             name = getTextAtKey(header.getObject("c4TabbedHeaderRenderer"), "title");
-        } else if (header.has("pageHeaderRenderer")) {
+        }
+        if (name == null || name.isBlank()) {
             name = getTextAtKey(header.getObject("pageHeaderRenderer"), "pageTitle");
         }
-
-        if (isNullOrEmpty(name)) {
+        if (name == null || name.isBlank()) {
             throw new ParsingException("Could not get Trending name");
         }
         return name;
@@ -103,66 +78,65 @@ public class YoutubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     @Nonnull
     @Override
     public InfoItemsPage<StreamInfoItem> getInitialPage() throws ParsingException {
-        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-        final TimeAgoParser timeAgoParser = getTimeAgoParser();
-        final JsonObject tab = getTrendingTab();
-        final JsonObject tabContent = tab.getObject("content");
-        final boolean isVideoTab = tab.getObject("endpoint").getObject("browseEndpoint")
-                .getString("params", "").equals(VIDEOS_TAB_PARAMS);
+        final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
+        final TimeAgoParser dates = getTimeAgoParser();
+        final JsonObject tab = getSelectedTab();
+        final JsonObject content = tab.getObject("content");
+        final boolean videosTab = VIDEOS_TAB_PARAMS.equals(tab.getObject("endpoint")
+                .getObject("browseEndpoint").getString("params"));
 
-        if (tabContent.has("richGridRenderer")) {
-            tabContent.getObject("richGridRenderer")
-                    .getArray("contents")
-                    .streamAsJsonObjects()
-                    // Filter Trending shorts and Recently trending sections
-                    .filter(content -> content.has("richItemRenderer"))
-                    .map(content -> content.getObject("richItemRenderer")
-                            .getObject("content")
-                            .getObject("videoRenderer"))
-                    .forEachOrdered(videoRenderer -> collector.commit(
-                            new YoutubeStreamInfoItemExtractor(videoRenderer, timeAgoParser)));
-        } else if (tabContent.has("sectionListRenderer")) {
-            final Stream<JsonObject> shelves = tabContent.getObject("sectionListRenderer")
-                    .getArray("contents")
-                    .streamAsJsonObjects()
-                    .flatMap(content -> content.getObject("itemSectionRenderer")
-                            .getArray("contents")
-                            .streamAsJsonObjects())
-                    .map(content -> content.getObject("shelfRenderer"));
-
-            final Stream<JsonObject> items;
-            if (isVideoTab) {
-                // The first shelf of the Videos tab contains the normal trends
-                items = shelves.findFirst().stream();
-            } else {
-                // Filter Trending shorts and Recently trending sections which have a title,
-                // contrary to normal trends
-                items = shelves.filter(shelfRenderer -> !shelfRenderer.has("title"));
-            }
-
-            items.flatMap(shelfRenderer -> shelfRenderer.getObject("content")
-                            .getObject("expandedShelfContentsRenderer")
-                            .getArray("items")
-                            .streamAsJsonObjects())
-                    .map(item -> item.getObject("videoRenderer"))
-                    .forEachOrdered(videoRenderer -> collector.commit(
-                            new YoutubeStreamInfoItemExtractor(videoRenderer, timeAgoParser)));
+        if (content.has("richGridRenderer")) {
+            addRichGridVideos(content.getObject("richGridRenderer").getArray("contents"),
+                    dates, items);
+        } else if (content.has("sectionListRenderer")) {
+            addShelfVideos(content.getObject("sectionListRenderer").getArray("contents"),
+                    videosTab, dates, items);
         }
-
-        return new InfoItemsPage<>(collector, null);
+        return new InfoItemsPage<>(items, null);
     }
 
-    private JsonObject getTrendingTab() throws ParsingException {
-        return initialData.getObject("contents")
-                .getObject("twoColumnBrowseResultsRenderer")
-                .getArray("tabs")
-                .streamAsJsonObjects()
-                .map(tab -> tab.getObject("tabRenderer"))
-                .filter(tabRenderer -> tabRenderer.getBoolean("selected"))
-                .filter(tabRenderer -> tabRenderer.has("content"))
-                // There should be at most one tab selected
-                .findFirst()
-                .orElseThrow(() ->
-                        new ParsingException("Could not get \"Now\" or \"Videos\" trending tab"));
+    private JsonObject getSelectedTab() throws ParsingException {
+        final JsonArray tabs = response.getObject("contents")
+                .getObject("twoColumnBrowseResultsRenderer").getArray("tabs");
+        for (final JsonObject tab : tabs.streamAsJsonObjects().toList()) {
+            final JsonObject renderer = tab.getObject("tabRenderer");
+            if (renderer.getBoolean("selected") && renderer.has("content")) return renderer;
+        }
+        throw new ParsingException("Could not find the selected Trending tab");
+    }
+
+    private static void addRichGridVideos(final JsonArray contents,
+                                          final TimeAgoParser dates,
+                                          final StreamInfoItemsCollector items) {
+        for (final JsonObject entry : contents.streamAsJsonObjects().toList()) {
+            if (!entry.has("richItemRenderer")) continue;
+            final JsonObject video = entry.getObject("richItemRenderer")
+                    .getObject("content").getObject("videoRenderer");
+            items.commit(new YoutubeStreamInfoItemExtractor(video, dates));
+        }
+    }
+
+    private static void addShelfVideos(final JsonArray sections,
+                                       final boolean videosTab,
+                                       final TimeAgoParser dates,
+                                       final StreamInfoItemsCollector items) {
+        final List<JsonObject> shelves = new ArrayList<>();
+        for (final JsonObject section : sections.streamAsJsonObjects().toList()) {
+            for (final JsonObject content : section.getObject("itemSectionRenderer")
+                    .getArray("contents").streamAsJsonObjects().toList()) {
+                final JsonObject shelf = content.getObject("shelfRenderer");
+                if (videosTab ? shelves.isEmpty() : !shelf.has("title")) shelves.add(shelf);
+            }
+            if (videosTab && !shelves.isEmpty()) break;
+        }
+
+        for (final JsonObject shelf : shelves) {
+            final JsonArray videos = shelf.getObject("content")
+                    .getObject("expandedShelfContentsRenderer").getArray("items");
+            for (final JsonObject item : videos.streamAsJsonObjects().toList()) {
+                items.commit(new YoutubeStreamInfoItemExtractor(
+                        item.getObject("videoRenderer"), dates));
+            }
+        }
     }
 }

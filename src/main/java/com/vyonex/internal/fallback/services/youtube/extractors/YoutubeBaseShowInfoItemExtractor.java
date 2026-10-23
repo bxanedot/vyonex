@@ -1,66 +1,68 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Objects;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
 
-/**
- * The base {@link PlaylistInfoItemExtractor} for shows playlists UI elements.
- */
+/** Shared VyonEx mapping for playlist-like show cards. */
 abstract class YoutubeBaseShowInfoItemExtractor implements PlaylistInfoItemExtractor {
-
     @Nonnull
     protected final JsonObject showRenderer;
 
     YoutubeBaseShowInfoItemExtractor(@Nonnull final JsonObject showRenderer) {
-        this.showRenderer = showRenderer;
+        this.showRenderer = Objects.requireNonNull(showRenderer, "show renderer is required");
     }
 
     @Override
     public String getName() throws ParsingException {
-        return showRenderer.getString("title");
+        final String name = showRenderer.getString("title");
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Show title is missing");
+        }
+        return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        return getUrlFromNavigationEndpoint(showRenderer.getObject("navigationEndpoint"));
+        final String url = getUrlFromNavigationEndpoint(showRenderer.getObject("navigationEndpoint"));
+        if (url == null || url.isBlank()) {
+            throw new ParsingException("Show URL is missing");
+        }
+        return url;
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromInfoItem(showRenderer.getObject("thumbnailRenderer")
-                .getObject("showCustomThumbnailRenderer"));
+        return getThumbnailsFromInfoItem(
+                showRenderer.getObject("thumbnailRenderer").getObject("showCustomThumbnailRenderer"));
     }
 
     @Override
     public long getStreamCount() throws ParsingException {
-        // The stream count should be always returned in the first text object for English
-        // localizations, but the complete text is parsed for reliability purposes
-        final String streamCountText = getTextFromObject(
-                showRenderer.getObject("thumbnailOverlays")
-                        .getObject("thumbnailOverlayBottomPanelRenderer")
-                        .getObject("text"));
-        if (streamCountText == null) {
-            throw new ParsingException("Could not get stream count");
+        final String count = getTextFromObject(showRenderer.getObject("thumbnailOverlays")
+                .getObject("thumbnailOverlayBottomPanelRenderer").getObject("text"));
+        if (count == null || count.isBlank()) {
+            throw new ParsingException("Show stream count is missing");
         }
 
         try {
-            // The data returned could be a human/shortened number, but no show with more than 1000
-            // videos has been found at the time this code was written
-            return Long.parseLong(Utils.removeNonDigitCharacters(streamCountText));
-        } catch (final NumberFormatException e) {
-            throw new ParsingException("Could not convert stream count to a long", e);
+            return Utils.mixedNumberWordToLong(count);
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse show stream count", error);
         }
     }
 }

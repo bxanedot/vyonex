@@ -1,56 +1,30 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.json.JsonObject;
 
-import javax.annotation.Nonnull;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl;
-import static com.vyonex.internal.fallback.utils.Utils.replaceHttpWithHttps;
+public final class SoundcloudChannelInfoItemExtractor implements ChannelInfoItemExtractor {
+    private final JsonObject user;
 
-public class SoundcloudChannelInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final JsonObject itemObject;
+    public SoundcloudChannelInfoItemExtractor(final JsonObject user) { this.user = user; }
 
-    public SoundcloudChannelInfoItemExtractor(final JsonObject itemObject) {
-        this.itemObject = itemObject;
+    @Override public String getName() { return user.getString("username", ""); }
+    @Override public String getUrl() {
+        return SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
     }
-
-    @Override
-    public String getName() {
-        return itemObject.getString("username");
+    @Override public List<Image> getThumbnails() {
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
+                user.getString("avatar_url"));
     }
-
-    @Override
-    public String getUrl() {
-        return replaceHttpWithHttps(itemObject.getString("permalink_url"));
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() {
-        return getAllImagesFromArtworkOrAvatarUrl(itemObject.getString("avatar_url"));
-    }
-
-    @Override
-    public long getSubscriberCount() {
-        return itemObject.getLong("followers_count");
-    }
-
-    @Override
-    public long getStreamCount() {
-        return itemObject.getLong("track_count");
-    }
-
-    @Override
-    public boolean isVerified() {
-        return itemObject.getBoolean("verified");
-    }
-
-    @Override
-    public String getDescription() {
-        return itemObject.getString("description", "");
-    }
+    @Override public long getSubscriberCount() { return user.getLong("followers_count"); }
+    @Override public long getStreamCount() { return user.getLong("track_count"); }
+    @Override public boolean isVerified() { return user.getBoolean("verified"); }
+    @Override public String getDescription() { return user.getString("description", ""); }
 }

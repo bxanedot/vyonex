@@ -1,8 +1,7 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonParser;
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
@@ -15,9 +14,10 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
-import javax.annotation.Nonnull;
 import java.io.IOException;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.COUNT_KEY;
@@ -25,57 +25,47 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.START_KEY;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.collectItemsFrom;
 import static com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory.getUrlSuffix;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-public class PeertubeChannelTabExtractor extends ChannelTabExtractor {
+public final class PeertubeChannelTabExtractor extends ChannelTabExtractor {
     private final String baseUrl;
 
     public PeertubeChannelTabExtractor(final StreamingService service,
-                                       final ListLinkHandler linkHandler)
-            throws ParsingException {
-        super(service, linkHandler);
+                                       final ListLinkHandler handler) throws ParsingException {
+        super(service, handler);
         baseUrl = getBaseUrl();
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) {
-    }
+    @Override public void onFetchPage(final Downloader downloader) { }
 
-    @Nonnull
     @Override
     public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        return getPage(new Page(baseUrl + PeertubeChannelLinkHandlerFactory.API_ENDPOINT
-                + getId() + getUrlSuffix(getName()) + "?" + START_KEY + "=0&" + COUNT_KEY + "="
-                + ITEMS_PER_PAGE));
+        final String url = baseUrl + PeertubeChannelLinkHandlerFactory.API_ENDPOINT + getId()
+                + getUrlSuffix(getName()) + "?" + START_KEY + "=0&"
+                + COUNT_KEY + "=" + ITEMS_PER_PAGE;
+        return getPage(new Page(url));
     }
 
     @Override
     public InfoItemsPage<InfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+        if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
+            throw new IllegalArgumentException("Page URL is required");
         }
-
         final Response response = getDownloader().get(page.getUrl());
-
-        JsonObject pageJson = null;
-        if (response != null && !Utils.isBlank(response.responseBody())) {
-            try {
-                pageJson = JsonParser.object().from(response.responseBody());
-            } catch (final Exception e) {
-                throw new ParsingException("Could not parse json data for account info", e);
-            }
+        if (response == null || response.responseBody().isBlank()) {
+            throw new ExtractionException("PeerTube returned no channel tab data");
         }
-
-        if (pageJson == null) {
-            throw new ExtractionException("Unable to get account channel list");
+        final JsonObject data;
+        try {
+            data = JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube channel tab response", error);
         }
-        PeertubeParsingHelper.validate(pageJson);
+        PeertubeParsingHelper.validate(data);
 
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-        collectItemsFrom(collector, pageJson, getBaseUrl());
-
-        return new InfoItemsPage<>(collector,
-                PeertubeParsingHelper.getNextPage(page.getUrl(), pageJson.getLong("total")));
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        collectItemsFrom(items, data, baseUrl);
+        final Page next = PeertubeParsingHelper.getNextPage(page.getUrl(), data.getLong("total"));
+        return new InfoItemsPage<>(items, next);
     }
 }

@@ -1,20 +1,15 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.localization;
-
-import javax.annotation.Nonnull;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Represents a country that should be used when fetching content.
- * <p>
- * YouTube, for example, give different results in their feed depending on which country is
- * selected.
- * </p>
- */
+import javax.annotation.Nonnull;
+
 public class ContentCountry implements Serializable {
     public static final ContentCountry DEFAULT =
             new ContentCountry(Localization.DEFAULT.getCountryCode());
@@ -22,12 +17,11 @@ public class ContentCountry implements Serializable {
     @Nonnull
     private final String countryCode;
 
-    public static List<ContentCountry> listFrom(final String... countryCodeList) {
-        final List<ContentCountry> toReturn = new ArrayList<>();
-        for (final String countryCode : countryCodeList) {
-            toReturn.add(new ContentCountry(countryCode));
-        }
-        return Collections.unmodifiableList(toReturn);
+    @Nonnull
+    public static List<ContentCountry> listFrom(final String... codes) {
+        final List<ContentCountry> result = new ArrayList<>(codes.length);
+        for (final String code : codes) result.add(new ContentCountry(code));
+        return Collections.unmodifiableList(result);
     }
 
     public ContentCountry(@Nonnull final String countryCode) {
@@ -35,31 +29,17 @@ public class ContentCountry implements Serializable {
     }
 
     @Nonnull
-    public String getCountryCode() {
-        return countryCode;
+    public String getCountryCode() { return countryCode; }
+
+    @Override
+    public String toString() { return countryCode; }
+
+    @Override
+    public boolean equals(final Object other) {
+        return this == other || other instanceof ContentCountry that
+                && countryCode.equals(that.countryCode);
     }
 
     @Override
-    public String toString() {
-        return getCountryCode();
-    }
-
-    @Override
-    public boolean equals(final Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof ContentCountry)) {
-            return false;
-        }
-
-        final ContentCountry that = (ContentCountry) o;
-
-        return countryCode.equals(that.countryCode);
-    }
-
-    @Override
-    public int hashCode() {
-        return countryCode.hashCode();
-    }
+    public int hashCode() { return countryCode.hashCode(); }
 }

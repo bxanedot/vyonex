@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.comments;
 
@@ -6,10 +8,10 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public final class CommentsInfoItemsCollector
         extends InfoItemsCollector<CommentsInfoItem, CommentsInfoItemExtractor> {
-
     public CommentsInfoItemsCollector(final int serviceId) {
         super(serviceId);
     }
@@ -17,118 +19,52 @@ public final class CommentsInfoItemsCollector
     @Override
     public CommentsInfoItem extract(final CommentsInfoItemExtractor extractor)
             throws ParsingException {
-        final CommentsInfoItem resultItem = new CommentsInfoItem(
+        final CommentsInfoItem item = new CommentsInfoItem(
                 getServiceId(), extractor.getUrl(), extractor.getName());
 
-        // optional information
-        try {
-            resultItem.setCommentId(extractor.getCommentId());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setCommentText(extractor.getCommentText());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setUploaderName(extractor.getUploaderName());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setUploaderAvatars(extractor.getUploaderAvatars());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setUploaderUrl(extractor.getUploaderUrl());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setTextualUploadDate(extractor.getTextualUploadDate());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setUploadDate(extractor.getUploadDate());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setLikeCount(extractor.getLikeCount());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setTextualLikeCount(extractor.getTextualLikeCount());
-        } catch (final Exception e) {
-            addError(e);
-        }
-        try {
-            resultItem.setThumbnails(extractor.getThumbnails());
-        } catch (final Exception e) {
-            addError(e);
-        }
+        copy(extractor::getCommentId, item::setCommentId);
+        copy(extractor::getCommentText, item::setCommentText);
+        copy(extractor::getUploaderName, item::setUploaderName);
+        copy(extractor::getUploaderAvatars, item::setUploaderAvatars);
+        copy(extractor::getUploaderUrl, item::setUploaderUrl);
+        copy(extractor::getTextualUploadDate, item::setTextualUploadDate);
+        copy(extractor::getUploadDate, item::setUploadDate);
+        copy(extractor::getLikeCount, item::setLikeCount);
+        copy(extractor::getTextualLikeCount, item::setTextualLikeCount);
+        copy(extractor::getThumbnails, item::setThumbnails);
+        copy(extractor::isHeartedByUploader, item::setHeartedByUploader);
+        copy(extractor::isPinned, item::setPinned);
+        copy(extractor::getStreamPosition, item::setStreamPosition);
+        copy(extractor::getReplyCount, item::setReplyCount);
+        copy(extractor::getReplies, item::setReplies);
+        copy(extractor::isChannelOwner, item::setChannelOwner);
+        copy(extractor::hasCreatorReply, item::setCreatorReply);
+        return item;
+    }
 
+    private <T> void copy(final Field<T> field, final Consumer<T> setter) {
         try {
-            resultItem.setHeartedByUploader(extractor.isHeartedByUploader());
-        } catch (final Exception e) {
-            addError(e);
+            setter.accept(field.read());
+        } catch (final Exception error) {
+            addError(error);
         }
+    }
 
-        try {
-            resultItem.setPinned(extractor.isPinned());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-        try {
-            resultItem.setStreamPosition(extractor.getStreamPosition());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-        try {
-            resultItem.setReplyCount(extractor.getReplyCount());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-        try {
-            resultItem.setReplies(extractor.getReplies());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-        try {
-            resultItem.setChannelOwner(extractor.isChannelOwner());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-
-        try {
-            resultItem.setCreatorReply(extractor.hasCreatorReply());
-        } catch (final Exception e) {
-            addError(e);
-        }
-
-
-        return resultItem;
+    @FunctionalInterface
+    private interface Field<T> {
+        T read() throws Exception;
     }
 
     @Override
     public void commit(final CommentsInfoItemExtractor extractor) {
         try {
             addItem(extract(extractor));
-        } catch (final Exception e) {
-            addError(e);
+        } catch (final Exception error) {
+            addError(error);
         }
     }
 
     public List<CommentsInfoItem> getCommentsInfoItemList() {
-        return new ArrayList<>(super.getItems());
+        return new ArrayList<>(getItems());
     }
 }

@@ -1,103 +1,90 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.utils.Parser;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Objects;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
+/** Converts YouTube Music artist search results into channel items. */
 public class YoutubeMusicArtistInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final JsonObject artistInfoItem;
+    private final JsonObject artist;
 
-    public YoutubeMusicArtistInfoItemExtractor(final JsonObject artistInfoItem) {
-        this.artistInfoItem = artistInfoItem;
+    public YoutubeMusicArtistInfoItemExtractor(final JsonObject artist) {
+        this.artist = Objects.requireNonNull(artist, "artist result is required");
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
         try {
-            return getImagesFromThumbnailsArray(
-                    artistInfoItem.getObject("thumbnail")
-                            .getObject("musicThumbnailRenderer")
-                            .getObject("thumbnail")
-                            .getArray("thumbnails"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get thumbnails", e);
+            return getImagesFromThumbnailsArray(artist.getObject("thumbnail")
+                    .getObject("musicThumbnailRenderer").getObject("thumbnail")
+                    .getArray("thumbnails"));
+        } catch (final RuntimeException error) {
+            throw new ParsingException("Could not read artist thumbnails", error);
         }
     }
 
     @Override
     public String getName() throws ParsingException {
-        final String name = getTextFromObject(artistInfoItem.getArray("flexColumns")
-                .getObject(0)
-                .getObject("musicResponsiveListItemFlexColumnRenderer")
-                .getObject("text"));
-        if (!isNullOrEmpty(name)) {
-            return name;
+        final JsonArray columns = artist.getArray("flexColumns");
+        final String name = columns.isEmpty() ? null : getTextFromObject(columns.getObject(0)
+                .getObject("musicResponsiveListItemFlexColumnRenderer").getObject("text"));
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Artist name is missing");
         }
-        throw new ParsingException("Could not get name");
+        return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        final String url = getUrlFromNavigationEndpoint(
-                artistInfoItem.getObject("navigationEndpoint"));
-        if (!isNullOrEmpty(url)) {
-            return url;
+        final String url = getUrlFromNavigationEndpoint(artist.getObject("navigationEndpoint"));
+        if (url == null || url.isBlank()) {
+            throw new ParsingException("Artist URL is missing");
         }
-        throw new ParsingException("Could not get URL");
+        return url;
     }
 
     @Override
     public long getSubscriberCount() throws ParsingException {
-        final JsonArray flexColumns = artistInfoItem.getArray("flexColumns");
-        final JsonArray runs = flexColumns
-                .getObject(flexColumns.size() - 1)
+        final JsonArray columns = artist.getArray("flexColumns");
+        if (columns.isEmpty()) throw new ParsingException("Artist audience size is missing");
+
+        final JsonArray runs = columns.getObject(columns.size() - 1)
                 .getObject("musicResponsiveListItemFlexColumnRenderer")
-                .getObject("text")
-                .getArray("runs");
-        // NOTE: YoutubeParsingHelper#getTextFromObject would use all entries from the run array,
-        // which is not wanted as only the last entry contains the actual subscriberCount
-        final String subscriberCount = runs.getObject(runs.size() - 1)
-                .getString("text");
-        if (!isNullOrEmpty(subscriberCount)) {
-            try {
-                return Utils.mixedNumberWordToLong(subscriberCount);
-            } catch (final Parser.RegexException ignored) {
-                // probably subscriberCount == "No subscribers" or similar
-                return 0;
-            }
+                .getObject("text").getArray("runs");
+        if (runs.isEmpty()) throw new ParsingException("Artist audience size is missing");
+
+        final String label = runs.getObject(runs.size() - 1).getString("text");
+        if (label == null || label.isBlank()) {
+            throw new ParsingException("Artist audience size is missing");
         }
-        throw new ParsingException("Could not get subscriber count");
+        try {
+            return Utils.mixedNumberWordToLong(label);
+        } catch (final Parser.RegexException ignored) {
+            return 0;
+        } catch (final NumberFormatException error) {
+            throw new ParsingException("Could not parse artist audience size", error);
+        }
     }
 
-    @Override
-    public long getStreamCount() {
-        return -1;
-    }
-
-    @Override
-    public boolean isVerified() {
-        // An artist on YouTube Music is always verified
-        return true;
-    }
-
-    @Nullable
-    @Override
-    public String getDescription() {
-        return null;
-    }
+    @Override public long getStreamCount() { return ListExtractor.ITEM_COUNT_UNKNOWN; }
+    @Override public boolean isVerified() { return true; }
+    @Nullable @Override public String getDescription() { return null; }
 }

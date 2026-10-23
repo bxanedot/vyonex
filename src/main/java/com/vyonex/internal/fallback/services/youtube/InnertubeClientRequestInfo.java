@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube;
 
@@ -31,130 +33,102 @@ import static com.vyonex.internal.fallback.services.youtube.ClientsConstants.WEB
 import static com.vyonex.internal.fallback.services.youtube.ClientsConstants.WEB_MUSIC_ANALYTICS_CLIENT_NAME;
 import static com.vyonex.internal.fallback.services.youtube.ClientsConstants.WEB_MUSIC_ANALYTICS_CLIENT_VERSION;
 
-// TODO: add docs
-
 public final class InnertubeClientRequestInfo {
-
-    @Nonnull
-    public ClientInfo clientInfo;
-    @Nonnull
-    public DeviceInfo deviceInfo;
+    @Nonnull public ClientInfo clientInfo;
+    @Nonnull public DeviceInfo deviceInfo;
 
     public static final class ClientInfo {
+        @Nonnull public String clientName;
+        @Nonnull public String clientVersion;
+        @Nonnull public String clientId;
+        @Nullable public String clientScreen;
+        @Nullable public String visitorData;
 
-        @Nonnull
-        public String clientName;
-        @Nonnull
-        public String clientVersion;
-        @Nonnull
-        public String clientId;
-        @Nullable
-        public String clientScreen;
-        @Nullable
-        public String visitorData;
-
-        private ClientInfo(@Nonnull final String clientName,
-                           @Nonnull final String clientVersion,
-                           @Nonnull final String clientId,
-                           @Nullable final String clientScreen,
-                           @Nullable final String visitorData) {
-            this.clientName = clientName;
-            this.clientVersion = clientVersion;
-            this.clientId = clientId;
-            this.clientScreen = clientScreen;
-            this.visitorData = visitorData;
+        private ClientInfo(final String name, final String version, final String id,
+                           @Nullable final String screen, @Nullable final String visitor) {
+            clientName = name;
+            clientVersion = version;
+            clientId = id;
+            clientScreen = screen;
+            visitorData = visitor;
         }
     }
 
     public static final class DeviceInfo {
-
-        @Nullable
-        public String platform;
-        @Nullable
-        public String deviceMake;
-        @Nullable
-        public String deviceModel;
-        @Nullable
-        public String osName;
-        @Nullable
-        public String osVersion;
+        @Nullable public String platform;
+        @Nullable public String deviceMake;
+        @Nullable public String deviceModel;
+        @Nullable public String osName;
+        @Nullable public String osVersion;
         public int androidSdkVersion;
 
-        private DeviceInfo(@Nullable final String platform,
-                           @Nullable final String deviceMake,
-                           @Nullable final String deviceModel,
-                           @Nullable final String osName,
-                           @Nullable final String osVersion,
-                           final int androidSdkVersion) {
+        private DeviceInfo(@Nullable final String platform, @Nullable final String make,
+                           @Nullable final String model, @Nullable final String os,
+                           @Nullable final String version, final int sdk) {
             this.platform = platform;
-            this.deviceMake = deviceMake;
-            this.deviceModel = deviceModel;
-            this.osName = osName;
-            this.osVersion = osVersion;
-            this.androidSdkVersion = androidSdkVersion;
+            deviceMake = make;
+            deviceModel = model;
+            osName = os;
+            osVersion = version;
+            androidSdkVersion = sdk;
         }
     }
 
-    private InnertubeClientRequestInfo(@Nonnull final ClientInfo clientInfo,
-                                       @Nonnull final DeviceInfo deviceInfo) {
-        this.clientInfo = clientInfo;
-        this.deviceInfo = deviceInfo;
+    private InnertubeClientRequestInfo(final ClientInfo client, final DeviceInfo device) {
+        clientInfo = client;
+        deviceInfo = device;
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofWebClient() {
-        return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(
-                        WEB_CLIENT_NAME, WEB_HARDCODED_CLIENT_VERSION, WEB_CLIENT_ID,
-                        WATCH_CLIENT_SCREEN, null),
-                new InnertubeClientRequestInfo.DeviceInfo(DESKTOP_CLIENT_PLATFORM, null, null,
-                        null, null, -1));
+        return desktop(WEB_CLIENT_NAME, WEB_HARDCODED_CLIENT_VERSION, WEB_CLIENT_ID,
+                WATCH_CLIENT_SCREEN);
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofWebEmbeddedPlayerClient() {
-        return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(WEB_EMBEDDED_CLIENT_NAME,
-                        WEB_EMBEDDED_CLIENT_VERSION, WEB_EMBEDDED_CLIENT_ID, EMBED_CLIENT_SCREEN,
-                        null),
-                new InnertubeClientRequestInfo.DeviceInfo(DESKTOP_CLIENT_PLATFORM, null, null,
-                        null, null, -1));
+        return desktop(WEB_EMBEDDED_CLIENT_NAME, WEB_EMBEDDED_CLIENT_VERSION,
+                WEB_EMBEDDED_CLIENT_ID, EMBED_CLIENT_SCREEN);
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofWebMusicAnalyticsChartsClient() {
         return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(WEB_MUSIC_ANALYTICS_CLIENT_NAME,
-                        WEB_MUSIC_ANALYTICS_CLIENT_VERSION, WEB_MUSIC_ANALYTICS_CLIENT_ID, null,
-                        null),
-                new InnertubeClientRequestInfo.DeviceInfo(null, null, null,
-                        null, null, -1));
+                new ClientInfo(WEB_MUSIC_ANALYTICS_CLIENT_NAME,
+                        WEB_MUSIC_ANALYTICS_CLIENT_VERSION, WEB_MUSIC_ANALYTICS_CLIENT_ID,
+                        null, null),
+                new DeviceInfo(null, null, null, null, null, -1));
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofAndroidClient() {
         return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(ANDROID_CLIENT_NAME,
-                        ANDROID_CLIENT_VERSION, ANDROID_CLIENT_ID, WATCH_CLIENT_SCREEN, null),
-                new InnertubeClientRequestInfo.DeviceInfo(MOBILE_CLIENT_PLATFORM, null, null,
-                        "Android", "16", 36));
+                new ClientInfo(ANDROID_CLIENT_NAME, ANDROID_CLIENT_VERSION,
+                        ANDROID_CLIENT_ID, WATCH_CLIENT_SCREEN, null),
+                new DeviceInfo(MOBILE_CLIENT_PLATFORM, null, null, "Android", "16", 36));
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofIosClient() {
         return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(IOS_CLIENT_NAME, IOS_CLIENT_VERSION,
-                        IOS_CLIENT_ID, WATCH_CLIENT_SCREEN, null),
-                new InnertubeClientRequestInfo.DeviceInfo(MOBILE_CLIENT_PLATFORM, "Apple",
-                        IOS_DEVICE_MODEL, "iOS", IOS_OS_VERSION, -1));
+                new ClientInfo(IOS_CLIENT_NAME, IOS_CLIENT_VERSION, IOS_CLIENT_ID,
+                        WATCH_CLIENT_SCREEN, null),
+                new DeviceInfo(MOBILE_CLIENT_PLATFORM, "Apple", IOS_DEVICE_MODEL, "iOS",
+                        IOS_OS_VERSION, -1));
     }
 
     @Nonnull
     public static InnertubeClientRequestInfo ofVisionOsClient() {
         return new InnertubeClientRequestInfo(
-                new InnertubeClientRequestInfo.ClientInfo(VISIONOS_CLIENT_NAME,
-                        VISIONOS_CLIENT_VERSION, VISIONOS_CLIENT_ID, WATCH_CLIENT_SCREEN, null),
-                new InnertubeClientRequestInfo.DeviceInfo(MOBILE_CLIENT_PLATFORM, "Apple",
-                        VISIONOS_DEVICE_MODEL, "visionOS", VISIONOS_VERSION, -1));
+                new ClientInfo(VISIONOS_CLIENT_NAME, VISIONOS_CLIENT_VERSION,
+                        VISIONOS_CLIENT_ID, WATCH_CLIENT_SCREEN, null),
+                new DeviceInfo(MOBILE_CLIENT_PLATFORM, "Apple", VISIONOS_DEVICE_MODEL,
+                        "visionOS", VISIONOS_VERSION, -1));
+    }
+
+    private static InnertubeClientRequestInfo desktop(final String name, final String version,
+                                                      final String id, final String screen) {
+        return new InnertubeClientRequestInfo(new ClientInfo(name, version, id, screen, null),
+                new DeviceInfo(DESKTOP_CLIENT_PLATFORM, null, null, null, null, -1));
     }
 }

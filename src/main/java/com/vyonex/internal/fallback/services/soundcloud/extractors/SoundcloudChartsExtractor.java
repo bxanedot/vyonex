@@ -1,9 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud.extractors;
-
-import static com.vyonex.internal.fallback.ServiceList.SoundCloud;
-import static com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
@@ -18,77 +16,49 @@ import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 
 import java.io.IOException;
 
-import javax.annotation.Nonnull;
+public final class SoundcloudChartsExtractor extends KioskExtractor<StreamInfoItem> {
+    private String nextUrl;
+    private StreamInfoItemsCollector firstPage;
 
-public class SoundcloudChartsExtractor extends KioskExtractor<StreamInfoItem> {
-
-    private String initialFetchNextPageUrl;
-    private StreamInfoItemsCollector initialFetchCollector;
-
-    public SoundcloudChartsExtractor(final StreamingService service,
-                                     final ListLinkHandler linkHandler,
+    public SoundcloudChartsExtractor(final StreamingService service, final ListLinkHandler handler,
                                      final String kioskId) {
-        super(service, linkHandler, kioskId);
+        super(service, handler, kioskId);
     }
 
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
-        throws ExtractionException, IOException {
-        // Check if already run
-        if (initialFetchNextPageUrl != null) {
-            return;
-        }
-
-        initialFetchCollector = new StreamInfoItemsCollector(getServiceId());
-
-        final String apiUrl = SOUNDCLOUD_API_V2_URL + "charts"
-            + "?genre=soundcloud:genres:all-music"
-            + "&client_id=" + SoundcloudParsingHelper.clientId()
-            + "&kind=trending";
-
-        final ContentCountry contentCountry = SoundCloud.getContentCountry();
-        String apiUrlWithRegion = null;
-        if (getService().getSupportedCountries().contains(contentCountry)) {
-            apiUrlWithRegion = apiUrl + "&region=soundcloud:regions:"
-                + contentCountry.getCountryCode();
-        }
-
+    @Override public void onFetchPage(final Downloader downloader)
+            throws ExtractionException, IOException {
+        if (firstPage != null) return;
+        firstPage = new StreamInfoItemsCollector(getServiceId());
+        final String base = SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL + "charts"
+                + "?genre=soundcloud%3Agenres%3Aall-music&client_id="
+                + SoundcloudParsingHelper.clientId() + "&kind=trending";
+        final ContentCountry country = getService().getContentCountry();
+        final String regional = getService().getSupportedCountries().contains(country)
+                ? base + "&region=soundcloud%3Aregions%3A" + country.getCountryCode() : base;
         try {
-            initialFetchNextPageUrl = SoundcloudParsingHelper.getStreamsFromApi(
-                initialFetchCollector,
-                apiUrlWithRegion == null ? apiUrl : apiUrlWithRegion, true);
+            nextUrl = SoundcloudParsingHelper.getStreamsFromApi(firstPage, regional, true);
         } catch (final IOException e) {
-            // Request to other region may be geo-restricted.
-            // See historical region retry issue #537.
-            // We retry without the specified region.
-            initialFetchNextPageUrl = SoundcloudParsingHelper.getStreamsFromApi(
-                initialFetchCollector, apiUrl, true);
+            if (regional.equals(base)) throw e;
+            nextUrl = SoundcloudParsingHelper.getStreamsFromApi(firstPage, base, true);
         }
     }
 
-    @Nonnull
-    @Override
-    public String getName() {
-        return getId();
+    @Override public String getName() { return getId(); }
+
+    @Override public InfoItemsPage<StreamInfoItem> getInitialPage()
+            throws IOException, ExtractionException {
+        if (firstPage == null) throw new IllegalStateException("Charts have not been fetched");
+        return new InfoItemsPage<>(firstPage, nextUrl == null || nextUrl.isBlank()
+                ? null : new Page(nextUrl));
     }
 
-    @Override
-    public InfoItemsPage<StreamInfoItem> getPage(final Page page) throws IOException,
-            ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+    @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
+        if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
+            throw new IllegalArgumentException("Page URL is required");
         }
-
-        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-        final String nextPageUrl = SoundcloudParsingHelper.getStreamsFromApi(collector,
-                page.getUrl(), true);
-
-        return new InfoItemsPage<>(collector, new Page(nextPageUrl));
-    }
-
-    @Nonnull
-    @Override
-    public InfoItemsPage<StreamInfoItem> getInitialPage() throws IOException, ExtractionException {
-        return new InfoItemsPage<>(initialFetchCollector, new Page(initialFetchNextPageUrl));
+        final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
+        final String next = SoundcloudParsingHelper.getStreamsFromApi(items, page.getUrl(), true);
+        return new InfoItemsPage<>(items, next.isBlank() ? null : new Page(next));
     }
 }

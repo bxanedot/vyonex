@@ -1,8 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
@@ -14,83 +14,61 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampDiscographStreamInfoItemExtractor;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.List;
 
 public class BandcampChannelTabExtractor extends ChannelTabExtractor {
+    private final String itemType;
     private JsonArray discography;
-    private final String filter;
 
     public BandcampChannelTabExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler) {
         super(service, linkHandler);
-
-        final String tab = linkHandler.getContentFilters().get(0);
-        switch (tab) {
-            case ChannelTabs.TRACKS:
-                filter = "track";
-                break;
-            case ChannelTabs.ALBUMS:
-                filter = "album";
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported channel tab: " + tab);
-        }
+        final List<String> filters = linkHandler.getContentFilters();
+        if (filters.isEmpty()) throw new IllegalArgumentException("Channel tab is missing its type");
+        itemType = switch (filters.get(0)) {
+            case ChannelTabs.TRACKS -> "track";
+            case ChannelTabs.ALBUMS -> "album";
+            default -> throw new IllegalArgumentException("Unsupported channel tab: " + filters.get(0));
+        };
     }
 
     public static BandcampChannelTabExtractor fromDiscography(final StreamingService service,
                                                               final ListLinkHandler linkHandler,
                                                               final JsonArray discography) {
-        final BandcampChannelTabExtractor tabExtractor =
+        final BandcampChannelTabExtractor extractor =
                 new BandcampChannelTabExtractor(service, linkHandler);
-        tabExtractor.discography = discography;
-        return tabExtractor;
+        extractor.discography = discography;
+        return extractor;
     }
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader) throws ParsingException {
         if (discography == null) {
-            discography = BandcampExtractorHelper.getArtistDetails(getId())
-                    .getArray("discography");
+            discography = BandcampExtractorHelper.getArtistDetails(getId()).getArray("discography");
         }
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-
-        for (final Object discograph : discography) {
-            // A discograph is as an item appears in a discography
-            if (!(discograph instanceof JsonObject)) {
-                continue;
-            }
-
-            final JsonObject discographJsonObject = (JsonObject) discograph;
-            final String itemType = discographJsonObject.getString("item_type", "");
-
-            if (!itemType.equals(filter)) {
-                continue;
-            }
-
-            switch (itemType) {
-                case "track":
-                    collector.commit(new BandcampDiscographStreamInfoItemExtractor(
-                            discographJsonObject, getUrl()));
-                    break;
-                case "album":
-                    collector.commit(new BandcampAlbumInfoItemExtractor(
-                            discographJsonObject, getUrl()));
-                    break;
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        for (final Object value : discography) {
+            if (!(value instanceof JsonObject entry)
+                    || !itemType.equals(entry.getString("item_type"))) continue;
+            if ("track".equals(itemType)) {
+                items.commit(new BandcampDiscographStreamInfoItemExtractor(entry, getUrl()));
+            } else {
+                items.commit(new BandcampAlbumInfoItemExtractor(entry, getUrl()));
             }
         }
-
-        return new InfoItemsPage<>(collector, null);
+        return new InfoItemsPage<>(items, null);
     }
 
     @Override
-    public InfoItemsPage<InfoItem> getPage(final Page page) {
-        return null;
-    }
+    public InfoItemsPage<InfoItem> getPage(final Page page) { return null; }
 }

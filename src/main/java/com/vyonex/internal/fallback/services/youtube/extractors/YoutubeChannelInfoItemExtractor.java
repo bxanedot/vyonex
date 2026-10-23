@@ -1,27 +1,10 @@
-/*
- * Created by Christian Schabesberger on 12.02.17.
- *
- * Copyright (C) 2017 Christian Schabesberger <chris.schabesberger@mailbox.org>
- * YoutubeChannelInfoItemExtractor.java is part of VyonEx.
- *
- * VyonEx is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * VyonEx is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with VyonEx. If not, see <https://www.gnu.org/licenses/>.
- */
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.grack.nanojson.JsonObject;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.ListExtractor;
@@ -30,119 +13,81 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
 
-import javax.annotation.Nonnull;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
+import javax.annotation.Nonnull;
 
 public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final JsonObject channelInfoItem;
-    /**
-     * New layout:
-     * "subscriberCountText": Channel handle
-     * "videoCountText": Subscriber count
-     */
-    private final boolean withHandle;
+    private final JsonObject channel;
+    private final boolean handleInSubscriberField;
 
     public YoutubeChannelInfoItemExtractor(final JsonObject channelInfoItem) {
-        this.channelInfoItem = channelInfoItem;
-
-        boolean wHandle = false;
-        final String subscriberCountText = getTextFromObject(
-                channelInfoItem.getObject("subscriberCountText"));
-        if (subscriberCountText != null) {
-            wHandle = subscriberCountText.startsWith("@");
-        }
-        this.withHandle = wHandle;
+        channel = channelInfoItem;
+        final String subscriberLabel = getTextFromObject(channel.getObject("subscriberCountText"));
+        handleInSubscriberField = subscriberLabel != null && subscriberLabel.startsWith("@");
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
         try {
-            return getThumbnailsFromInfoItem(channelInfoItem);
+            return getThumbnailsFromInfoItem(channel);
         } catch (final Exception e) {
-            throw new ParsingException("Could not get thumbnails", e);
+            throw new ParsingException("Could not read channel thumbnails", e);
         }
     }
 
     @Override
     public String getName() throws ParsingException {
-        try {
-            return getTextFromObject(channelInfoItem.getObject("title"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get name", e);
-        }
+        return getTextFromObject(channel.getObject("title"));
     }
 
     @Override
     public String getUrl() throws ParsingException {
         try {
-            final String id = "channel/" + channelInfoItem.getString("channelId");
-            return YoutubeChannelLinkHandlerFactory.getInstance().getUrl(id);
+            return YoutubeChannelLinkHandlerFactory.getInstance()
+                    .getUrl("channel/" + channel.getString("channelId"));
         } catch (final Exception e) {
-            throw new ParsingException("Could not get url", e);
+            throw new ParsingException("Could not read channel URL", e);
         }
     }
 
     @Override
     public long getSubscriberCount() throws ParsingException {
+        if (!channel.has("subscriberCountText")) return -1;
+        final String value = getTextFromObject(channel.getObject(
+                handleInSubscriberField ? "videoCountText" : "subscriberCountText"));
+        if (value == null) throw new ParsingException("Could not read subscriber count");
         try {
-            if (!channelInfoItem.has("subscriberCountText")) {
-                // Subscription count is not available for this channel item.
-                return -1;
-            }
-
-            if (withHandle) {
-                if (channelInfoItem.has("videoCountText")) {
-                    return Utils.mixedNumberWordToLong(getTextFromObject(
-                            channelInfoItem.getObject("videoCountText")));
-                } else {
-                    return -1;
-                }
-            }
-
-            return Utils.mixedNumberWordToLong(getTextFromObject(
-                    channelInfoItem.getObject("subscriberCountText")));
+            return Utils.mixedNumberWordToLong(value);
         } catch (final Exception e) {
-            throw new ParsingException("Could not get subscriber count", e);
+            throw new ParsingException("Could not parse subscriber count", e);
         }
     }
 
     @Override
     public long getStreamCount() throws ParsingException {
+        if (handleInSubscriberField || !channel.has("videoCountText")) {
+            return ListExtractor.ITEM_COUNT_UNKNOWN;
+        }
+        final String value = getTextFromObject(channel.getObject("videoCountText"));
         try {
-            if (withHandle || !channelInfoItem.has("videoCountText")) {
-                // Video count is not available, either the channel has no public uploads
-                // or YouTube displays the channel handle instead.
-                return ListExtractor.ITEM_COUNT_UNKNOWN;
-            }
-
-            return Long.parseLong(Utils.removeNonDigitCharacters(getTextFromObject(
-                    channelInfoItem.getObject("videoCountText"))));
+            return Long.parseLong(Utils.removeNonDigitCharacters(value));
         } catch (final Exception e) {
-            throw new ParsingException("Could not get stream count", e);
+            throw new ParsingException("Could not parse channel video count", e);
         }
     }
 
     @Override
-    public boolean isVerified() throws ParsingException {
-        return YoutubeParsingHelper.isVerified(channelInfoItem.getArray("ownerBadges"));
+    public boolean isVerified() {
+        return YoutubeParsingHelper.isVerified(channel.getArray("ownerBadges"));
     }
 
     @Override
-    public String getDescription() throws ParsingException {
-        try {
-            if (!channelInfoItem.has("descriptionSnippet")) {
-                // Channel have no description.
-                return null;
-            }
-
-            return getTextFromObject(channelInfoItem.getObject("descriptionSnippet"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get description", e);
-        }
+    public String getDescription() {
+        return channel.has("descriptionSnippet")
+                ? getTextFromObject(channel.getObject("descriptionSnippet")) : null;
     }
 }

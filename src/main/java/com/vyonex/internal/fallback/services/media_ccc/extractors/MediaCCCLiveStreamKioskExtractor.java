@@ -1,12 +1,14 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -15,87 +17,44 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem;
 
 public class MediaCCCLiveStreamKioskExtractor implements StreamInfoItemExtractor {
-
-    private final JsonObject conferenceInfo;
+    private final JsonObject conference;
     private final String group;
-    private final JsonObject roomInfo;
+    private final JsonObject room;
 
-    public MediaCCCLiveStreamKioskExtractor(final JsonObject conferenceInfo,
-                                            final String group,
-                                            final JsonObject roomInfo) {
-        this.conferenceInfo = conferenceInfo;
+    public MediaCCCLiveStreamKioskExtractor(final JsonObject conference, final String group,
+                                            final JsonObject room) {
+        this.conference = conference;
         this.group = group;
-        this.roomInfo = roomInfo;
+        this.room = room;
     }
 
-    @Override
-    public String getName() throws ParsingException {
-        return roomInfo.getObject("talks").getObject("current").getString("title");
+    @Override public String getName() throws ParsingException {
+        return room.getObject("talks").getObject("current").getString("title");
     }
-
-    @Override
-    public String getUrl() throws ParsingException {
-        return roomInfo.getString("link");
+    @Override public String getUrl() throws ParsingException { return room.getString("link"); }
+    @Nonnull @Override public List<Image> getThumbnails() {
+        return getThumbnailsFromLiveStreamItem(room);
     }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromLiveStreamItem(roomInfo);
-    }
-
-    @Override
-    public StreamType getStreamType() throws ParsingException {
-        boolean isVideo = false;
-        for (final Object stream : roomInfo.getArray("streams")) {
-            if ("video".equals(((JsonObject) stream).getString("type"))) {
-                isVideo = true;
-                break;
+    @Override public StreamType getStreamType() {
+        final JsonArray streams = room.getArray("streams");
+        for (final Object value : streams) {
+            if (value instanceof JsonObject && "video".equals(((JsonObject) value).getString("type"))) {
+                return StreamType.LIVE_STREAM;
             }
         }
-        return isVideo ? StreamType.LIVE_STREAM :  StreamType.AUDIO_LIVE_STREAM;
+        return StreamType.AUDIO_LIVE_STREAM;
     }
-
-    @Override
-    public boolean isAd() throws ParsingException {
-        return false;
+    @Override public boolean isAd() { return false; }
+    @Override public long getDuration() { return 0; }
+    @Override public long getViewCount() { return -1; }
+    @Override public String getUploaderName() throws ParsingException {
+        return conference.getString("conference") + " - " + group + " - "
+                + room.getString("display");
     }
-
-    @Override
-    public long getDuration() throws ParsingException {
-        return 0;
+    @Override public String getUploaderUrl() throws ParsingException {
+        return "https://media.ccc.de/c/" + conference.getString("slug");
     }
-
-    @Override
-    public long getViewCount() throws ParsingException {
-        return -1;
-    }
-
-    @Override
-    public String getUploaderName() throws ParsingException {
-        return conferenceInfo.getString("conference") + " - " + group
-                + " - " + roomInfo.getString("display");
-    }
-
-    @Override
-    public String getUploaderUrl() throws ParsingException {
-        return "https://media.ccc.de/c/" + conferenceInfo.getString("slug");
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
-
-    @Nullable
-    @Override
-    public String getTextualUploadDate() throws ParsingException {
-        return null;
-    }
-
-    @Nullable
-    @Override
-    public DateWrapper getUploadDate() throws ParsingException {
-        return null;
-    }
+    @Override public boolean isUploaderVerified() { return false; }
+    @Nullable @Override public String getTextualUploadDate() { return null; }
+    @Nullable @Override public DateWrapper getUploadDate() { return null; }
 }

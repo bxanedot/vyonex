@@ -1,10 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -18,591 +15,316 @@ import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.utils.JsonUtils;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Objects;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-/**
- * Extractor of YouTube lockup view models for stream items.
- *
- * <p>The following features are currently not implemented:</p>
- * <ul>
- *     <li>Shorts: appear in related items without a duration badge; getDuration() returns -1</li>
- *     <li>YouTube Premium Paid content</li>
- * </ul>
- */
+/** Maps YouTube's lockup card data to a VyonEx stream item. */
 public class YoutubeStreamInfoItemLockupExtractor implements StreamInfoItemExtractor {
-
-    private static final String NO_VIEWS_LOWERCASE = "no views";
-    // This approach is language dependant (en-GB)
-    // Leading end space is voluntary included
-    private static final String PREMIERES_VIDEOS_TEXT = "Premieres ";
-    private static final String PREMIERES_LIVES_TEXT = "Scheduled for ";
-    private static final DateTimeFormatter PREMIERES_DATE_FORMATTER =
+    private static final String VIDEO_PREMIERE_PREFIX = "Premieres ";
+    private static final String LIVE_PREMIERE_PREFIX = "Scheduled for ";
+    private static final DateTimeFormatter PREMIERE_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy, HH:mm");
 
-    private final JsonObject lockupViewModel;
+    private final JsonObject item;
+    private final JsonArray metadataRows;
     private final TimeAgoParser timeAgoParser;
-    private final JsonArray cachedMetadataRows;
+    private StreamType streamType;
+    private String uploadLabel;
 
-    private StreamType cachedStreamType;
-    private String cachedName;
-    private String cachedDateText;
-
-    private ChannelImageViewModel cachedChannelImageViewModel;
-
-    /**
-     * Creates an extractor of StreamInfoItems from a YouTube page.
-     *
-     * @param lockupViewModel The JSON page element
-     * @param timeAgoParser A parser of the textual dates or {@code null}.
-     */
-    public YoutubeStreamInfoItemLockupExtractor(@Nonnull final JsonObject lockupViewModel,
+    public YoutubeStreamInfoItemLockupExtractor(@Nonnull final JsonObject item,
                                                 @Nullable final TimeAgoParser timeAgoParser) {
-        this.lockupViewModel = lockupViewModel;
+        this.item = Objects.requireNonNull(item, "video lockup is required");
         this.timeAgoParser = timeAgoParser;
-        cachedMetadataRows = lockupViewModel.getObject("metadata")
-                .getObject("lockupMetadataViewModel")
-                .getObject("metadata")
-                .getObject("contentMetadataViewModel")
+        this.metadataRows = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("metadata").getObject("contentMetadataViewModel")
                 .getArray("metadataRows");
     }
 
-    /**
-     * Returns whether this is a lockup view model for a channel or a course playlist.
-     *
-     * <p>
-     * Some cases to parse properly the date and the views count requires to know this.
-     * </p>
-     *
-     * @return whether this is a lockup view model for a channel or a course playlist, false by
-     * default
-     */
+    /** Lets channel and course-list callers select their one-row live-count behavior. */
     protected boolean isChannelOrCoursePlaylistLockupItem() {
         return false;
     }
 
     @Override
-    public StreamType getStreamType() throws ParsingException {
-        if (cachedStreamType == null) {
-            cachedStreamType = determineStreamType();
+    public StreamType getStreamType() {
+        if (streamType != null) return streamType;
+        for (final JsonObject overlay : overlays().streamAsJsonObjects().toList()) {
+            for (final JsonObject wrapper : overlay.getObject("thumbnailOverlayBadgeViewModel")
+                    .getArray("thumbnailBadges").streamAsJsonObjects().toList()) {
+                final JsonObject badge = wrapper.getObject("thumbnailBadgeViewModel");
+                if (isLiveBadge(badge)) return streamType = StreamType.LIVE_STREAM;
+            }
+            for (final JsonObject wrapper : overlay.getObject("thumbnailBottomOverlayViewModel")
+                    .getArray("badges").streamAsJsonObjects().toList()) {
+                if (isLiveBadge(wrapper.getObject("thumbnailBadgeViewModel"))) {
+                    return streamType = StreamType.LIVE_STREAM;
+                }
+            }
         }
-        return cachedStreamType;
+        return streamType = StreamType.VIDEO_STREAM;
     }
 
-    private StreamType determineStreamType() throws ParsingException {
-        final JsonArray overlays = JsonUtils.getArray(lockupViewModel,
-            "contentImage.thumbnailViewModel.overlays");
-
-        // thumbnailOverlayBadgeViewModel path (legacy/alternate overlay structure)
-        if (overlays.streamAsJsonObjects()
-            .flatMap(overlay -> overlay
-                .getObject("thumbnailOverlayBadgeViewModel")
-                .getArray("thumbnailBadges")
-                .streamAsJsonObjects())
-            .map(thumbnailBadge -> thumbnailBadge.getObject("thumbnailBadgeViewModel"))
-            .anyMatch(vm -> {
-                if ("THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".equals(vm.getString("badgeStyle"))) {
-                    return true;
-                }
-                // Fallback: Check if there is a live icon
-                return vm.getObject("icon")
-                    .getArray("sources")
-                    .streamAsJsonObjects()
-                    .map(source -> source
-                        .getObject("clientResource")
-                        .getString("imageName"))
-                    .anyMatch("LIVE"::equals);
-            })) {
-            return StreamType.LIVE_STREAM;
+    private boolean isLiveBadge(@Nonnull final JsonObject badge) {
+        if ("THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".equals(badge.getString("badgeStyle"))) {
+            return true;
         }
-
-        // thumbnailBottomOverlayViewModel path (used in lockup format for both duration and live)
-        if (overlays.streamAsJsonObjects()
-            .flatMap(overlay -> overlay
-                .getObject("thumbnailBottomOverlayViewModel")
-                .getArray("badges")
-                .streamAsJsonObjects())
-            .map(badge -> badge.getObject("thumbnailBadgeViewModel"))
-            .anyMatch(vm -> "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".equals(
-                vm.getString("badgeStyle")))) {
-            return StreamType.LIVE_STREAM;
-        }
-
-        return StreamType.VIDEO_STREAM;
+        return badge.getObject("icon").getArray("sources").streamAsJsonObjects()
+                .anyMatch(source -> "LIVE".equals(source.getObject("clientResource")
+                        .getString("imageName")));
     }
 
     @Override
     public boolean isAd() throws ParsingException {
-        final String name = getName();
-        return "[Private video]".equals(name)
-            || "[Deleted video]".equals(name);
+        final String title = getName();
+        return "[Private video]".equals(title) || "[Deleted video]".equals(title);
     }
 
     @Override
     public String getUrl() throws ParsingException {
+        String videoId = item.getString("contentId");
+        if (videoId == null || videoId.isBlank()) {
+            videoId = item.getObject("rendererContext").getObject("commandContext")
+                    .getObject("onTap").getObject("innertubeCommand")
+                    .getObject("watchEndpoint").getString("videoId");
+        }
+        if (videoId == null || videoId.isBlank()) throw new ParsingException("Video ID is missing");
         try {
-            String videoId = lockupViewModel.getString("contentId");
-            if (isNullOrEmpty(videoId)) {
-                videoId = JsonUtils.getString(lockupViewModel,
-                    "rendererContext.commandContext.onTap.innertubeCommand.watchEndpoint.videoId");
-            }
             return YoutubeStreamLinkHandlerFactory.getInstance().getUrl(videoId);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get url", e);
+        } catch (final RuntimeException error) {
+            throw new ParsingException("Could not build video URL", error);
         }
     }
 
     @Override
     public String getName() throws ParsingException {
-        if (cachedName != null) {
-            return cachedName;
-        }
-
-        final String name = JsonUtils.getString(lockupViewModel,
-            "metadata.lockupMetadataViewModel.title.content");
-        if (!isNullOrEmpty(name)) {
-            this.cachedName = name;
-            return name;
-        }
-        throw new ParsingException("Could not get name");
+        final String title = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("title").getString("content");
+        if (title == null || title.isBlank()) throw new ParsingException("Video title is missing");
+        return title;
     }
 
     @Override
     public long getDuration() throws ParsingException {
-        // Duration cannot be extracted for live streams, but only for normal videos
-        // Exact duration cannot be extracted for premieres, an approximation is only available in
-        // accessibility context label
-        if (isLive() || isPremiere()) {
-            return -1;
-        }
+        if (isLive() || isPremiere()) return -1;
 
-        final List<String> potentialDurations = JsonUtils.getArray(lockupViewModel,
-                "contentImage.thumbnailViewModel.overlays")
-            .streamAsJsonObjects()
-            .flatMap(jsonObject -> jsonObject
-                .getObject("thumbnailBottomOverlayViewModel")
-                .getArray("badges")
-                .streamAsJsonObjects())
-            .map(jsonObject -> jsonObject
-                .getObject("thumbnailBadgeViewModel")
-                .getString("text"))
-            .collect(Collectors.toList());
-
-        if (potentialDurations.isEmpty()) {
-            return -1;
-        }
-
-        ParsingException parsingException = null;
-        for (final String potentialDuration : potentialDurations) {
-            if (potentialDuration == null || !potentialDuration.matches(".*\\d.*")) {
-                continue;
-            }
-            try {
-                return YoutubeParsingHelper.parseDurationString(potentialDuration);
-            } catch (final ParsingException ex) {
-                parsingException = ex;
+        ParsingException invalidDuration = null;
+        for (final JsonObject overlay : overlays().streamAsJsonObjects().toList()) {
+            for (final JsonObject wrapper : overlay.getObject("thumbnailBottomOverlayViewModel")
+                    .getArray("badges").streamAsJsonObjects().toList()) {
+                final String label = wrapper.getObject("thumbnailBadgeViewModel").getString("text");
+                if (label == null || label.codePoints().noneMatch(Character::isDigit)) continue;
+                try {
+                    return YoutubeParsingHelper.parseDurationString(label);
+                } catch (final ParsingException error) {
+                    invalidDuration = error;
+                } catch (final NumberFormatException error) {
+                    invalidDuration = new ParsingException("Invalid duration: " + label, error);
+                }
             }
         }
-
-        if (parsingException == null) {
-            return -1; // e.g. only "SHORTS" or "CC" badge was present, no duration available
+        if (invalidDuration != null) {
+            throw new ParsingException("Could not parse video duration", invalidDuration);
         }
-
-        throw new ParsingException("Could not get duration", parsingException);
+        return -1;
     }
 
     @Override
     public String getUploaderName() throws ParsingException {
-        final List<JsonArray> metadataRows = getMetadataPartsFromMetadataRows();
-        if (metadataRows.isEmpty()) {
-            throw new ParsingException("Could not get uploader name: no metadata row");
+        final List<JsonArray> rows = metadataPartsRows();
+        if (rows.isEmpty() || rows.get(0).isEmpty()) {
+            throw new ParsingException("Uploader metadata is missing");
         }
-
-        final String uploaderName = getTextContentFromMetadataPart(metadataRows.get(0)
-                .getObject(0));
-        if (isNullOrEmpty(uploaderName)) {
-            throw new ParsingException("Could not get uploader name");
-        }
-
-        return uploaderName;
+        final String name = text(rows.get(0).getObject(0));
+        if (name == null || name.isBlank()) throw new ParsingException("Uploader name is missing");
+        return name;
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        final JsonObject innerTubeCommand = channelImageViewModel()
-            .forUploaderUrlExtraction()
-            .getObject("rendererContext")
-            .getObject("commandContext")
-            .getObject("onTap")
-            .getObject("innertubeCommand");
-        final JsonObject browseEndpoint = innerTubeCommand
-            .getObject("browseEndpoint");
-        final String channelId = browseEndpoint
-            .getString("browseId");
+        JsonObject avatarModel = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("image").getObject("decoratedAvatarViewModel", null);
+        if (avatarModel == null) {
+            final JsonObject stack = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                    .getObject("image").getObject("avatarStackViewModel", null);
+            final JsonObject firstAvatar = stack == null ? null : stack.getArray("avatars").getObject(0);
+            avatarModel = firstAvatar == null ? null : firstAvatar.getObject("rendererContext")
+                    .getObject("commandContext").getObject("onTap").getObject("innertubeCommand")
+                    .getObject("showDialogCommand").getObject("panelLoadingStrategy")
+                    .getObject("inlineContent").getObject("dialogViewModel")
+                    .getObject("customContent").getObject("listViewModel")
+                    .getArray("listItems").getObject(0).getObject("listItemViewModel");
+        }
+        if (avatarModel == null) throw new ParsingException("Uploader route is missing");
 
+        final JsonObject command = avatarModel.getObject("rendererContext")
+                .getObject("commandContext").getObject("onTap").getObject("innertubeCommand");
+        final JsonObject browse = command.getObject("browseEndpoint");
+        final String channelId = browse.getString("browseId");
         if (channelId != null && channelId.startsWith("UC")) {
             return YoutubeChannelLinkHandlerFactory.getInstance().getUrl("channel/" + channelId);
         }
 
-        final String canonicalBaseUrl = browseEndpoint.getString("canonicalBaseUrl");
-        if (!isNullOrEmpty(canonicalBaseUrl)) {
-            return resolveUploaderUrlFromRelativeUrl(canonicalBaseUrl);
+        String path = browse.getString("canonicalBaseUrl");
+        if (path == null || path.isBlank()) {
+            path = command.getObject("commandMetadata").getObject("webCommandMetadata")
+                    .getString("url");
         }
-
-        final String webCommandMetadataUrl = innerTubeCommand.getObject("commandMetadata")
-            .getObject("webCommandMetadata")
-            .getString("url");
-        if (!isNullOrEmpty(webCommandMetadataUrl)) {
-            return resolveUploaderUrlFromRelativeUrl(webCommandMetadataUrl);
+        if (path == null || path.isBlank()) throw new ParsingException("Uploader URL is missing");
+        if (path.startsWith("https://www.youtube.com/")) {
+            path = path.substring("https://www.youtube.com/".length());
+        } else if (path.startsWith("https://youtube.com/")) {
+            path = path.substring("https://youtube.com/".length());
         }
-
-        throw new ParsingException("Could not get uploader url");
-    }
-
-    private String resolveUploaderUrlFromRelativeUrl(@Nonnull final String relativeUrl)
-        throws ParsingException {
         return YoutubeChannelLinkHandlerFactory.getInstance().getUrl(
-            relativeUrl.startsWith("/") ? relativeUrl.substring(1) : relativeUrl);
+                path.startsWith("/") ? path.substring(1) : path);
     }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() throws ParsingException {
+        final JsonObject image = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("image");
+        JsonObject avatar = image.getObject("decoratedAvatarViewModel", null);
+        if (avatar != null) {
+            avatar = avatar.getObject("avatar");
+        } else {
+            final JsonObject stack = image.getObject("avatarStackViewModel", null);
+            avatar = stack == null ? null : stack.getArray("avatars").getObject(0);
+        }
+        if (avatar == null) throw new ParsingException("Uploader avatar is missing");
         return YoutubeParsingHelper.getImagesFromThumbnailsArray(
-            JsonUtils.getArray(
-                channelImageViewModel().forAvatarExtraction(),
-                "avatarViewModel.image.sources"));
+                JsonUtils.getArray(avatar, "avatarViewModel.image.sources"));
     }
 
     @Override
     public boolean isUploaderVerified() throws ParsingException {
-        final List<JsonArray> metadataRows = getMetadataPartsFromMetadataRows();
-        if (metadataRows.isEmpty()) {
-            throw new ParsingException("Could not get uploader verified status: no metadata row");
+        final List<JsonArray> rows = metadataPartsRows();
+        if (rows.isEmpty() || rows.get(0).isEmpty()) {
+            throw new ParsingException("Uploader metadata is missing");
         }
-
-        return YoutubeParsingHelper.hasArtistOrVerifiedIconBadgeAttachment(metadataRows.get(0)
-                .getObject(0)
-                .getObject("text")
-                .getArray("attachmentRuns"));
+        final JsonArray attachments = rows.get(0).getObject(0).getObject("text")
+                .getArray("attachmentRuns");
+        return YoutubeParsingHelper.hasArtistOrVerifiedIconBadgeAttachment(attachments);
     }
 
     @Nullable
     @Override
     public String getTextualUploadDate() throws ParsingException {
-        // Live streams have no upload date
-        if (isLive()) {
-            return null;
-        }
-
-        // Date string might be null e.g. for live streams
-        final String dateText = getDateText();
-
-        if (isPremiere()) {
-            return getDateFromPremiere(dateText);
-        }
-
-        return dateText;
-    }
-
-    @Nonnull
-    private String getDateFromPremiere(@Nonnull final String dateText) {
-        // This approach is language dependent
-        // Remove the premieres text from the upload date metadata part
-        return dateText.replace(PREMIERES_VIDEOS_TEXT, "")
-                        .replace(PREMIERES_LIVES_TEXT, "");
+        if (isLive()) return null;
+        final String label = getDateText();
+        if (label.startsWith(VIDEO_PREMIERE_PREFIX)) return label.substring(VIDEO_PREMIERE_PREFIX.length());
+        if (label.startsWith(LIVE_PREMIERE_PREFIX)) return label.substring(LIVE_PREMIERE_PREFIX.length());
+        return label;
     }
 
     @Nullable
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        if (timeAgoParser == null) {
-            return null;
-        }
-
-        final String textualUploadDate = getTextualUploadDate();
-        // Prevent NPE when e.g. a live stream is shown
-        if (textualUploadDate == null) {
-            return null;
-        }
-
+        if (timeAgoParser == null) return null;
+        final String label = getTextualUploadDate();
+        if (label == null) return null;
         if (isPremiere()) {
-            final String premiereDate = getDateFromPremiere(getDateText());
-
             try {
-                // As we request a UTC offset of 0 minutes, we get the UTC date
-                final var dateTime = LocalDateTime.parse(premiereDate, PREMIERES_DATE_FORMATTER);
-                return new DateWrapper(dateTime.atZone(ZoneOffset.UTC).toInstant(), false);
-            } catch (final DateTimeParseException e) {
-                throw new ParsingException("Could not parse premiere upload date", e);
+                return new DateWrapper(LocalDateTime.parse(label, PREMIERE_FORMAT)
+                        .atZone(ZoneOffset.UTC).toInstant(), false);
+            } catch (final DateTimeParseException error) {
+                throw new ParsingException("Could not parse premiere date", error);
             }
         }
-
-        return timeAgoParser.parse(textualUploadDate);
+        return timeAgoParser.parse(label);
     }
 
     @Override
     public long getViewCount() throws ParsingException {
-        if (isChannelsMembersOnlyOrFirst()) {
-            // Members only or members first contents do not return their view count
-            // Check done here as there should be no metadata row for running members-only
-            // livestreams on channels
-            return -1;
+        if (isMembersOnly()) return -1;
+        final List<JsonArray> rows = metadataPartsRows();
+        if (rows.isEmpty()) {
+            if (isLive() && isChannelOrCoursePlaylistLockupItem()) return 0;
+            throw new ParsingException("View count metadata is missing");
         }
+        if (isPremiere()) return -1;
+        if (isLive() && rows.size() == 1 && !isChannelOrCoursePlaylistLockupItem()) return 0;
 
-        final List<JsonArray> metadataPartsRows = getMetadataPartsFromMetadataRows();
-        if (metadataPartsRows.isEmpty()) {
-            // No metadata part row is returned for running livestreams with no viewers on channels
-            // (course playlists shouldn't have livestreams)
-            if (isLive() && isChannelOrCoursePlaylistLockupItem()) {
-                return 0;
-            }
-
-            throw new ParsingException(
-                    "Could not get view count: no metadata part from metadata rows");
-        }
-
-        if (isPremiere()) {
-            // The number of people returned for premieres is the one currently waiting
-            // Check done here as isPremiere relies on metadataPartsRows
-            return -1;
-        }
-
-        if (isLive() && metadataPartsRows.size() == 1 && !isChannelOrCoursePlaylistLockupItem()) {
-            // If there is only one metadata part on channel lockup items for running livestreams,
-            // this should be the watching count (course playlists shouldn't have livestreams)
-            // If this isn't a channel lockup item, this should be a livestream without any viewer
-            return 0;
-        }
-
-        /*
-         * YouTube uses 2 rows for stream items outside channels and course playlists: one for
-         * author(s) then one for views and upload date (in standard cases for this row). However,
-         * on channels, it uses mostly 1 row except for collaborations when there are two, but the
-         * views and upload date metadata row is always the latest one.
-         */
-        final JsonArray metadataPartsRow = metadataPartsRows.get(metadataPartsRows.size() - 1);
-        if (metadataPartsRow.isEmpty()) {
-            throw new ParsingException(
-                    "Could not get view count: no metadata part in the metadata parts array");
-        }
-
-        // View count is always returned as the first metadata part, then date text
-        // For members only content, view count isn't returned, so there is only the date text
-        // in the metadata row
-        final String viewCountText = getTextContentFromMetadataPart(
-                metadataPartsRow.getObject(0));
-        if (isNullOrEmpty(viewCountText)) {
-            throw new ParsingException("Could not get view count");
-        }
-        return getViewCountFromViewCountText(viewCountText);
-    }
-
-    private long getViewCountFromViewCountText(@Nonnull final String viewCountText)
-            throws NumberFormatException, ParsingException {
-        // These approaches are language dependent
-        if (viewCountText.toLowerCase().contains(NO_VIEWS_LOWERCASE)) {
-            return 0;
-        } else if (viewCountText.toLowerCase().contains("recommended")) {
-            return -1;
-        }
-
-        return Utils.mixedNumberWordToLong(viewCountText);
+        final JsonArray finalRow = rows.get(rows.size() - 1);
+        if (finalRow.isEmpty()) throw new ParsingException("View count metadata is empty");
+        final String label = text(finalRow.getObject(0));
+        if (label == null || label.isBlank()) throw new ParsingException("View count is missing");
+        if (label.toLowerCase(java.util.Locale.ROOT).contains("no views")) return 0;
+        if (label.toLowerCase(java.util.Locale.ROOT).contains("recommended")) return -1;
+        return Utils.mixedNumberWordToLong(label);
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        return YoutubeParsingHelper.getImagesFromThumbnailsArray(
-            JsonUtils.getArray(lockupViewModel,
+        return YoutubeParsingHelper.getImagesFromThumbnailsArray(JsonUtils.getArray(item,
                 "contentImage.thumbnailViewModel.image.sources"));
     }
 
     @Nonnull
     @Override
     public ContentAvailability getContentAvailability() throws ParsingException {
-        if (isChannelsMembersOnlyOrFirst()) {
-            // In the case we get a running members-only livestream, checking for isLive first
-            // would return an incorrect content availability
-            // This case hasn't been found when this code has been written, so it needs to be
-            // checked
-            return ContentAvailability.MEMBERSHIP;
-        }
-
-        if (isLive()) {
-            // Check that it is a running livestream first as in the case of a livestream, no date
-            // text is available so getDateText called isPremiere will throw an exception
-            return ContentAvailability.AVAILABLE;
-        }
-
-        if (isPremiere()) {
-            return ContentAvailability.UPCOMING;
-        }
-
-        return ContentAvailability.AVAILABLE;
+        if (isMembersOnly()) return ContentAvailability.MEMBERSHIP;
+        if (isLive()) return ContentAvailability.AVAILABLE;
+        return isPremiere() ? ContentAvailability.UPCOMING : ContentAvailability.AVAILABLE;
     }
 
-    private ChannelImageViewModel channelImageViewModel() throws ParsingException {
-        if (cachedChannelImageViewModel == null) {
-            cachedChannelImageViewModel = determineChannelImageViewModel();
-        }
-
-        return cachedChannelImageViewModel;
-    }
-
-    @Nonnull
-    private ChannelImageViewModel determineChannelImageViewModel() throws ParsingException {
-        final JsonObject image = lockupViewModel.getObject("metadata")
-                .getObject("lockupMetadataViewModel")
-                .getObject("image");
-
-        final JsonObject single = image.getObject("decoratedAvatarViewModel", null);
-        if (single != null) {
-            return new SingleChannelImageViewModel(single);
-        }
-
-        final JsonObject multi = image.getObject("avatarStackViewModel", null);
-        if (multi != null) {
-            return new MultiChannelImageViewModel(multi);
-        }
-
-        throw new ParsingException("Failed to determine channel image view model");
-    }
-
-    @Nullable
-    private String getTextContentFromMetadataPart(@Nonnull final JsonObject metadataPart) {
-        return metadataPart.getObject("text")
-                .getString("content");
-    }
-
-    private boolean isLive() throws ParsingException {
+    private boolean isLive() {
         return getStreamType() != StreamType.VIDEO_STREAM;
     }
 
-    private boolean isChannelsMembersOnlyOrFirst() {
-        return cachedMetadataRows.streamAsJsonObjects()
-                .flatMap(jsonObject -> jsonObject.getArray("badges")
-                        .streamAsJsonObjects())
-                .map(badge -> badge.getObject("badgeViewModel")
-                        .getString("badgeStyle"))
-                // Also returned for members first contents
-                .anyMatch("BADGE_MEMBERS_ONLY"::equals);
+    private boolean isPremiere() throws ParsingException {
+        final String label = getDateText();
+        return label.startsWith(VIDEO_PREMIERE_PREFIX) || label.startsWith(LIVE_PREMIERE_PREFIX);
     }
 
-    private boolean isPremiere() throws ParsingException {
-        final String dateText = getDateText();
-        return dateText.contains(PREMIERES_VIDEOS_TEXT) || dateText.contains(PREMIERES_LIVES_TEXT);
+    private boolean isMembersOnly() {
+        for (final JsonObject row : metadataRows.streamAsJsonObjects().toList()) {
+            for (final JsonObject badge : row.getArray("badges").streamAsJsonObjects().toList()) {
+                if ("BADGE_MEMBERS_ONLY".equals(badge.getObject("badgeViewModel")
+                        .getString("badgeStyle"))) return true;
+            }
+        }
+        return false;
     }
 
     private String getDateText() throws ParsingException {
-        if (cachedDateText == null) {
-            final List<JsonArray> metadataPartsRows = getMetadataPartsFromMetadataRows();
-            if (metadataPartsRows.isEmpty()) {
-                throw new ParsingException(
-                        "Could not get date text: no metadata part from metadata rows");
-            }
+        final List<JsonArray> rows = metadataPartsRows();
+        if (rows.isEmpty()) throw new ParsingException("Upload date metadata is missing");
+        final JsonArray finalRow = rows.get(rows.size() - 1);
+        if (finalRow.isEmpty()) throw new ParsingException("Upload date metadata is empty");
+        final String label = text(finalRow.getObject(finalRow.size() - 1));
+        if (label == null || label.isBlank()) throw new ParsingException("Upload date is missing");
+        return label;
+    }
 
-            /*
-             * YouTube uses 2 rows for stream items outside channels and course playlists: author(s)
-             * then one for views and upload date (in standard cases for this row). However, on
-             * channels, this is mostly 1 row except for collaborations when there are two, but the
-             * views and upload date metadata row is always the latest one.
-             */
-            final JsonArray metadataPartsRow = metadataPartsRows.get(metadataPartsRows.size() - 1);
-            if (metadataPartsRow.isEmpty()) {
-                throw new ParsingException(
-                        "Could not get date text: no metadata part in the metadata parts array");
-            }
-
-            // View count is always returned as the first metadata part, then date text
-            // For members only content, view count isn't returned, so there is only the date text
-            // in the metadata row
-            cachedDateText = getTextContentFromMetadataPart(
-                    metadataPartsRow.getObject(metadataPartsRow.size() - 1));
-            return cachedDateText;
-        }
-        return cachedDateText;
+    @Nullable
+    private static String text(@Nonnull final JsonObject part) {
+        return part.getObject("text").getString("content");
     }
 
     @Nonnull
-    private List<JsonArray> getMetadataPartsFromMetadataRows() {
-        final List<JsonArray> metadataParts = new ArrayList<>();
-
-        for (int i = 0; i < cachedMetadataRows.size(); i++) {
-            final JsonObject metadataRow = cachedMetadataRows.getObject(i);
-            if (metadataRow.has("metadataParts")) {
-                metadataParts.add(metadataRow.getArray("metadataParts"));
-            }
+    private List<JsonArray> metadataPartsRows() {
+        final List<JsonArray> result = new ArrayList<>();
+        for (final JsonObject row : metadataRows.streamAsJsonObjects().toList()) {
+            if (row.has("metadataParts")) result.add(row.getArray("metadataParts"));
         }
-
-        return metadataParts;
+        return result;
     }
 
-    abstract static class ChannelImageViewModel {
-        protected JsonObject viewModel;
-
-        protected ChannelImageViewModel(final JsonObject viewModel) {
-            this.viewModel = viewModel;
-        }
-
-        public abstract JsonObject forUploaderUrlExtraction();
-
-        public abstract JsonObject forAvatarExtraction();
-    }
-
-    static class SingleChannelImageViewModel extends ChannelImageViewModel {
-        SingleChannelImageViewModel(final JsonObject viewModel) {
-            super(viewModel);
-        }
-
-        @Override
-        public JsonObject forUploaderUrlExtraction() {
-            return viewModel;
-        }
-
-        @Override
-        public JsonObject forAvatarExtraction() {
-            return viewModel.getObject("avatar");
-        }
-    }
-
-    static class MultiChannelImageViewModel extends ChannelImageViewModel {
-        MultiChannelImageViewModel(final JsonObject viewModel) {
-            super(viewModel);
-        }
-
-        @Override
-        public JsonObject forUploaderUrlExtraction() {
-            return viewModel.getObject("rendererContext")
-                .getObject("commandContext")
-                .getObject("onTap")
-                .getObject("innertubeCommand")
-                .getObject("showDialogCommand")
-                .getObject("panelLoadingStrategy")
-                .getObject("inlineContent")
-                .getObject("dialogViewModel")
-                .getObject("customContent")
-                .getObject("listViewModel")
-                .getArray("listItems")
-                .streamAsJsonObjects()
-                .map(item -> item.getObject("listItemViewModel"))
-                .findFirst()
-                .orElse(null);
-        }
-
-        @Override
-        public JsonObject forAvatarExtraction() {
-            return viewModel.getArray("avatars")
-                .getObject(0);
-        }
+    @Nonnull
+    private JsonArray overlays() {
+        return item.getObject("contentImage").getObject("thumbnailViewModel")
+                .getArray("overlays");
     }
 }

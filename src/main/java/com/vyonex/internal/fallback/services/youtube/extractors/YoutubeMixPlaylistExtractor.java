@@ -1,21 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.DISABLE_PRETTY_PRINT_PARAMETER;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.YOUTUBEI_V1_URL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractCookieValue;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistId;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getValidJsonResponseBody;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getYouTubeHeaders;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
-import static com.vyonex.internal.fallback.utils.Utils.getQueryValue;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-import static com.vyonex.internal.fallback.utils.Utils.stringToURL;
-
-import com.grack.nanojson.JsonArray;
-import com.grack.nanojson.JsonBuilder;
-import com.grack.nanojson.JsonObject;
-import com.grack.nanojson.JsonWriter;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;
@@ -38,40 +24,40 @@ import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.utils.ImageSuffix;
 import com.vyonex.internal.fallback.utils.JsonUtils;
+import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonBuilder;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.DISABLE_PRETTY_PRINT_PARAMETER;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.YOUTUBEI_V1_URL;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractCookieValue;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistId;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getValidJsonResponseBody;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getYouTubeHeaders;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
 
-/**
- * A {@link YoutubePlaylistExtractor} for a mix (auto-generated playlist).
- * It handles URLs in the format of
- * {@code youtube.com/watch?v=videoId&list=playlistId}
- */
+/** Loads and paginates YouTube-generated mix playlists. */
 public class YoutubeMixPlaylistExtractor extends PlaylistExtractor {
-    private static final List<ImageSuffix> IMAGE_URL_SUFFIXES_AND_RESOLUTIONS = List.of(
-            // sqdefault and maxresdefault image resolutions are not available on all
-            // videos, so don't add them in the list of available resolutions
+    private static final List<ImageSuffix> THUMBNAILS = List.of(
             new ImageSuffix("default.jpg", 90, 120, ResolutionLevel.LOW),
             new ImageSuffix("mqdefault.jpg", 180, 320, ResolutionLevel.MEDIUM),
             new ImageSuffix("hqdefault.jpg", 360, 480, ResolutionLevel.MEDIUM));
-
-    /**
-     * YouTube identifies mixes based on this cookie. With this information it can generate
-     * continuations without duplicates.
-     */
     public static final String COOKIE_NAME = "VISITOR_INFO1_LIVE";
 
     private JsonObject initialData;
     private JsonObject playlistData;
-    private String cookieValue;
+    private String visitorCookie = "";
 
     public YoutubeMixPlaylistExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler) {
@@ -82,214 +68,162 @@ public class YoutubeMixPlaylistExtractor extends PlaylistExtractor {
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
         final Localization localization = getExtractorLocalization();
-        final URL url = stringToURL(getUrl());
-        final String mixPlaylistId = getId();
-        final String videoId = getQueryValue(url, "v");
-        final String playlistIndexString = getQueryValue(url, "index");
+        final URL requestUrl = Utils.stringToURL(getUrl());
+        final JsonBuilder<JsonObject> body = prepareDesktopJsonBuilder(localization,
+                getExtractorContentCountry()).value("playlistId", getId());
 
-        final JsonBuilder<JsonObject> jsonBody = prepareDesktopJsonBuilder(localization,
-                getExtractorContentCountry()).value("playlistId", mixPlaylistId);
-        if (videoId != null) {
-            jsonBody.value("videoId", videoId);
+        final String videoId = Utils.getQueryValue(requestUrl, "v");
+        if (videoId != null && !videoId.isBlank()) body.value("videoId", videoId);
+        final String index = Utils.getQueryValue(requestUrl, "index");
+        if (index != null) {
+            try {
+                final int value = Integer.parseInt(index);
+                if (value < 0) throw new NumberFormatException("index is negative");
+                body.value("playlistIndex", value);
+            } catch (final NumberFormatException error) {
+                throw new ParsingException("Playlist index is invalid", error);
+            }
         }
-        if (playlistIndexString != null) {
-            jsonBody.value("playlistIndex", Integer.parseInt(playlistIndexString));
-        }
 
-        final byte[] body = JsonWriter.string(jsonBody.done()).getBytes(StandardCharsets.UTF_8);
-
-        // Cookie is required due to consent
-        final var headers = getYouTubeHeaders();
-
+        final byte[] requestBody = JsonWriter.string(body.done()).getBytes(StandardCharsets.UTF_8);
         final Response response = getDownloader().postWithContentTypeJson(
-                YOUTUBEI_V1_URL + "next?" + DISABLE_PRETTY_PRINT_PARAMETER, headers, body,
-                localization);
-
+                YOUTUBEI_V1_URL + "next?" + DISABLE_PRETTY_PRINT_PARAMETER,
+                getYouTubeHeaders(), requestBody, localization);
         initialData = JsonUtils.toJsonObject(getValidJsonResponseBody(response));
-        playlistData = initialData
-                .getObject("contents")
-                .getObject("twoColumnWatchNextResults")
-                .getObject("playlist")
-                .getObject("playlist");
-        if (isNullOrEmpty(playlistData)) {
-            final ExtractionException ex = new ExtractionException("Could not get playlistData");
+        playlistData = getPlaylistData(initialData);
+        if (playlistData.isEmpty()) {
+            final ExtractionException cause = new ExtractionException("Mix response has no playlist data");
             if (!YoutubeParsingHelper.isConsentAccepted()) {
                 throw new ContentNotAvailableException(
-                        "Consent is required in some countries to view Mix playlists",
-                        ex);
+                        "Consent is required in some countries to view Mix playlists", cause);
             }
-            throw ex;
+            throw cause;
         }
-        cookieValue = extractCookieValue(COOKIE_NAME, response);
+        visitorCookie = extractCookieValue(COOKIE_NAME, response);
     }
 
-    @Nonnull
     @Override
     public String getName() throws ParsingException {
-        final String name = YoutubeParsingHelper.getTextAtKey(playlistData, "title");
-        if (isNullOrEmpty(name)) {
-            throw new ParsingException("Could not get playlist name");
-        }
-        return name;
+        final String title = YoutubeParsingHelper.getTextAtKey(playlistData, "title");
+        if (title == null || title.isBlank()) throw new ParsingException("Mix title is missing");
+        return title;
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
+        final String playlistId = playlistData.getString("playlistId");
         try {
-            return getThumbnailsFromPlaylistId(playlistData.getString("playlistId"));
-        } catch (final Exception e) {
-            try {
-                // Fallback to thumbnail of current video. Always the case for channel mixes
-                return getThumbnailsFromVideoId(initialData.getObject("currentVideoEndpoint")
-                        .getObject("watchEndpoint").getString("videoId"));
-            } catch (final Exception ignored) {
+            if (playlistId == null || playlistId.isBlank()) {
+                throw new ParsingException("Mix playlist ID is missing");
             }
-
-            throw new ParsingException("Could not get playlist thumbnails", e);
+            return thumbnailsForVideo(YoutubeParsingHelper.extractVideoIdFromMixId(playlistId));
+        } catch (final ParsingException playlistFailure) {
+            final String videoId = initialData.getObject("currentVideoEndpoint")
+                    .getObject("watchEndpoint").getString("videoId");
+            if (videoId != null && !videoId.isBlank()) return thumbnailsForVideo(videoId);
+            throw new ParsingException("Could not read mix thumbnails", playlistFailure);
         }
     }
 
-    @Override
-    public String getUploaderUrl() {
-        // YouTube mixes are auto-generated by YouTube
-        return "";
-    }
-
-    @Override
-    public String getUploaderName() {
-        // YouTube mixes are auto-generated by YouTube
-        return "YouTube";
-    }
+    @Override public String getUploaderUrl() { return ""; }
+    @Override public String getUploaderName() { return "YouTube"; }
+    @Nonnull @Override public List<Image> getUploaderAvatars() { return List.of(); }
+    @Override public boolean isUploaderVerified() { return false; }
+    @Override public long getStreamCount() { return ListExtractor.ITEM_COUNT_INFINITE; }
+    @Nonnull @Override public Description getDescription() { return Description.EMPTY_DESCRIPTION; }
 
     @Nonnull
     @Override
-    public List<Image> getUploaderAvatars() {
-        // YouTube mixes are auto-generated by YouTube
-        return List.of();
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
-
-    @Override
-    public long getStreamCount() {
-        // Auto-generated playlists always start with 25 videos and are endless
-        return ListExtractor.ITEM_COUNT_INFINITE;
-    }
-
-    @Nonnull
-    @Override
-    public Description getDescription() throws ParsingException {
-        return Description.EMPTY_DESCRIPTION;
-    }
-
-    @Nonnull
-    @Override
-    public InfoItemsPage<StreamInfoItem> getInitialPage()
-            throws IOException, ExtractionException {
+    public InfoItemsPage<StreamInfoItem> getInitialPage() throws IOException, ExtractionException {
         final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-        collectStreamsFrom(collector, playlistData.getArray("contents"));
-
-        final Map<String, String> cookies = new HashMap<>();
-        cookies.put(COOKIE_NAME, cookieValue);
-
-        return new InfoItemsPage<>(collector, getNextPageFrom(playlistData, cookies));
+        collectStreams(collector, playlistData.getArray("contents"));
+        return new InfoItemsPage<>(collector, nextPageFrom(playlistData,
+                Map.of(COOKIE_NAME, visitorCookie)));
     }
 
-    @Nonnull
-    private Page getNextPageFrom(@Nonnull final JsonObject playlistJson,
-                                 final Map<String, String> cookies)
+    @Nullable
+    private Page nextPageFrom(@Nonnull final JsonObject playlist,
+                              @Nonnull final Map<String, String> cookies)
             throws IOException, ExtractionException {
-        final JsonObject lastStream = ((JsonObject) playlistJson.getArray("contents")
-                .get(playlistJson.getArray("contents").size() - 1));
-        if (lastStream == null || lastStream.getObject("playlistPanelVideoRenderer") == null) {
-            throw new ExtractionException("Could not extract next page url");
+        final JsonArray streams = playlist.getArray("contents");
+        if (streams.isEmpty()) return null;
+        final JsonObject lastRenderer = streams.getObject(streams.size() - 1)
+                .getObject("playlistPanelVideoRenderer", null);
+        if (lastRenderer == null) return null;
+
+        final JsonObject endpoint = lastRenderer.getObject("navigationEndpoint")
+                .getObject("watchEndpoint");
+        final String videoId = endpoint.getString("videoId");
+        final String playlistId = endpoint.getString("playlistId");
+        final int index = endpoint.getInt("index", -1);
+        if (videoId == null || videoId.isBlank() || playlistId == null || playlistId.isBlank()
+                || index < 0) {
+            throw new ExtractionException("Last mix item has no continuation route");
         }
 
-        final JsonObject watchEndpoint = lastStream.getObject("playlistPanelVideoRenderer")
-                .getObject("navigationEndpoint").getObject("watchEndpoint");
-        final String playlistId = watchEndpoint.getString("playlistId");
-        final String videoId = watchEndpoint.getString("videoId");
-        final int index = watchEndpoint.getInt("index");
-        final String params = watchEndpoint.getString("params");
-        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(getExtractorLocalization(),
-                getExtractorContentCountry())
-                .value("videoId", videoId)
-                .value("playlistId", playlistId)
-                .value("playlistIndex", index)
-                .value("params", params)
-                .done())
-                .getBytes(StandardCharsets.UTF_8);
-
-        return new Page(YOUTUBEI_V1_URL + "next?" + DISABLE_PRETTY_PRINT_PARAMETER, null, null,
-                cookies, body);
+        final JsonBuilder<JsonObject> body = prepareDesktopJsonBuilder(getExtractorLocalization(),
+                getExtractorContentCountry()).value("videoId", videoId)
+                .value("playlistId", playlistId).value("playlistIndex", index);
+        final String params = endpoint.getString("params");
+        if (params != null && !params.isBlank()) body.value("params", params);
+        final byte[] bytes = JsonWriter.string(body.done()).getBytes(StandardCharsets.UTF_8);
+        return new Page(YOUTUBEI_V1_URL + "next?" + DISABLE_PRETTY_PRINT_PARAMETER,
+                null, null, cookies, bytes);
     }
 
     @Override
-    public InfoItemsPage<StreamInfoItem> getPage(final Page page) throws IOException,
-            ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+    public InfoItemsPage<StreamInfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
+        if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
+            throw new IllegalArgumentException("Mix continuation URL is missing");
         }
-        if (!page.getCookies().containsKey(COOKIE_NAME)) {
-            throw new IllegalArgumentException("Cookie '" + COOKIE_NAME + "' is missing");
+        final String cookie = page.getCookies() == null ? null : page.getCookies().get(COOKIE_NAME);
+        if (cookie == null || cookie.isBlank()) {
+            throw new IllegalArgumentException("Mix continuation cookie is missing");
         }
 
+        final Map<String, List<String>> headers = new HashMap<>(getYouTubeHeaders());
+        final List<String> existingCookies = headers.getOrDefault("Cookie", List.of());
+        final String consentCookie = existingCookies.isEmpty() ? "" : existingCookies.get(0);
+        headers.put("Cookie", List.of(consentCookie + "; " + COOKIE_NAME + "=" + cookie));
+        final Response response = getDownloader().postWithContentTypeJson(page.getUrl(),
+                headers, page.getBody(), getExtractorLocalization());
+        final JsonObject data = JsonUtils.toJsonObject(getValidJsonResponseBody(response));
+        final JsonObject playlist = getPlaylistData(data);
+        if (playlist.isEmpty()) throw new ParsingException("Continuation has no playlist data");
+
+        final JsonArray streams = playlist.getArray("contents");
+        final int currentIndex = playlist.getInt("currentIndex", -1);
+        if (currentIndex < -1 || currentIndex >= streams.size()) {
+            throw new ParsingException("Mix continuation index is outside its result list");
+        }
         final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-        // Cookie is required due to consent
-        final var headers = getYouTubeHeaders();
-
-        final Response response = getDownloader().postWithContentTypeJson(page.getUrl(), headers,
-                page.getBody(), getExtractorLocalization());
-        final JsonObject ajaxJson = JsonUtils.toJsonObject(getValidJsonResponseBody(response));
-        final JsonObject playlistJson = ajaxJson.getObject("contents")
-                .getObject("twoColumnWatchNextResults").getObject("playlist").getObject("playlist");
-        final JsonArray allStreams = playlistJson.getArray("contents");
-        // Sublist because YouTube returns up to 24 previous streams in the mix
-        // +1 because the stream of "currentIndex" was already extracted in previous request
-        final List<Object> newStreams =
-                allStreams.subList(playlistJson.getInt("currentIndex") + 1, allStreams.size());
-
-        collectStreamsFrom(collector, newStreams);
-        return new InfoItemsPage<>(collector, getNextPageFrom(playlistJson, page.getCookies()));
+        collectStreams(collector, new JsonArray(streams.subList(currentIndex + 1, streams.size())));
+        return new InfoItemsPage<>(collector, nextPageFrom(playlist, page.getCookies()));
     }
 
-    private void collectStreamsFrom(@Nonnull final StreamInfoItemsCollector collector,
-                                    @Nullable final List<Object> streams) {
-        if (streams == null) {
-            return;
+    private void collectStreams(@Nonnull final StreamInfoItemsCollector collector,
+                                @Nonnull final JsonArray streams) {
+        final TimeAgoParser dates = getTimeAgoParser();
+        for (final JsonObject stream : streams.streamAsJsonObjects().toList()) {
+            final JsonObject renderer = stream.getObject("playlistPanelVideoRenderer", null);
+            if (renderer != null) collector.commit(new YoutubeStreamInfoItemExtractor(renderer, dates));
         }
+    }
 
-        final TimeAgoParser timeAgoParser = getTimeAgoParser();
-
-        new JsonArray(streams).streamAsJsonObjects()
-                .map(stream -> {
-                    final var renderer = stream.getObject("playlistPanelVideoRenderer");
-                    return new YoutubeStreamInfoItemExtractor(renderer, timeAgoParser);
-                })
-                .forEachOrdered(collector::commit);
+    private static JsonObject getPlaylistData(@Nonnull final JsonObject response) {
+        return response.getObject("contents").getObject("twoColumnWatchNextResults")
+                .getObject("playlist").getObject("playlist");
     }
 
     @Nonnull
-    private List<Image> getThumbnailsFromPlaylistId(@Nonnull final String playlistId)
-            throws ParsingException {
-        return getThumbnailsFromVideoId(YoutubeParsingHelper.extractVideoIdFromMixId(playlistId));
+    private static List<Image> thumbnailsForVideo(@Nonnull final String videoId) {
+        final String prefix = "https://i.ytimg.com/vi/" + videoId + "/";
+        return THUMBNAILS.stream().map(suffix -> new Image(prefix + suffix.getSuffix(),
+                suffix.getHeight(), suffix.getWidth(), suffix.getResolutionLevel())).toList();
     }
 
-    @Nonnull
-    private List<Image> getThumbnailsFromVideoId(@Nonnull final String videoId) {
-        final String baseUrl = "https://i.ytimg.com/vi/" + videoId + "/";
-        return IMAGE_URL_SUFFIXES_AND_RESOLUTIONS.stream()
-                .map(imageSuffix -> new Image(baseUrl + imageSuffix.getSuffix(),
-                        imageSuffix.getHeight(), imageSuffix.getWidth(),
-                        imageSuffix.getResolutionLevel()))
-                .collect(Collectors.toUnmodifiableList());
-    }
-
-    @Nonnull
     @Override
     public PlaylistInfo.PlaylistType getPlaylistType() throws ParsingException {
         return extractPlaylistTypeFromPlaylistId(playlistData.getString("playlistId"));

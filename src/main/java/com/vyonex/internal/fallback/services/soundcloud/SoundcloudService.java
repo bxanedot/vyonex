@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud;
 
@@ -41,114 +43,67 @@ import com.vyonex.internal.fallback.subscription.SubscriptionExtractor;
 import java.util.EnumSet;
 import java.util.List;
 
-public class SoundcloudService extends StreamingService {
+public final class SoundcloudService extends StreamingService {
+    public SoundcloudService(final int id) { super(id, "SoundCloud", EnumSet.of(AUDIO, COMMENTS)); }
 
-    public SoundcloudService(final int id) {
-        super(id, "SoundCloud", EnumSet.of(AUDIO, COMMENTS));
-    }
-
-    @Override
-    public String getBaseUrl() {
-        return "https://soundcloud.com";
-    }
-
-    @Override
-    public SearchQueryHandlerFactory getSearchQHFactory() {
+    @Override public String getBaseUrl() { return "https://soundcloud.com"; }
+    @Override public SearchQueryHandlerFactory getSearchQHFactory() {
         return SoundcloudSearchQueryHandlerFactory.getInstance();
     }
-
-    @Override
-    public LinkHandlerFactory getStreamLHFactory() {
+    @Override public LinkHandlerFactory getStreamLHFactory() {
         return SoundcloudStreamLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getChannelLHFactory() {
+    @Override public ListLinkHandlerFactory getChannelLHFactory() {
         return SoundcloudChannelLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getChannelTabLHFactory() {
+    @Override public ListLinkHandlerFactory getChannelTabLHFactory() {
         return SoundcloudChannelTabLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public ListLinkHandlerFactory getPlaylistLHFactory() {
+    @Override public ListLinkHandlerFactory getPlaylistLHFactory() {
         return SoundcloudPlaylistLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public List<ContentCountry> getSupportedCountries() {
-        // Country selector here: https://soundcloud.com/charts/top?genre=all-music
-        return ContentCountry.listFrom(
-                "AU", "CA", "DE", "FR", "GB", "IE", "NL", "NZ", "US"
-        );
+    @Override public List<ContentCountry> getSupportedCountries() {
+        return ContentCountry.listFrom("AU", "CA", "DE", "FR", "GB", "IE", "NL", "NZ", "US");
     }
-
-    @Override
-    public StreamExtractor getStreamExtractor(final LinkHandler linkHandler) {
-        return new SoundcloudStreamExtractor(this, linkHandler);
+    @Override public StreamExtractor getStreamExtractor(final LinkHandler handler) {
+        return new SoundcloudStreamExtractor(this, handler);
     }
-
-    @Override
-    public ChannelExtractor getChannelExtractor(final ListLinkHandler linkHandler) {
-        return new SoundcloudChannelExtractor(this, linkHandler);
+    @Override public ChannelExtractor getChannelExtractor(final ListLinkHandler handler) {
+        return new SoundcloudChannelExtractor(this, handler);
     }
-
-    @Override
-    public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler linkHandler) {
-        return new SoundcloudChannelTabExtractor(this, linkHandler);
+    @Override public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler handler) {
+        return new SoundcloudChannelTabExtractor(this, handler);
     }
-
-    @Override
-    public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler linkHandler) {
-        return new SoundcloudPlaylistExtractor(this, linkHandler);
+    @Override public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler handler) {
+        return new SoundcloudPlaylistExtractor(this, handler);
     }
-
-    @Override
-    public SearchExtractor getSearchExtractor(final SearchQueryHandler queryHandler) {
-        return new SoundcloudSearchExtractor(this, queryHandler);
+    @Override public SearchExtractor getSearchExtractor(final SearchQueryHandler handler) {
+        return new SoundcloudSearchExtractor(this, handler);
     }
-
-    @Override
-    public SoundcloudSuggestionExtractor getSuggestionExtractor() {
+    @Override public SoundcloudSuggestionExtractor getSuggestionExtractor() {
         return new SoundcloudSuggestionExtractor(this);
     }
-
-    @Override
-    public KioskList getKioskList() throws ExtractionException {
-        final KioskList list = new KioskList(this);
-
-        final SoundcloudChartsLinkHandlerFactory h =
-                SoundcloudChartsLinkHandlerFactory.getInstance();
-        final KioskList.KioskExtractorFactory chartsFactory = (streamingService, url, id) ->
-                new SoundcloudChartsExtractor(SoundcloudService.this,
-                        h.fromUrl(url), id);
-
-        // add kiosks here e.g.:
+    @Override public KioskList getKioskList() throws ExtractionException {
+        final KioskList kiosks = new KioskList(this);
+        final SoundcloudChartsLinkHandlerFactory links = SoundcloudChartsLinkHandlerFactory.getInstance();
+        final KioskList.KioskExtractorFactory charts = (service, url, id) ->
+                new SoundcloudChartsExtractor(this, links.fromUrl(url), id);
         try {
-            list.addKioskEntry(chartsFactory, h, "New & hot");
-            list.setDefaultKiosk("New & hot");
+            kiosks.addKioskEntry(charts, links, "New & hot");
+            kiosks.setDefaultKiosk("New & hot");
+            return kiosks;
         } catch (final Exception e) {
-            throw new ExtractionException(e);
+            throw new ExtractionException("Unable to initialize SoundCloud charts", e);
         }
-
-        return list;
     }
-
-    @Override
-    public SubscriptionExtractor getSubscriptionExtractor() {
+    @Override public SubscriptionExtractor getSubscriptionExtractor() {
         return new SoundcloudSubscriptionExtractor(this);
     }
-
-    @Override
-    public ListLinkHandlerFactory getCommentsLHFactory() {
+    @Override public ListLinkHandlerFactory getCommentsLHFactory() {
         return SoundcloudCommentsLinkHandlerFactory.getInstance();
     }
-
-    @Override
-    public CommentsExtractor getCommentsExtractor(final ListLinkHandler linkHandler)
+    @Override public CommentsExtractor getCommentsExtractor(final ListLinkHandler handler)
             throws ExtractionException {
-        return new SoundcloudCommentsExtractor(this, linkHandler);
+        return new SoundcloudCommentsExtractor(this, handler);
     }
 }

@@ -16,7 +16,7 @@ interface VyonExHost {
     /** Optional platform PoToken minting implementation. */
     val tokenProvider: TokenProvider?
 
-    /** App-private storage for preprocessed player scripts, or null before host initialization. */
+    /** App-private storage for prepared player scripts, or null before host initialization. */
     val filesDir: File?
 
     /** Shared app transport. VyonEx configures its own Ktor client over this OkHttp client. */

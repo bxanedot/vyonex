@@ -1,14 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.exceptions;
 
-/**
- * Exception for contents not supported in a country.
- *
- * <p>
- * Unsupported content means content is not intentionally geographically restricted such as for
- * distribution rights, for which {@link GeographicRestrictionException} should be used instead.
- * </p>
- */
 public class UnsupportedContentInCountryException extends ContentNotAvailableException {
 
     public UnsupportedContentInCountryException(final String message) {

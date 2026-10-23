@@ -1,9 +1,10 @@
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler;
 
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.UnsupportedTabException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 
@@ -11,49 +12,30 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public final class BandcampChannelTabLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final BandcampChannelTabLinkHandlerFactory INSTANCE =
+            new BandcampChannelTabLinkHandlerFactory();
 
-    private static final BandcampChannelTabLinkHandlerFactory INSTANCE
-            = new BandcampChannelTabLinkHandlerFactory();
+    private BandcampChannelTabLinkHandlerFactory() { }
 
-    private BandcampChannelTabLinkHandlerFactory() {
-    }
+    public static BandcampChannelTabLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    public static BandcampChannelTabLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
-
-    /**
-     * Get a tab's URL suffix.
-     *
-     * <p>
-     * These URLs don't actually exist on the Bandcamp website, as both albums and tracks are
-     * listed on the main page, but redirect to the main page, which is perfect for us as we need a
-     * unique URL for each tab.
-     * </p>
-     *
-     * @param tab the tab value, which must not be null
-     * @return a URL suffix
-     * @throws UnsupportedTabException if the tab is not supported
-     */
     @Nonnull
     public static String getUrlSuffix(@Nonnull final String tab) throws UnsupportedTabException {
-        switch (tab) {
-            case ChannelTabs.TRACKS:
-                return "/track";
-            case ChannelTabs.ALBUMS:
-                return "/album";
-        }
-        throw new UnsupportedTabException(tab);
+        return switch (tab) {
+            case ChannelTabs.TRACKS -> "/track";
+            case ChannelTabs.ALBUMS -> "/album";
+            default -> throw new UnsupportedTabException(tab);
+        };
     }
 
     @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
+    public String getId(final String url) throws ParsingException {
         return BandcampChannelLinkHandlerFactory.getInstance().getId(url);
     }
 
     @Override
-    public String getUrl(final String id, final List<String> contentFilter, final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
+    public String getUrl(final String id, final List<String> contentFilter,
+                         final String sortFilter) throws ParsingException {
         return BandcampChannelLinkHandlerFactory.getInstance().getUrl(id)
                 + getUrlSuffix(contentFilter.get(0));
     }
@@ -65,9 +47,6 @@ public final class BandcampChannelTabLinkHandlerFactory extends ListLinkHandlerF
 
     @Override
     public String[] getAvailableContentFilter() {
-        return new String[]{
-                ChannelTabs.TRACKS,
-                ChannelTabs.ALBUMS,
-        };
+        return new String[] { ChannelTabs.TRACKS, ChannelTabs.ALBUMS };
     }
 }

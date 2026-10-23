@@ -1,165 +1,122 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.Localization;
-import com.vyonex.internal.fallback.utils.Parser;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
+import java.util.Objects;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * The extractor of YouTube's base JavaScript player file.
- *
- * <p>
- * This class handles fetching of this base JavaScript player file in order to allow other classes
- * to extract the needed data.
- * </p>
- *
- * <p>
- * It will try to get the player URL from YouTube's IFrame resource first, and from a YouTube embed
- * watch page as a fallback.
- * </p>
- */
 final class YoutubeJavaScriptExtractor {
-
-    private static final String HTTPS = "https:";
-    private static final String BASE_JS_PLAYER_URL_FORMAT =
+    private static final Pattern PLAYER_HASH = Pattern.compile("player\\\\/([a-z0-9]{8})\\\\/");
+    private static final Pattern JSON_PLAYER_URL = Pattern.compile(
+            "\\\"jsUrl\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+    private static final Pattern VIDEO_ID = Pattern.compile("[A-Za-z0-9_-]{11}");
+    private static final String IFRAME_API_URL = "https://www.youtube.com/iframe_api";
+    private static final String PLAYER_URL =
             "https://www.youtube.com/s/player/%s/player_ias.vflset/en_GB/base.js";
-    private static final Pattern IFRAME_RES_JS_BASE_PLAYER_HASH_PATTERN = Pattern.compile(
-            "player\\\\/([a-z0-9]{8})\\\\/");
-    private static final Pattern EMBEDDED_WATCH_PAGE_JS_BASE_PLAYER_URL_PATTERN = Pattern.compile(
-            "\"jsUrl\":\"(/s/player/[A-Za-z0-9]+/player_ias\\.vflset/[A-Za-z_-]+/base\\.js)\"");
 
-    private YoutubeJavaScriptExtractor() {
-    }
+    private YoutubeJavaScriptExtractor() { }
 
-    /**
-     * Extracts the JavaScript base player file.
-     *
-     * @param videoId the video ID used to get the JavaScript base player file (an empty one can be
-     *                passed, even it is not recommend in order to spoof better official YouTube
-     *                clients)
-     * @return the whole JavaScript base player file as a string
-     * @throws ParsingException if the extraction of the file failed
-     */
     @Nonnull
     static String extractJavaScriptPlayerCode(@Nonnull final String videoId)
             throws ParsingException {
-        String url;
+        Objects.requireNonNull(videoId, "videoId");
+        if (!videoId.isEmpty() && !VIDEO_ID.matcher(videoId).matches()) {
+            throw new ParsingException("Invalid video ID");
+        }
+
         try {
-            url = YoutubeJavaScriptExtractor.extractJavaScriptUrlWithIframeResource();
-            final String playerJsUrl = YoutubeJavaScriptExtractor.cleanJavaScriptUrl(url);
-
-            // Assert that the URL we extracted and built is valid
-            new URL(playerJsUrl);
-
-            return YoutubeJavaScriptExtractor.downloadJavaScriptCode(playerJsUrl);
-        } catch (final Exception e) {
-            url = YoutubeJavaScriptExtractor.extractJavaScriptUrlWithEmbedWatchPage(videoId);
-            final String playerJsUrl = YoutubeJavaScriptExtractor.cleanJavaScriptUrl(url);
-
+            return downloadJavaScriptCode(cleanJavaScriptUrl(
+                    extractJavaScriptUrlWithIframeResource()));
+        } catch (final Exception iframeFailure) {
             try {
-                // Assert that the URL we extracted and built is valid
-                new URL(playerJsUrl);
-            } catch (final MalformedURLException exception) {
-                throw new ParsingException(
-                        "The extracted and built JavaScript URL is invalid", exception);
+                return downloadJavaScriptCode(cleanJavaScriptUrl(
+                        extractJavaScriptUrlWithEmbedWatchPage(videoId)));
+            } catch (final Exception embedFailure) {
+                embedFailure.addSuppressed(iframeFailure);
+                if (embedFailure instanceof ParsingException) {
+                    throw (ParsingException) embedFailure;
+                }
+                throw new ParsingException("Could not retrieve the player JavaScript", embedFailure);
             }
-
-            return YoutubeJavaScriptExtractor.downloadJavaScriptCode(playerJsUrl);
         }
     }
 
     @Nonnull
     static String extractJavaScriptUrlWithIframeResource() throws ParsingException {
-        final String iframeUrl;
-        final String iframeContent;
-        try {
-            iframeUrl = "https://www.youtube.com/iframe_api";
-            iframeContent = VyonEx.getDownloader()
-                    .get(iframeUrl, Localization.DEFAULT)
-                    .responseBody();
-        } catch (final Exception e) {
-            throw new ParsingException("Could not fetch IFrame resource", e);
+        final String content = getPage(IFRAME_API_URL, "Could not fetch IFrame resource");
+        final Matcher matcher = PLAYER_HASH.matcher(content);
+        if (!matcher.find()) {
+            throw new ParsingException("IFrame resource did not contain a player version");
         }
-
-        try {
-            final String hash = Parser.matchGroup1(
-                    IFRAME_RES_JS_BASE_PLAYER_HASH_PATTERN, iframeContent);
-            return String.format(BASE_JS_PLAYER_URL_FORMAT, hash);
-        } catch (final Parser.RegexException e) {
-            throw new ParsingException(
-                    "IFrame resource didn't provide JavaScript base player's hash", e);
-        }
+        return String.format(PLAYER_URL, matcher.group(1));
     }
 
     @Nonnull
     static String extractJavaScriptUrlWithEmbedWatchPage(@Nonnull final String videoId)
             throws ParsingException {
-        final String embedUrl;
-        final String embedPageContent;
-        try {
-            embedUrl = "https://www.youtube.com/embed/" + videoId;
-            embedPageContent = VyonEx.getDownloader()
-                    .get(embedUrl, Localization.DEFAULT)
-                    .responseBody();
-        } catch (final Exception e) {
-            throw new ParsingException("Could not fetch embedded watch page", e);
-        }
-
-        // Parse HTML response with jsoup and look at script elements first
-        final Document doc = Jsoup.parse(embedPageContent);
-        final Elements elems = doc.select("script")
-                .attr("name", "player/base");
-        for (final Element elem : elems) {
-            // Script URLs should be relative and not absolute
-            final String playerUrl = elem.attr("src");
-            if (playerUrl.contains("base.js")) {
-                return playerUrl;
+        final String html = getPage("https://www.youtube.com/embed/" + videoId,
+                "Could not fetch embedded watch page");
+        final var document = Jsoup.parse(html);
+        for (final Element script : document.select("script[name=player/base][src]")) {
+            final String source = script.attr("src");
+            if (source.contains("base.js")) {
+                return source;
             }
         }
+        return extractPlayerUrlFromEmbeddedPage(html);
+    }
 
-        // Use regexes to match the URL in an embedded script of the HTML page
+    @Nonnull
+    static String extractPlayerUrlFromEmbeddedPage(@Nonnull final String html)
+            throws ParsingException {
+        final Matcher matcher = JSON_PLAYER_URL.matcher(html);
+        if (matcher.find()) {
+            return matcher.group(1).replace("\\/", "/");
+        }
+        throw new ParsingException("Embedded page did not contain a player script URL");
+    }
+
+    @Nonnull
+    static String cleanJavaScriptUrl(@Nonnull final String playerUrl) throws ParsingException {
         try {
-            return Parser.matchGroup1(
-                    EMBEDDED_WATCH_PAGE_JS_BASE_PLAYER_URL_PATTERN, embedPageContent);
-        } catch (final Parser.RegexException e) {
-            throw new ParsingException(
-                    "Embedded watch page didn't provide JavaScript base player's URL", e);
+            final URI resolved = URI.create("https://www.youtube.com/").resolve(playerUrl);
+            if (!"https".equalsIgnoreCase(resolved.getScheme())
+                    || !("youtube.com".equalsIgnoreCase(resolved.getHost())
+                    || "www.youtube.com".equalsIgnoreCase(resolved.getHost()))
+                    || resolved.getPath() == null
+                    || !resolved.getPath().endsWith("/base.js")) {
+                throw new IllegalArgumentException("Unexpected player script URL");
+            }
+            return resolved.toString();
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("The player script URL is invalid", e);
         }
     }
 
     @Nonnull
-    private static String cleanJavaScriptUrl(@Nonnull final String javaScriptPlayerUrl) {
-        if (javaScriptPlayerUrl.startsWith("//")) {
-            // https part has to be added manually if the URL is protocol-relative
-            return HTTPS + javaScriptPlayerUrl;
-        } else if (javaScriptPlayerUrl.startsWith("/")) {
-            // https://www.youtube.com part has to be added manually if the URL is relative to
-            // YouTube's domain
-            return HTTPS + "//www.youtube.com" + javaScriptPlayerUrl;
-        } else {
-            return javaScriptPlayerUrl;
-        }
-    }
-
-    @Nonnull
-    private static String downloadJavaScriptCode(@Nonnull final String javaScriptPlayerUrl)
+    private static String getPage(@Nonnull final String url,
+                                  @Nonnull final String errorMessage)
             throws ParsingException {
         try {
-            return VyonEx.getDownloader()
-                    .get(javaScriptPlayerUrl, Localization.DEFAULT)
-                    .responseBody();
+            return VyonEx.getDownloader().get(url, Localization.DEFAULT).responseBody();
         } catch (final Exception e) {
-            throw new ParsingException("Could not get JavaScript base player's code", e);
+            throw new ParsingException(errorMessage, e);
         }
+    }
+
+    @Nonnull
+    private static String downloadJavaScriptCode(@Nonnull final String playerUrl)
+            throws ParsingException {
+        return getPage(playerUrl, "Could not download the player JavaScript");
     }
 }

@@ -1,12 +1,13 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems;
 
-import com.grack.nanojson.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -21,68 +22,22 @@ public class MediaCCCStreamInfoItemExtractor implements StreamInfoItemExtractor 
         this.event = event;
     }
 
-    @Override
-    public StreamType getStreamType() {
-        return StreamType.VIDEO_STREAM;
-    }
-
-    @Override
-    public boolean isAd() {
-        return false;
-    }
-
-    @Override
-    public long getDuration() {
-        return event.getInt("length");
-    }
-
-    @Override
-    public long getViewCount() {
-        return event.getInt("view_count");
-    }
-
-    @Override
-    public String getUploaderName() {
-        return event.getString("conference_title");
-    }
-
-    @Override
-    public String getUploaderUrl() {
-        return event.getString("conference_url");
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
-
-    @Nullable
-    @Override
-    public String getTextualUploadDate() {
-        return event.getString("release_date");
-    }
-
-    @Nullable
-    @Override
-    public DateWrapper getUploadDate() throws ParsingException {
-        // if null, event is in the future...
+    @Override public StreamType getStreamType() { return StreamType.VIDEO_STREAM; }
+    @Override public boolean isAd() { return false; }
+    @Override public long getDuration() { return event.getInt("length"); }
+    @Override public long getViewCount() { return event.getInt("view_count"); }
+    @Override public String getUploaderName() { return event.getString("conference_title"); }
+    @Override public String getUploaderUrl() { return event.getString("conference_url"); }
+    @Override public boolean isUploaderVerified() { return false; }
+    @Nullable @Override public String getTextualUploadDate() { return event.getString("release_date"); }
+    @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
         return DateWrapper.fromOffsetDateTime(getTextualUploadDate());
     }
-
-    @Override
-    public String getName() throws ParsingException {
-        return event.getString("title");
+    @Override public String getName() throws ParsingException { return event.getString("title"); }
+    @Override public String getUrl() throws ParsingException {
+        return "https://media.ccc.de/public/events/" + event.getString("guid");
     }
-
-    @Override
-    public String getUrl() throws ParsingException {
-        return "https://media.ccc.de/public/events/"
-                + event.getString("guid");
-    }
-
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() {
+    @Nonnull @Override public List<Image> getThumbnails() {
         return getThumbnailsFromStreamItem(event);
     }
 }

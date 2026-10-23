@@ -1,12 +1,10 @@
-// Created by Fynn Godau 2019, licensed GNU GPL version 3 or later
-
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler;
 
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper;
-import com.vyonex.internal.fallback.utils.Utils;
 
 import java.util.List;
 
@@ -16,48 +14,34 @@ import static com.vyonex.internal.fallback.services.bandcamp.extractors.Bandcamp
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampRadioExtractor.RADIO_API_URL;
 
 public final class BandcampFeaturedLinkHandlerFactory extends ListLinkHandlerFactory {
-
     private static final BandcampFeaturedLinkHandlerFactory INSTANCE =
             new BandcampFeaturedLinkHandlerFactory();
 
-    private BandcampFeaturedLinkHandlerFactory() {
-    }
+    private BandcampFeaturedLinkHandlerFactory() { }
 
-    public static BandcampFeaturedLinkHandlerFactory getInstance() {
-        return INSTANCE;
+    public static BandcampFeaturedLinkHandlerFactory getInstance() { return INSTANCE; }
+
+    @Override
+    public String getUrl(final String id, final List<String> contentFilter,
+                         final String sortFilter) {
+        if (KIOSK_FEATURED.equals(id)) return FEATURED_API_URL;
+        if (KIOSK_RADIO.equals(id)) return RADIO_API_URL;
+        return null;
     }
 
     @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilter,
-                         final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
-        if (id.equals(KIOSK_FEATURED)) {
-            return FEATURED_API_URL; // doesn't have a website
-        } else if (id.equals(KIOSK_RADIO)) {
-            return RADIO_API_URL; // doesn't have its own website
-        } else {
-            return null;
-        }
-    }
-
-    @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        final String fixedUrl = Utils.replaceHttpWithHttps(url);
-        if (BandcampExtractorHelper.isRadioUrl(fixedUrl) || fixedUrl.equals(RADIO_API_URL)) {
+    public String getId(final String url) {
+        final String httpsUrl = BandcampUrl.https(url);
+        if (BandcampExtractorHelper.isRadioUrl(httpsUrl) || RADIO_API_URL.equals(httpsUrl)) {
             return KIOSK_RADIO;
-        } else if (fixedUrl.equals(FEATURED_API_URL)) {
-            return KIOSK_FEATURED;
-        } else {
-            return null;
         }
+        return FEATURED_API_URL.equals(httpsUrl) ? KIOSK_FEATURED : null;
     }
 
     @Override
     public boolean onAcceptUrl(final String url) {
-        final String fixedUrl = Utils.replaceHttpWithHttps(url);
-        return fixedUrl.equals(FEATURED_API_URL)
-                || fixedUrl.equals(RADIO_API_URL)
-                || BandcampExtractorHelper.isRadioUrl(fixedUrl);
+        final String httpsUrl = BandcampUrl.https(url);
+        return FEATURED_API_URL.equals(httpsUrl) || RADIO_API_URL.equals(httpsUrl)
+                || BandcampExtractorHelper.isRadioUrl(httpsUrl);
     }
 }

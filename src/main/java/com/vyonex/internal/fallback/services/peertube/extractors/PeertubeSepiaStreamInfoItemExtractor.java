@@ -1,23 +1,29 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
-import com.grack.nanojson.JsonObject;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.json.JsonObject;
 
-/**
- * A StreamInfoItem collected from SepiaSearch
- */
-public class PeertubeSepiaStreamInfoItemExtractor extends PeertubeStreamInfoItemExtractor {
+import java.net.URI;
 
+public final class PeertubeSepiaStreamInfoItemExtractor extends PeertubeStreamInfoItemExtractor {
     public PeertubeSepiaStreamInfoItemExtractor(final JsonObject item, final String baseUrl) {
         super(item, baseUrl);
-        final String embedUrl = super.item.getString("embedUrl");
-        final String embedPath = super.item.getString("embedPath");
-        final String itemBaseUrl = embedUrl.replace(embedPath, "");
-        setBaseUrl(itemBaseUrl);
+    }
 
-        // Usually, all videos, pictures and other content are hosted on the instance,
-        // or can be accessed by the same URL path if the instance with baseUrl federates the one
-        // where the video is actually uploaded. But it can't be accessed with Sepiasearch, so we
-        // use the item's instance as base URL.
+    @Override public String getUrl() throws ParsingException {
+        final String embed = item.getString("embedUrl");
+        if (embed != null) {
+            try {
+                final URI location = URI.create(embed);
+                if (location.getScheme() != null && location.getRawAuthority() != null) {
+                    setBaseUrl(location.getScheme() + "://" + location.getRawAuthority());
+                }
+            } catch (final IllegalArgumentException error) {
+                throw new ParsingException("Invalid Sepia video URL", error);
+            }
+        }
+        return super.getUrl();
     }
 }

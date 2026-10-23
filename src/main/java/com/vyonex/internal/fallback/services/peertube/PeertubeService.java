@@ -1,8 +1,6 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube;
-
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.COMMENTS;
-import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.VIDEO;
 
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
@@ -41,8 +39,10 @@ import com.vyonex.internal.fallback.suggestion.SuggestionExtractor;
 import java.util.EnumSet;
 import java.util.List;
 
-public class PeertubeService extends StreamingService {
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.COMMENTS;
+import static com.vyonex.internal.fallback.StreamingService.ServiceInfo.MediaCapability.VIDEO;
 
+public class PeertubeService extends StreamingService {
     private PeertubeInstance instance;
 
     public PeertubeService(final int id) {
@@ -54,128 +54,93 @@ public class PeertubeService extends StreamingService {
         this.instance = instance;
     }
 
-    @Override
-    public LinkHandlerFactory getStreamLHFactory() {
+    @Override public LinkHandlerFactory getStreamLHFactory() {
         return PeertubeStreamLinkHandlerFactory.getInstance();
     }
 
-    @Override
-    public ListLinkHandlerFactory getChannelLHFactory() {
+    @Override public ListLinkHandlerFactory getChannelLHFactory() {
         return PeertubeChannelLinkHandlerFactory.getInstance();
     }
 
-    @Override
-    public ListLinkHandlerFactory getChannelTabLHFactory() {
+    @Override public ListLinkHandlerFactory getChannelTabLHFactory() {
         return PeertubeChannelTabLinkHandlerFactory.getInstance();
     }
 
-    @Override
-    public ListLinkHandlerFactory getPlaylistLHFactory() {
+    @Override public ListLinkHandlerFactory getPlaylistLHFactory() {
         return PeertubePlaylistLinkHandlerFactory.getInstance();
     }
 
-    @Override
-    public SearchQueryHandlerFactory getSearchQHFactory() {
+    @Override public SearchQueryHandlerFactory getSearchQHFactory() {
         return PeertubeSearchQueryHandlerFactory.getInstance();
     }
 
-    @Override
-    public ListLinkHandlerFactory getCommentsLHFactory() {
+    @Override public ListLinkHandlerFactory getCommentsLHFactory() {
         return PeertubeCommentsLinkHandlerFactory.getInstance();
     }
 
     @Override
-    public SearchExtractor getSearchExtractor(final SearchQueryHandler queryHandler) {
-        final List<String> contentFilters = queryHandler.getContentFilters();
-        return new PeertubeSearchExtractor(this, queryHandler,
-                !contentFilters.isEmpty() && contentFilters.get(0).startsWith("sepia_"));
+    public SearchExtractor getSearchExtractor(final SearchQueryHandler query) {
+        final List<String> filters = query.getContentFilters();
+        final boolean useSepia = !filters.isEmpty() && filters.get(0).startsWith("sepia_");
+        return new PeertubeSearchExtractor(this, query, useSepia);
     }
 
-    @Override
-    public SuggestionExtractor getSuggestionExtractor() {
+    @Override public SuggestionExtractor getSuggestionExtractor() {
         return new PeertubeSuggestionExtractor(this);
     }
 
-    @Override
-    public SubscriptionExtractor getSubscriptionExtractor() {
-        return null;
-    }
+    @Override public SubscriptionExtractor getSubscriptionExtractor() { return null; }
 
     @Override
-    public ChannelExtractor getChannelExtractor(final ListLinkHandler linkHandler)
+    public ChannelExtractor getChannelExtractor(final ListLinkHandler link)
             throws ExtractionException {
-
-        if (linkHandler.getUrl().contains("/video-channels/")) {
-            return new PeertubeChannelExtractor(this, linkHandler);
-        } else {
-            return new PeertubeAccountExtractor(this, linkHandler);
-        }
+        if (link.getId().startsWith("video-channels/")) return new PeertubeChannelExtractor(this, link);
+        return new PeertubeAccountExtractor(this, link);
     }
 
     @Override
-    public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler linkHandler)
+    public ChannelTabExtractor getChannelTabExtractor(final ListLinkHandler link)
             throws ExtractionException {
-        return new PeertubeChannelTabExtractor(this, linkHandler);
+        return new PeertubeChannelTabExtractor(this, link);
     }
 
     @Override
-    public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler linkHandler)
+    public PlaylistExtractor getPlaylistExtractor(final ListLinkHandler link)
             throws ExtractionException {
-        return new PeertubePlaylistExtractor(this, linkHandler);
+        return new PeertubePlaylistExtractor(this, link);
     }
 
     @Override
-    public StreamExtractor getStreamExtractor(final LinkHandler linkHandler)
+    public StreamExtractor getStreamExtractor(final LinkHandler link) throws ExtractionException {
+        return new PeertubeStreamExtractor(this, link);
+    }
+
+    @Override
+    public CommentsExtractor getCommentsExtractor(final ListLinkHandler link)
             throws ExtractionException {
-        return new PeertubeStreamExtractor(this, linkHandler);
+        return new PeertubeCommentsExtractor(this, link);
     }
 
-    @Override
-    public CommentsExtractor getCommentsExtractor(final ListLinkHandler linkHandler)
-            throws ExtractionException {
-        return new PeertubeCommentsExtractor(this, linkHandler);
-    }
-
-    @Override
-    public String getBaseUrl() {
-        return instance.getUrl();
-    }
-
-    public PeertubeInstance getInstance() {
-        return this.instance;
-    }
-
-    public void setInstance(final PeertubeInstance instance) {
-        this.instance = instance;
-    }
+    @Override public String getBaseUrl() { return instance.getUrl(); }
+    public PeertubeInstance getInstance() { return instance; }
+    public void setInstance(final PeertubeInstance instance) { this.instance = instance; }
 
     @Override
     public KioskList getKioskList() throws ExtractionException {
-        final PeertubeTrendingLinkHandlerFactory h =
+        final PeertubeTrendingLinkHandlerFactory handlers =
                 PeertubeTrendingLinkHandlerFactory.getInstance();
-
-        final KioskList.KioskExtractorFactory kioskFactory = (streamingService, url, id) ->
-                new PeertubeTrendingExtractor(
-                        PeertubeService.this,
-                        h.fromId(id),
-                        id
-                );
-
-        final KioskList list = new KioskList(this);
-
-        // add kiosks here e.g.:
-
+        final KioskList.KioskExtractorFactory factory = (service, url, id) ->
+                new PeertubeTrendingExtractor(this, handlers.fromId(id), id);
+        final KioskList kiosks = new KioskList(this);
         try {
-            list.addKioskEntry(kioskFactory, h, PeertubeTrendingLinkHandlerFactory.KIOSK_TRENDING);
-            list.addKioskEntry(kioskFactory, h,
-                    PeertubeTrendingLinkHandlerFactory.KIOSK_MOST_LIKED);
-            list.addKioskEntry(kioskFactory, h, PeertubeTrendingLinkHandlerFactory.KIOSK_RECENT);
-            list.addKioskEntry(kioskFactory, h, PeertubeTrendingLinkHandlerFactory.KIOSK_LOCAL);
-            list.setDefaultKiosk(PeertubeTrendingLinkHandlerFactory.KIOSK_TRENDING);
-        } catch (final Exception e) {
-            throw new ExtractionException(e);
+            kiosks.addKioskEntry(factory, handlers, PeertubeTrendingLinkHandlerFactory.KIOSK_TRENDING);
+            kiosks.addKioskEntry(factory, handlers, PeertubeTrendingLinkHandlerFactory.KIOSK_MOST_LIKED);
+            kiosks.addKioskEntry(factory, handlers, PeertubeTrendingLinkHandlerFactory.KIOSK_RECENT);
+            kiosks.addKioskEntry(factory, handlers, PeertubeTrendingLinkHandlerFactory.KIOSK_LOCAL);
+            kiosks.setDefaultKiosk(PeertubeTrendingLinkHandlerFactory.KIOSK_TRENDING);
+        } catch (final Exception error) {
+            throw new ExtractionException(error);
         }
-
-        return list;
+        return kiosks;
     }
 }

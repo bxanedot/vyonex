@@ -1,64 +1,47 @@
-// bxane
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.peertube.linkHandler;
-
 
 import com.vyonex.internal.fallback.ServiceList;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
-import com.vyonex.internal.fallback.utils.Parser;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.List;
 
 public final class PeertubePlaylistLinkHandlerFactory extends ListLinkHandlerFactory {
+    private static final PeertubePlaylistLinkHandlerFactory INSTANCE =
+            new PeertubePlaylistLinkHandlerFactory();
 
-    private static final PeertubePlaylistLinkHandlerFactory INSTANCE
-            = new PeertubePlaylistLinkHandlerFactory();
-    private static final String ID_PATTERN = "(/videos/watch/playlist/|/w/p/)([^/?&#]*)";
-    private static final String API_ID_PATTERN = "/video-playlists/([^/?&#]*)";
+    private PeertubePlaylistLinkHandlerFactory() { }
+    public static PeertubePlaylistLinkHandlerFactory getInstance() { return INSTANCE; }
 
-    private PeertubePlaylistLinkHandlerFactory() {
+    @Override public String getUrl(final String id, final List<String> filters, final String sort) {
+        return getUrl(id, filters, sort, ServiceList.PeerTube.getBaseUrl());
     }
-
-    public static PeertubePlaylistLinkHandlerFactory getInstance() {
-        return INSTANCE;
-    }
-
-    @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilters,
-                         final String sortFilter)
-            throws ParsingException, UnsupportedOperationException {
-        return getUrl(id, contentFilters, sortFilter, ServiceList.PeerTube.getBaseUrl());
-    }
-
-    @Override
-    public String getUrl(final String id,
-                         final List<String> contentFilters,
-                         final String sortFilter,
-                         final String baseUrl)
-            throws ParsingException, UnsupportedOperationException {
+    @Override public String getUrl(final String id, final List<String> filters, final String sort,
+                                   final String baseUrl) {
         return baseUrl + "/api/v1/video-playlists/" + id;
     }
-
-    @Override
-    public String getId(final String url) throws ParsingException, UnsupportedOperationException {
-        try {
-            return Parser.matchGroup(ID_PATTERN, url, 2);
-        } catch (final ParsingException ignored) {
-            // might also be an API url, no reason to throw an exception here
+    @Override public String getId(final String url) throws ParsingException {
+        final List<String> path = PeertubeUrl.segments(url);
+        if (path.size() == 3 && "w".equals(path.get(0)) && "p".equals(path.get(1))) {
+            return path.get(2);
         }
-        return Parser.matchGroup1(API_ID_PATTERN, url);
+        if (path.size() == 4 && "videos".equals(path.get(0))
+                && "watch".equals(path.get(1)) && "playlist".equals(path.get(2))) {
+            return path.get(3);
+        }
+        if (path.size() == 4 && "api".equals(path.get(0)) && "v1".equals(path.get(1))
+                && "video-playlists".equals(path.get(2))) {
+            return path.get(3);
+        }
+        throw new ParsingException("URL does not identify a PeerTube playlist");
     }
-
-    @Override
-    public boolean onAcceptUrl(final String url) {
+    @Override public boolean onAcceptUrl(final String url) {
         try {
-            new URL(url);
             getId(url);
             return true;
-        } catch (final ParsingException | MalformedURLException e) {
+        } catch (final ParsingException ignored) {
             return false;
         }
     }
