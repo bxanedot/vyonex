@@ -4,6 +4,7 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.localization.Localization;
@@ -30,10 +31,14 @@ public final class MediaCCCParsingHelper {
                                            final Localization localization)
             throws ExtractionException {
         try {
-            final String body = downloader.get(
-                    "https://streaming.media.ccc.de/streams/v2.json", localization)
-                    .responseBody();
-            return JsonParser.array().from(body);
+            final Response response = downloader.get(
+                    "https://streaming.media.ccc.de/streams/v2.json", localization);
+            if (response == null) throw new ExtractionException("No live stream response received");
+            if (response.responseCode() < 200 || response.responseCode() >= 300) {
+                throw new ExtractionException("Live stream request failed with HTTP "
+                        + response.responseCode());
+            }
+            return JsonParser.array().from(response.responseBody());
         } catch (final IOException | ReCaptchaException error) {
             throw new ExtractionException("Could not fetch live stream data.", error);
         } catch (final JsonParserException error) {
