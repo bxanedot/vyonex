@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -9,182 +10,151 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubePlaylistLinkHandlerFactory;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistId;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.hasArtistOrVerifiedIconBadgeAttachment;
 
+/** Maps YouTube's playlist-card layout into VyonEx playlist items. */
 public class YoutubeMixOrPlaylistLockupInfoItemExtractor implements PlaylistInfoItemExtractor {
+    private final JsonObject item;
 
-    @Nonnull
-    private final JsonObject lockupViewModel;
-    @Nonnull
-    private final JsonObject thumbnailViewModel;
-    @Nonnull
-    private final JsonObject lockupMetadataViewModel;
-    @Nonnull
-    private final JsonObject firstMetadataRow;
-    @Nonnull
-    private PlaylistInfo.PlaylistType playlistType;
-
-    public YoutubeMixOrPlaylistLockupInfoItemExtractor(@Nonnull final JsonObject lockupViewModel) {
-        this.lockupViewModel = lockupViewModel;
-        this.thumbnailViewModel = lockupViewModel.getObject("contentImage")
-                .getObject("collectionThumbnailViewModel")
-                .getObject("primaryThumbnail")
-                .getObject("thumbnailViewModel");
-        this.lockupMetadataViewModel = lockupViewModel.getObject("metadata")
-                .getObject("lockupMetadataViewModel");
-        /*
-        The metadata rows are structured in the following way:
-        1st part: uploader info, playlist type, playlist updated date
-        2nd part: space row
-        3rd element: first video
-        4th (not always returned for playlists with less than 2 items?): second video
-        5th element (always returned, but at a different index for playlists with less than 2
-        items?): Show full playlist
-
-        The first metadata row has the following structure:
-        1st array element: uploader info
-        2nd element: playlist type (course, playlist, podcast)
-        3rd element (not always returned): playlist updated date
-         */
-        this.firstMetadataRow = lockupMetadataViewModel.getObject("metadata")
-                .getObject("contentMetadataViewModel")
-                .getArray("metadataRows")
-                .getObject(0);
-
-        try {
-            this.playlistType = extractPlaylistTypeFromPlaylistId(getPlaylistId());
-        } catch (final ParsingException e) {
-            // If we cannot extract the playlist type, fall back to the normal one
-            this.playlistType = PlaylistInfo.PlaylistType.NORMAL;
-        }
-    }
-
-    @Override
-    public String getUploaderName() throws ParsingException {
-        return firstMetadataRow.getArray("metadataParts")
-                .getObject(0)
-                .getObject("text")
-                .getString("content");
-    }
-
-    @Override
-    public String getUploaderUrl() throws ParsingException {
-        if (playlistType != PlaylistInfo.PlaylistType.NORMAL) {
-            // If the playlist is a mix, there is no uploader as they are auto-generated
-            return null;
-        }
-
-        return getUrlFromNavigationEndpoint(
-                firstMetadataRow.getArray("metadataParts")
-                        .getObject(0)
-                        .getObject("text")
-                        .getArray("commandRuns")
-                        .getObject(0)
-                        .getObject("onTap")
-                        .getObject("innertubeCommand"));
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        if (playlistType != PlaylistInfo.PlaylistType.NORMAL) {
-            // If the playlist is a mix, there is no uploader as they are auto-generated
-            return false;
-        }
-
-        return hasArtistOrVerifiedIconBadgeAttachment(
-                firstMetadataRow.getArray("metadataParts")
-                        .getObject(0)
-                        .getObject("text")
-                        .getArray("attachmentRuns"));
-    }
-
-    @Override
-    public long getStreamCount() throws ParsingException {
-        if (playlistType != PlaylistInfo.PlaylistType.NORMAL) {
-            // If the playlist is a mix, we are not able to get its stream count
-            return ListExtractor.ITEM_COUNT_INFINITE;
-        }
-
-        try {
-            return Long.parseLong(Utils.removeNonDigitCharacters(
-                    thumbnailViewModel.getArray("overlays")
-                            .streamAsJsonObjects()
-                            .filter(overlay -> overlay.has("thumbnailOverlayBadgeViewModel"))
-                            .findFirst()
-                            .orElseThrow(() -> new ParsingException(
-                                    "Could not get thumbnailOverlayBadgeViewModel"))
-                            .getObject("thumbnailOverlayBadgeViewModel")
-                            .getArray("thumbnailBadges")
-                            .streamAsJsonObjects()
-                            .filter(badge -> badge.has("thumbnailBadgeViewModel"))
-                            .findFirst()
-                            .orElseThrow(() ->
-                                    new ParsingException("Could not get thumbnailBadgeViewModel"))
-                            .getObject("thumbnailBadgeViewModel")
-                            .getString("text")));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get playlist stream count", e);
-        }
+    public YoutubeMixOrPlaylistLockupInfoItemExtractor(@Nonnull final JsonObject item) {
+        this.item = Objects.requireNonNull(item, "playlist card is required");
     }
 
     @Override
     public String getName() throws ParsingException {
-        return lockupMetadataViewModel.getObject("title")
-                .getString("content");
+        final String name = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("title").getString("content");
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Playlist card title is missing");
+        }
+        return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        // If the playlist item is a mix, we cannot return just its playlist ID as mix playlists
-        // are not viewable in playlist pages
-        // Use directly getUrlFromNavigationEndpoint in this case, which returns the watch URL with
-        // the mix playlist
-        if (playlistType == PlaylistInfo.PlaylistType.NORMAL) {
-            try {
-                return YoutubePlaylistLinkHandlerFactory.getInstance().getUrl(getPlaylistId());
-            } catch (final Exception ignored) {
+        final String playlistId = playlistId();
+        if (playlistType() == PlaylistInfo.PlaylistType.NORMAL && playlistId != null) {
+            return YoutubePlaylistLinkHandlerFactory.getInstance().getUrl(playlistId);
+        }
+
+        final String url = getUrlFromNavigationEndpoint(item.getObject("rendererContext")
+                .getObject("commandContext").getObject("onTap").getObject("innertubeCommand"));
+        if (url == null || url.isBlank()) {
+            throw new ParsingException("Playlist card URL is missing");
+        }
+        return url;
+    }
+
+    @Nonnull
+    @Override
+    public List<Image> getThumbnails() {
+        return getImagesFromThumbnailsArray(thumbnailViewModel().getObject("image").getArray("sources"));
+    }
+
+    @Override
+    public String getUploaderName() throws ParsingException {
+        final String name = firstMetadataPart().getObject("text").getString("content");
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Playlist card uploader is missing");
+        }
+        return name;
+    }
+
+    @Override
+    public String getUploaderUrl() throws ParsingException {
+        if (playlistType() != PlaylistInfo.PlaylistType.NORMAL) return null;
+
+        final JsonArray runs = firstMetadataPart().getObject("text").getArray("commandRuns");
+        if (runs.isEmpty()) return null;
+        final JsonObject command = runs.getObject(0).getObject("onTap").getObject("innertubeCommand");
+        return getUrlFromNavigationEndpoint(command);
+    }
+
+    @Override
+    public boolean isUploaderVerified() throws ParsingException {
+        if (playlistType() != PlaylistInfo.PlaylistType.NORMAL) return false;
+        return hasArtistOrVerifiedIconBadgeAttachment(firstMetadataPart().getObject("text")
+                .getArray("attachmentRuns"));
+    }
+
+    @Override
+    public long getStreamCount() throws ParsingException {
+        if (playlistType() != PlaylistInfo.PlaylistType.NORMAL) {
+            return ListExtractor.ITEM_COUNT_INFINITE;
+        }
+
+        final String count = badgeText();
+        if (count == null || count.isBlank()) {
+            throw new ParsingException("Playlist card count is missing");
+        }
+        try {
+            final String upperCase = count.toUpperCase(Locale.ROOT);
+            return upperCase.indexOf('K') >= 0 || upperCase.indexOf('M') >= 0 || upperCase.indexOf('B') >= 0
+                    ? Utils.mixedNumberWordToLong(count)
+                    : Long.parseLong(Utils.removeNonDigitCharacters(count));
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse playlist card count", error);
+        }
+    }
+
+    @Nonnull
+    @Override
+    public PlaylistInfo.PlaylistType getPlaylistType() {
+        return playlistType();
+    }
+
+    private JsonObject thumbnailViewModel() {
+        return item.getObject("contentImage").getObject("collectionThumbnailViewModel")
+                .getObject("primaryThumbnail").getObject("thumbnailViewModel");
+    }
+
+    private JsonObject firstMetadataPart() throws ParsingException {
+        final JsonArray rows = item.getObject("metadata").getObject("lockupMetadataViewModel")
+                .getObject("metadata").getObject("contentMetadataViewModel").getArray("metadataRows");
+        if (rows.isEmpty()) throw new ParsingException("Playlist card metadata is missing");
+
+        final JsonArray parts = rows.getObject(0).getArray("metadataParts");
+        if (parts.isEmpty()) throw new ParsingException("Playlist card uploader metadata is missing");
+        return parts.getObject(0);
+    }
+
+    private String badgeText() {
+        for (final JsonObject overlay : thumbnailViewModel().getArray("overlays")
+                .streamAsJsonObjects().toList()) {
+            final JsonArray badges = overlay.getObject("thumbnailOverlayBadgeViewModel")
+                    .getArray("thumbnailBadges");
+            for (final JsonObject badge : badges.streamAsJsonObjects().toList()) {
+                final String text = badge.getObject("thumbnailBadgeViewModel").getString("text");
+                if (text != null && !text.isBlank()) return text;
             }
         }
-
-        return getUrlFromNavigationEndpoint(lockupViewModel.getObject("rendererContext")
-                .getObject("commandContext")
-                .getObject("onTap")
-                .getObject("innertubeCommand"));
+        return null;
     }
 
-    @Nonnull
-    @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        return getImagesFromThumbnailsArray(thumbnailViewModel.getObject("image")
-                .getArray("sources"));
+    private String playlistId() {
+        final String id = item.getString("contentId");
+        if (id != null && !id.isBlank()) return id;
+        final String endpointId = item.getObject("rendererContext").getObject("commandContext")
+                .getObject("watchEndpoint").getString("playlistId");
+        return endpointId == null || endpointId.isBlank() ? null : endpointId;
     }
 
-    @Nonnull
-    @Override
-    public PlaylistInfo.PlaylistType getPlaylistType() throws ParsingException {
-        return playlistType;
-    }
-
-    private String getPlaylistId() throws ParsingException {
-        String id = lockupViewModel.getString("contentId");
-        if (Utils.isNullOrEmpty(id)) {
-            id = lockupViewModel.getObject("rendererContext")
-                    .getObject("commandContext")
-                    .getObject("watchEndpoint")
-                    .getString("playlistId");
+    private PlaylistInfo.PlaylistType playlistType() {
+        try {
+            return extractPlaylistTypeFromPlaylistId(playlistId());
+        } catch (final ParsingException ignored) {
+            return PlaylistInfo.PlaylistType.NORMAL;
         }
-
-        if (Utils.isNullOrEmpty(id)) {
-            throw new ParsingException("Could not get playlist ID");
-        }
-
-        return id;
     }
 }
