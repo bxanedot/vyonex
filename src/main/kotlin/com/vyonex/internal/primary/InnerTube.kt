@@ -52,9 +52,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
@@ -99,9 +96,7 @@ class InnerTube(
                 HttpHeaders.Range.lowercase(),
                 HttpHeaders.UserAgent.lowercase(),
             )
-        private val VISITOR_DATA_REGEX = Regex(""""(?:VISITOR_DATA|visitorData)"\s*:\s*"([^"]+)"""")
         private const val MAX_VISITOR_RESPONSE_BYTES = 4 * 1024 * 1024
-        private const val MAX_VISITOR_DATA_LENGTH = 4096
     }
 
     /** Immutable request identity. Contains credentials and must not be serialized or logged directly. */
@@ -777,7 +772,7 @@ class InnerTube(
                             }
                         }
                     if (response.status.value in 200..299) {
-                        parseServiceWorkerVisitorData(response.bodyAsTextLimited(MAX_VISITOR_RESPONSE_BYTES))
+                        VisitorDataParser.fromServiceWorker(response.bodyAsTextLimited(MAX_VISITOR_RESPONSE_BYTES))
                     } else {
                         response.bodyAsChannel().cancel(null)
                         null
@@ -823,32 +818,9 @@ class InnerTube(
             response.bodyAsChannel().cancel(null)
             return null
         }
-        return VISITOR_DATA_REGEX
-            .find(response.bodyAsTextLimited(MAX_VISITOR_RESPONSE_BYTES))
-            ?.groupValues
-            ?.get(1)
-            .validatedVisitorData()
+        return VisitorDataParser.fromHomepage(response.bodyAsTextLimited(MAX_VISITOR_RESPONSE_BYTES))
     }
 
-    private fun parseServiceWorkerVisitorData(responseText: String): String? =
-        runCatching {
-            Json
-                .parseToJsonElement(responseText.substringAfter('\n').trimStart())
-                .jsonArray[0]
-                .jsonArray[2]
-                .jsonArray[0]
-                .jsonArray[0]
-                .jsonArray[13]
-                .jsonPrimitive
-                .contentOrNull
-                .validatedVisitorData()
-        }.getOrNull()
-
-    private fun String?.validatedVisitorData(): String? =
-        this?.takeIf { value ->
-            value.isNotBlank() && value.length <= MAX_VISITOR_DATA_LENGTH &&
-                value.all { it.code in 0x21..0x7e }
-        }
 }
 
 class InnerTubeHttpException(
