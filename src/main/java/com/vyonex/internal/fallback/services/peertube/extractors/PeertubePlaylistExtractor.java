@@ -6,7 +6,6 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
-import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
@@ -16,8 +15,6 @@ import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 import java.util.List;
@@ -27,6 +24,7 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.START_KEY;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.collectItemsFrom;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
+import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getThumbnailsFromPlaylistOrVideoItem;
 
 public final class PeertubePlaylistExtractor extends PlaylistExtractor {
@@ -78,7 +76,7 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
         }
-        final JsonObject data = readObject(getDownloader().get(page.getUrl()), "playlist videos");
+        final JsonObject data = readApiObject(getDownloader().get(page.getUrl()), "playlist videos");
         PeertubeParsingHelper.validate(data);
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
         collectItemsFrom(items, data, getBaseUrl());
@@ -88,7 +86,7 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
 
     @Override
     public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
-        playlist = readObject(downloader.get(getUrl()), "playlist");
+        playlist = readApiObject(downloader.get(getUrl()), "playlist");
         PeertubeParsingHelper.validate(playlist);
     }
 
@@ -96,22 +94,4 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
         return PeertubeParsingHelper.requiredString(playlist, "displayName");
     }
 
-    private static JsonObject readObject(final Response response, final String kind)
-            throws ExtractionException {
-        if (response == null) {
-            throw new ExtractionException("PeerTube returned no " + kind + " data");
-        }
-        if (response.responseCode() >= 400) {
-            throw new ExtractionException("PeerTube " + kind + " request failed with HTTP "
-                    + response.responseCode());
-        }
-        if (response.responseBody().isBlank()) {
-            throw new ExtractionException("PeerTube returned no " + kind + " data");
-        }
-        try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("PeerTube returned invalid " + kind + " JSON", error);
-        }
-    }
 }

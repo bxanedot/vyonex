@@ -5,17 +5,13 @@ package com.vyonex.internal.fallback.services.peertube.extractors;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
-import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 
@@ -23,6 +19,7 @@ import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelp
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.ITEMS_PER_PAGE;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.START_KEY;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.collectItemsFrom;
+import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
 
 public final class PeertubeTrendingExtractor extends KioskExtractor<StreamInfoItem> {
     public PeertubeTrendingExtractor(final StreamingService service,
@@ -44,17 +41,7 @@ public final class PeertubeTrendingExtractor extends KioskExtractor<StreamInfoIt
         if (page == null || page.getUrl() == null || page.getUrl().isBlank()) {
             throw new IllegalArgumentException("Page URL is required");
         }
-        final Response response = getDownloader().get(page.getUrl());
-        if (response == null || response.responseBody().isBlank()) {
-            throw new ExtractionException("PeerTube returned no kiosk results");
-        }
-
-        final JsonObject data;
-        try {
-            data = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ParsingException("Invalid PeerTube kiosk response", error);
-        }
+        final JsonObject data = readApiObject(getDownloader().get(page.getUrl()), "kiosk results");
         PeertubeParsingHelper.validate(data);
 
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());

@@ -6,7 +6,9 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;
 import com.vyonex.internal.fallback.InfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubePlaylistInfoItemExtractor;
@@ -14,6 +16,8 @@ import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeSepiaSt
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeStreamInfoItemExtractor;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import java.net.URI;
 import java.net.URLDecoder;
@@ -32,6 +36,23 @@ public final class PeertubeParsingHelper {
     public static void validate(final JsonObject response) throws ContentNotAvailableException {
         final String message = response.getString("error");
         if (message != null && !message.isBlank()) throw new ContentNotAvailableException(message);
+    }
+
+    public static JsonObject readApiObject(final Response response, final String resource)
+            throws ExtractionException {
+        if (response == null) throw new ExtractionException("PeerTube returned no " + resource);
+        if (response.responseCode() < 200 || response.responseCode() >= 300) {
+            throw new ExtractionException("PeerTube " + resource + " request failed with HTTP "
+                    + response.responseCode());
+        }
+        if (response.responseBody().isBlank()) {
+            throw new ExtractionException("PeerTube returned no " + resource);
+        }
+        try {
+            return JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube " + resource + " response", error);
+        }
     }
 
     public static Page getNextPage(final String previousUrl, final long total) {

@@ -8,7 +8,6 @@ import com.vyonex.internal.fallback.comments.CommentsExtractor;
 import com.vyonex.internal.fallback.comments.CommentsInfoItem;
 import com.vyonex.internal.fallback.comments.CommentsInfoItemsCollector;
 import com.vyonex.internal.fallback.downloader.Downloader;
-import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
@@ -69,15 +68,7 @@ public final class PeertubeCommentsExtractor extends CommentsExtractor {
     }
 
     private JsonObject fetch(final String url) throws IOException, ExtractionException {
-        final Response response = getDownloader().get(url);
-        if (response == null || response.responseBody().isBlank()) {
-            throw new ExtractionException("PeerTube returned no comment data");
-        }
-        try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ParsingException("Invalid comment response", error);
-        }
+        return PeertubeParsingHelper.readApiObject(getDownloader().get(url), "comment data");
     }
 
     private static JsonObject parseEmbedded(final Page page) throws ParsingException {
