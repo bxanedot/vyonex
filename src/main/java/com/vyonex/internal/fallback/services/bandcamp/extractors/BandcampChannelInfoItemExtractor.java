@@ -12,18 +12,23 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public final class BandcampChannelInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final Element result;
+    private final String name;
+    private final String url;
+    private final String imageUrl;
+    private final String description;
 
     public BandcampChannelInfoItemExtractor(final Element result) {
-        this.result = result;
+        name = text(result, ".heading");
+        url = text(result, ".itemurl");
+        description = text(result, ".subhead");
+        final Element image = result.selectFirst(".art img[src]");
+        imageUrl = image == null ? "" : image.attr("src");
     }
 
-    @Override
-    public String getName() { return text(".heading"); }
+    @Override public String getName() { return name; }
 
     @Override
     public String getUrl() throws ParsingException {
-        final String url = text(".itemurl");
         if (url.isBlank()) throw new ParsingException("Bandcamp artist result has no URL");
         return url;
     }
@@ -31,11 +36,10 @@ public final class BandcampChannelInfoItemExtractor implements ChannelInfoItemEx
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromSearchResult(result);
+        return BandcampExtractorHelper.getImagesFromImageUrl(imageUrl);
     }
 
-    @Override
-    public String getDescription() { return text(".subhead"); }
+    @Override public String getDescription() { return description; }
 
     @Override
     public long getSubscriberCount() { return -1; }
@@ -46,7 +50,7 @@ public final class BandcampChannelInfoItemExtractor implements ChannelInfoItemEx
     @Override
     public boolean isVerified() { return false; }
 
-    private String text(final String selector) {
+    private static String text(final Element result, final String selector) {
         final Element value = result.selectFirst(".result-info " + selector);
         return value == null ? "" : value.text();
     }

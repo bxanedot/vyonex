@@ -11,14 +11,22 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public class BandcampPlaylistInfoItemFeaturedExtractor implements PlaylistInfoItemExtractor {
-    private final JsonObject story;
+    private final String uploaderName;
+    private final long streamCount;
+    private final String name;
+    private final String url;
+    private final long artworkId;
 
     public BandcampPlaylistInfoItemFeaturedExtractor(final JsonObject story) {
-        this.story = story;
+        uploaderName = story.getString("band_name", "");
+        streamCount = story.getLong("num_streamable_tracks", -1);
+        name = story.getString("album_title", "");
+        url = https(story.getString("item_url", ""));
+        artworkId = story.getLong(story.isNumber("art_id") ? "art_id" : "item_art_id");
     }
 
     @Override
-    public String getUploaderName() { return story.getString("band_name", ""); }
+    public String getUploaderName() { return uploaderName; }
 
     @Override
     public String getUploaderUrl() { return null; }
@@ -27,19 +35,18 @@ public class BandcampPlaylistInfoItemFeaturedExtractor implements PlaylistInfoIt
     public boolean isUploaderVerified() { return false; }
 
     @Override
-    public long getStreamCount() { return story.getLong("num_streamable_tracks", -1); }
+    public long getStreamCount() { return streamCount; }
 
     @Override
-    public String getName() { return story.getString("album_title", ""); }
+    public String getName() { return name; }
 
     @Override
-    public String getUrl() { return https(story.getString("item_url", "")); }
+    public String getUrl() { return url; }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        final String key = story.isNumber("art_id") ? "art_id" : "item_art_id";
-        return BandcampExtractorHelper.getImagesFromImageId(story.getLong(key), true);
+        return BandcampExtractorHelper.getImagesFromImageId(artworkId, true);
     }
 
     private static String https(final String value) {

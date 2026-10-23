@@ -11,36 +11,33 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public class BandcampRelatedPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final Element album;
+    private final String name;
+    private final String url;
+    private final String imageUrl;
+    private final String uploaderName;
 
     public BandcampRelatedPlaylistInfoItemExtractor(@Nonnull final Element album) {
-        this.album = album;
-    }
-
-    @Override
-    public String getName() {
         final Element title = album.selectFirst(".release-title");
-        return title == null ? "" : title.text();
+        final Element link = album.selectFirst(".album-link[href]");
+        final Element image = album.selectFirst(".album-art[src]");
+        final Element artist = album.selectFirst(".by-artist");
+        name = title == null ? "" : title.text();
+        url = link == null ? "" : link.absUrl("href").replaceFirst("^http://", "https://");
+        imageUrl = image == null ? "" : image.attr("src");
+        uploaderName = artist == null ? "" : artist.text().replaceFirst("(?i)^by\\s+", "");
     }
 
-    @Override
-    public String getUrl() {
-        final Element link = album.selectFirst(".album-link[href]");
-        return link == null ? "" : link.absUrl("href").replaceFirst("^http://", "https://");
-    }
+    @Override public String getName() { return name; }
+
+    @Override public String getUrl() { return url; }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        final Element image = album.selectFirst(".album-art[src]");
-        return BandcampExtractorHelper.getImagesFromImageUrl(image == null ? "" : image.attr("src"));
+        return BandcampExtractorHelper.getImagesFromImageUrl(imageUrl);
     }
 
-    @Override
-    public String getUploaderName() {
-        final Element artist = album.selectFirst(".by-artist");
-        return artist == null ? "" : artist.text().replaceFirst("(?i)^by\\s+", "");
-    }
+    @Override public String getUploaderName() { return uploaderName; }
 
     @Override
     public String getUploaderUrl() { return null; }
