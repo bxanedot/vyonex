@@ -441,7 +441,6 @@ internal class PlayerClientDirector(
                 authUser = "0",
                 cookie = null,
                 sapisid = null,
-                useLoginForBrowse = false,
             )
         val attemptResult =
             try {

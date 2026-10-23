@@ -40,7 +40,6 @@ class InnerTubeSessionContractTest {
                 visitorData = "visitor",
                 dataSyncId = "sync",
                 authUser = "2",
-                useLoginForBrowse = true,
             )
 
             val publicSession = source.createIsolatedSession(includeAccount = false)
@@ -53,13 +52,11 @@ class InnerTubeSessionContractTest {
                 assertNull(publicSession.dataSyncId)
                 assertNull(publicSession.sessionSnapshot().sapisid)
                 assertEquals("0", publicSession.authUser)
-                assertFalse(publicSession.useLoginForBrowse)
 
                 assertEquals("SID=session; SAPISID=token", accountSession.cookie)
                 assertEquals("sync", accountSession.dataSyncId)
                 assertEquals("token", accountSession.sessionSnapshot().sapisid)
                 assertEquals("2", accountSession.authUser)
-                assertTrue(accountSession.useLoginForBrowse)
             } finally {
                 publicSession.close()
                 accountSession.close()

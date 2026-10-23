@@ -113,7 +113,6 @@ class InnerTube(
         val authUser: String = "0",
         val cookie: String? = null,
         val sapisid: String? = null,
-        val useLoginForBrowse: Boolean = false,
         val regionOverrideActive: Boolean = false,
         val generation: Long = 0,
     ) {
@@ -125,7 +124,6 @@ class InnerTube(
                 "authUser=${authUser.presence()}, " +
                 "cookie=${cookie.presence()}, " +
                 "sapisid=${sapisid.presence()}, " +
-                "useLoginForBrowse=$useLoginForBrowse, " +
                 "regionOverrideActive=$regionOverrideActive, " +
                 "generation=$generation)"
 
@@ -174,10 +172,6 @@ class InnerTube(
             updateSession { it.copy(cookie = sanitized, sapisid = resolveSapisidValue(sanitized)) }
         }
 
-    var useLoginForBrowse: Boolean
-        get() = session.load().useLoginForBrowse
-        set(value) = updateSession { it.copy(useLoginForBrowse = value) }
-
     var regionOverrideActive: Boolean
         get() = session.load().regionOverrideActive
         set(value) = updateSession { it.copy(regionOverrideActive = value) }
@@ -192,7 +186,6 @@ class InnerTube(
                 visitorData = current.visitorData,
                 dataSyncId = current.dataSyncId.takeIf { includeAccount },
                 authUser = current.authUser.takeIf { includeAccount } ?: "0",
-                useLoginForBrowse = current.useLoginForBrowse && includeAccount,
             )
         }
     }
@@ -242,7 +235,6 @@ class InnerTube(
                 authUser = "0",
                 cookie = null,
                 sapisid = null,
-                useLoginForBrowse = false,
             ),
         )
 
@@ -302,7 +294,6 @@ class InnerTube(
         visitorData: String?,
         dataSyncId: String?,
         authUser: String,
-        useLoginForBrowse: Boolean,
     ) {
         val sanitizedCookie = cookie?.let(::sanitizeCookieString)
         updateSession { current ->
@@ -312,7 +303,6 @@ class InnerTube(
                 authUser = sanitizeAuthUser(authUser),
                 cookie = sanitizedCookie,
                 sapisid = resolveSapisidValue(sanitizedCookie),
-                useLoginForBrowse = useLoginForBrowse,
             )
         }
     }
