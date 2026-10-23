@@ -9,7 +9,7 @@ internal interface ExtractionCipherService {
 
     suspend fun preloadPlayerCode(playerUrl: String)
 
-    suspend fun prewarmEjs()
+    suspend fun prewarmPlayerCipher()
 
     suspend fun processFormats(
         playerUrl: String,
@@ -28,8 +28,8 @@ internal class DefaultExtractionCipherService(
         delegate.preloadPlayerCode(playerUrl)
     }
 
-    override suspend fun prewarmEjs() {
-        delegate.prewarmEjs()
+    override suspend fun prewarmPlayerCipher() {
+        delegate.prewarmPlayerCipher()
     }
 
     override suspend fun processFormats(

@@ -291,7 +291,7 @@ class InnerTubeExtractor internal constructor(
             throw e
         } catch (e: Exception) {
             logger.w(TAG, "player config prewarm failed", details = mapOf("exceptionType" to (e::class.simpleName ?: "unknown")))
-            cipherService.prewarmEjs()
+            cipherService.prewarmPlayerCipher()
         }
         logger.d(TAG, "prewarm completed", details = mapOf("elapsedMs" to (Clock.System.now().toEpochMilliseconds() - startMs).toString()))
     }
@@ -1085,7 +1085,7 @@ class InnerTubeExtractor internal constructor(
                         ?.withPoToken(result.streamingDataPoToken)
                         ?.let { appendClientPlaybackNonce(it, clientPlaybackNonce) }
                 if (wantVideo && (directVideoUrl.isNullOrBlank() || !isAllowedMediaUrl(directVideoUrl))) continue
-                // Fast path: if the selected URLs are already playback-ready, skip cipher/ejs work.
+                // Fast path: if the selected URLs are playback-ready, skip cipher work.
                 if (!directUrl.hasNParameter() && directVideoUrl?.hasNParameter() != true) {
                     val expireSeconds = extractExpire(directUrl)
                     val expiresAt = expireSeconds?.let { Instant.fromEpochSeconds(it) }

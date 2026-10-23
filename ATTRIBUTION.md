@@ -5,6 +5,5 @@ VyonEx combines and modifies code and data from the projects below. Project name
 | Source | License | Included material |
 | --- | --- | --- |
 | [InnerTubeX](https://github.com/MetrolistGroup/innertubex) | GPL-3.0 | YouTube InnerTube and stream extraction code adapted into VyonEx. |
-| [yt-dlp EJS](https://github.com/yt-dlp/ejs) | Unlicense | JavaScript solver resources in `src/main/resources/yt_ejs`. |
 
 VyonEx modifications are maintained by bxane and distributed under GPL-3.0-only. The corresponding license text is in [LICENSE](LICENSE).

@@ -26,8 +26,7 @@ import kotlin.time.Clock
  * - N-parameter challenges (throttling prevention)
  * - Signature cipher challenges (URL decryption)
  *
- * Uses validated remote player configs first, then yt-dlp EJS
- * and regex-based [PlayerScriptParser] fallbacks.
+ * Uses validated remote player configs first, then VyonEx player-script transforms.
  */
 class YouTubeCipherService(
     private val httpClient: HttpClient,
@@ -51,7 +50,7 @@ class YouTubeCipherService(
     }
 
     private val engine = QuickJsEngine()
-    private val ejs = EjsChallengeSolver(engine, logger)
+    private val playerCipher = PlayerCipherChallengeSolver(engine, logger)
     private val cache = LinkedHashMap<String, CachedSolver>()
     private val playerConfigCipherCache = LinkedHashMap<String, CachedPlayerConfigSolver>()
     private val playerCodeCache = LinkedHashMap<String, String>()
@@ -66,7 +65,7 @@ class YouTubeCipherService(
 
     private data class CachedSolver(
         val playerUrl: String,
-        /** Full player JS; used for EJS preprocessed-player cache and fallbacks. */
+        /** Full player JS; used by VyonEx player-script solvers and fallbacks. */
         val playerCode: String,
         val engine: QuickJsEngine,
         val nSolver: suspend (String) -> String?,
@@ -90,19 +89,19 @@ class YouTubeCipherService(
     suspend fun initialize() = operationMutex.withLock { initializeUnsafe() }
 
     /**
-     * Installs optional persistent storage for generated EJS preprocessed players.
+     * Installs optional persistent storage for prepared VyonEx player scripts.
      * Passing null to [write] deletes an unusable cached value.
      */
     suspend fun setPreprocessedPlayerCache(
         read: suspend (String) -> String?,
         write: suspend (String, String?) -> Unit,
-    ) = operationMutex.withLock { ejs.setPreprocessedPlayerCache(read, write) }
+    ) = operationMutex.withLock { playerCipher.setPreparedPlayerScriptCache(read, write) }
 
     private suspend fun initializeUnsafe() {
         engine.initialize()
     }
 
-    suspend fun prewarmEjs() = operationMutex.withLock { ejs.ensureLoaded() }
+    suspend fun prewarmPlayerCipher() = operationMutex.withLock { playerCipher.ensureReady() }
 
     /**
      * Notify the remote config workflow that a deciphered stream was rejected by
@@ -122,7 +121,7 @@ class YouTubeCipherService(
             val startMs = Clock.System.now().toEpochMilliseconds()
             try {
                 val playerCode = getOrDownloadPlayerCode(playerUrl, cached = null)
-                ejs.solve(playerUrl, playerCode.code, listOf("sig" to listOf("prewarm")))
+                playerCipher.solve(playerUrl, playerCode.code, listOf("sig" to listOf("prewarm")))
                 logger.d(
                     TAG,
                     "player JS preload done source=${playerCode.source} size=${playerCode.code.length} elapsed=${Clock.System.now().toEpochMilliseconds() - startMs}ms player=${playerUrl.logId()}",
@@ -197,7 +196,7 @@ class YouTubeCipherService(
                     }
                 }
 
-                // --- Signature ciphers (batch EJS, then parser fallback) ---
+                // --- Signature ciphers (batch player solver, then parser fallback) ---
                 data class SigTask(
                     val index: Int,
                     val params: Map<String, String>,
@@ -256,15 +255,15 @@ class YouTubeCipherService(
                 val remoteSolved = remoteConfigSolved
 
                 val solvedNFromSignaturePass = remoteSolved.nByChallenge.toMutableMap()
-                val preferLocalPreprocessed = remoteSolved.sigByChallenge.isEmpty() && remoteSolved.nByChallenge.isEmpty()
+                val preferPreparedPlayerScript = remoteSolved.sigByChallenge.isEmpty() && remoteSolved.nByChallenge.isEmpty()
                 if (sigTasks.isNotEmpty()) {
                     val solvedSig = remoteSolved.sigByChallenge.toMutableMap()
                     val missingSigChallenges = sigChallenges.filterNot { it in solvedSig }
                     if (missingSigChallenges.isNotEmpty()) {
                         val sigStartMs = Clock.System.now().toEpochMilliseconds()
-                        val ejsSig =
+                        val playerResult =
                             playerCode()?.let { code ->
-                                ejs.solve(
+                                playerCipher.solve(
                                     playerUrl = playerUrl,
                                     fullPlayerJs = code,
                                     requestOrder =
@@ -275,15 +274,15 @@ class YouTubeCipherService(
                                                 .takeIf { it.isNotEmpty() }
                                                 ?.let { add("n" to it) }
                                         },
-                                    preferPreprocessed = preferLocalPreprocessed,
+                                    preferPrepared = preferPreparedPlayerScript,
                                 )
                             }
-                        if (ejsSig != null) {
-                            solvedSig += ejsSig.sigByChallenge
-                            solvedNFromSignaturePass += ejsSig.nByChallenge
+                        if (playerResult != null) {
+                            solvedSig += playerResult.sigByChallenge
+                            solvedNFromSignaturePass += playerResult.nByChallenge
                             logger.d(
                                 TAG,
-                                "signature EJS done tasks=${sigTasks.size} unique=${sigChallenges.size} missing=${missingSigChallenges.size} solved=${ejsSig.sigByChallenge.size} nRemote=${solvedNFromSignaturePass.size} elapsed=${Clock.System.now().toEpochMilliseconds() - sigStartMs}ms player=${playerUrl.logId()}",
+                                "signature player solver done tasks=${sigTasks.size} unique=${sigChallenges.size} missing=${missingSigChallenges.size} solved=${playerResult.sigByChallenge.size} nRemote=${solvedNFromSignaturePass.size} elapsed=${Clock.System.now().toEpochMilliseconds() - sigStartMs}ms player=${playerUrl.logId()}",
                             )
                         }
                     } else {
@@ -330,7 +329,7 @@ class YouTubeCipherService(
                     }
                 }
 
-                // --- n-parameter (batch EJS, then parser fallback) ---
+                // --- n-parameter (batch player solver, then parser fallback) ---
                 val nTasks = mutableListOf<NTask>()
                 for ((i, format) in working.withIndex()) {
                     val url = format.url ?: continue
@@ -363,20 +362,20 @@ class YouTubeCipherService(
                     val missingNChallenges = nChallenges.filterNot { it in solvedN }
                     if (missingNChallenges.isNotEmpty()) {
                         val nStartMs = Clock.System.now().toEpochMilliseconds()
-                        val ejsN =
+                        val playerResult =
                             playerCode()?.let { code ->
-                                ejs.solve(
+                                playerCipher.solve(
                                     playerUrl = playerUrl,
                                     fullPlayerJs = code,
                                     requestOrder = listOf("n" to missingNChallenges),
-                                    preferPreprocessed = preferLocalPreprocessed,
+                                    preferPrepared = preferPreparedPlayerScript,
                                 )
                             }
-                        if (ejsN != null) {
-                            solvedN += ejsN.nByChallenge
+                        if (playerResult != null) {
+                            solvedN += playerResult.nByChallenge
                             logger.d(
                                 TAG,
-                                "n EJS done tasks=${nTasks.size} unique=${nChallenges.size} missing=${missingNChallenges.size} solved=${ejsN.nByChallenge.size} reused=${solvedNFromSignaturePass.size} elapsed=${Clock.System.now().toEpochMilliseconds() - nStartMs}ms player=${playerUrl.logId()}",
+                                "n player solver done tasks=${nTasks.size} unique=${nChallenges.size} missing=${missingNChallenges.size} solved=${playerResult.nByChallenge.size} reused=${solvedNFromSignaturePass.size} elapsed=${Clock.System.now().toEpochMilliseconds() - nStartMs}ms player=${playerUrl.logId()}",
                             )
                         }
                     } else {
@@ -543,11 +542,11 @@ class YouTubeCipherService(
                             ?: run {
                                 val pc = solver.playerCode
                                 val r =
-                                    ejs.solve(
+                                    playerCipher.solve(
                                         playerUrl,
                                         pc,
                                         listOf("sig" to listOf(signature)),
-                                        preferPreprocessed = true,
+                                        preferPrepared = true,
                                     )
                                 r.sigByChallenge[signature]
                             }
@@ -593,11 +592,11 @@ class YouTubeCipherService(
                         solver.nSolver(nValue).takeUnless { it.isNullOrBlank() }
                             ?: run {
                                 val r =
-                                    ejs.solve(
+                                    playerCipher.solve(
                                         playerUrl,
                                         solver.playerCode,
                                         listOf("n" to listOf(nValue)),
-                                        preferPreprocessed = true,
+                                        preferPrepared = true,
                                     )
                                 r.nByChallenge[nValue]
                             }
@@ -1001,6 +1000,7 @@ class YouTubeCipherService(
                 }
             cachedSolvers.forEach { it.engine.dispose() }
             cachedConfigSolvers.forEach { it.solver.dispose() }
+            playerCipher.dispose()
             engine.dispose()
         }
 
