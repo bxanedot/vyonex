@@ -7,6 +7,7 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
@@ -20,7 +21,6 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
 import com.vyonex.internal.fallback.utils.LocaleCompat;
-import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
@@ -38,50 +38,43 @@ import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCC
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromStreamItem;
 
 public class MediaCCCStreamExtractor extends StreamExtractor {
-    @Nullable private JsonObject event;
-    @Nullable private JsonObject conference;
+    @Nullable private Event event;
+    @Nullable private String conferenceLogo;
 
     public MediaCCCStreamExtractor(final StreamingService service, final LinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    @Nullable @Override public String getTextualUploadDate() {
-        return event.getString("release_date");
-    }
+    @Nullable @Override public String getTextualUploadDate() { return event.releaseDate(); }
     @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
         return DateWrapper.fromOffsetDateTime(getTextualUploadDate());
     }
-    @Nonnull @Override public List<Image> getThumbnails() {
-        return getThumbnailsFromStreamItem(event);
-    }
+    @Nonnull @Override public List<Image> getThumbnails() { return event.thumbnails(); }
     @Nonnull @Override public Description getDescription() {
-        return new Description(event.getString("description"), Description.PLAIN_TEXT);
+        return new Description(event.description(), Description.PLAIN_TEXT);
     }
-    @Override public long getLength() { return event.getInt("length"); }
-    @Override public long getViewCount() { return event.getInt("view_count"); }
+    @Override public long getLength() { return event.length(); }
+    @Override public long getViewCount() { return event.viewCount(); }
     @Nonnull @Override public String getUploaderUrl() throws ParsingException {
         return MediaCCCConferenceLinkHandlerFactory.CONFERENCE_PATH + getUploaderName();
     }
     @Nonnull @Override public String getUploaderName() throws ParsingException {
-        return MediaCCCConferenceLinkHandlerFactory.getInstance()
-                .getId(event.getString("conference_url"));
+        return MediaCCCConferenceLinkHandlerFactory.getInstance().getId(event.conferenceUrl());
     }
     @Override public List<Image> getUploaderAvatars() {
-        return getImageListFromLogoImageUrl(conference.getString("logo_url"));
+        return getImageListFromLogoImageUrl(conferenceLogo);
     }
 
     @Override public List<AudioStream> getAudioStreams() throws ExtractionException {
         final List<AudioStream> result = new ArrayList<>();
-        for (final JsonObject recording : event.getArray("recordings").streamAsJsonObjects()
-                .toList()) {
-            final String mimeType = recording.getString("mime_type", "");
-            if (!mimeType.startsWith("audio")) continue;
+        for (final Recording recording : event.recordings()) {
+            if (!recording.mimeType().startsWith("audio")) continue;
             final AudioStream.Builder stream = new AudioStream.Builder()
-                    .setId(recording.getString("filename", ID_UNKNOWN))
-                    .setContent(recording.getString("recording_url"), true)
-                    .setMediaFormat(audioFormat(mimeType))
+                    .setId(recording.fileName())
+                    .setContent(recording.url(), true)
+                    .setMediaFormat(audioFormat(recording.mimeType()))
                     .setAverageBitrate(UNKNOWN_BITRATE);
-            final String language = recording.getString("language");
+            final String language = recording.language();
             if (language != null && !language.contains("-")) {
                 stream.setAudioLocale(LocaleCompat.forLanguageTag(language).orElseThrow(() ->
                         new ParsingException("Cannot convert language to a locale: " + language)));
@@ -100,18 +93,17 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
 
     @Override public List<VideoStream> getVideoStreams() {
         final List<VideoStream> result = new ArrayList<>();
-        final JsonArray recordings = event.getArray("recordings");
-        for (final JsonObject recording : recordings.streamAsJsonObjects().toList()) {
-            final String mimeType = recording.getString("mime_type", "");
-            if (!mimeType.startsWith("video")) continue;
+        for (final Recording recording : event.recordings()) {
+            if (!recording.mimeType().startsWith("video")) continue;
+            final String mimeType = recording.mimeType();
             final MediaFormat format = mimeType.endsWith("webm") ? MediaFormat.WEBM
                     : mimeType.endsWith("mp4") ? MediaFormat.MPEG_4 : null;
             result.add(new VideoStream.Builder()
-                    .setId(recording.getString("filename", ID_UNKNOWN))
-                    .setContent(recording.getString("recording_url"), true)
+                    .setId(recording.fileName())
+                    .setContent(recording.url(), true)
                     .setIsVideoOnly(false)
                     .setMediaFormat(format)
-                    .setResolution(recording.getInt("height") + "p")
+                    .setResolution(recording.height() + "p")
                     .build());
         }
         return result;
@@ -123,38 +115,69 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
         final String eventUrl = MediaCCCStreamLinkHandlerFactory.VIDEO_API_ENDPOINT + getId();
-        try {
-            event = JsonParser.object().from(downloader.get(eventUrl).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse event response from " + eventUrl, error);
-        }
+        event = readEvent(downloader, eventUrl);
+        conferenceLogo = readConferenceLogo(downloader, event.conferenceUrl());
+    }
 
-        final String conferenceUrl = event.getString("conference_url");
+    private static Event readEvent(final Downloader downloader, final String url)
+            throws IOException, ExtractionException {
+        final JsonObject object = readObject(downloader, url, "event");
+        final String conferenceUrl = object.getString("conference_url");
         if (conferenceUrl == null || conferenceUrl.isBlank()) {
             throw new ExtractionException("The event response has no conference URL.");
         }
+        final List<String> tags = new ArrayList<>();
+        for (final Object tag : object.getArray("tags")) {
+            if (tag instanceof String) tags.add((String) tag);
+        }
+        final List<Recording> recordings = new ArrayList<>();
+        for (final JsonObject item : object.getArray("recordings").streamAsJsonObjects().toList()) {
+            recordings.add(new Recording(item.getString("filename", ID_UNKNOWN),
+                    item.getString("recording_url"), item.getString("mime_type", ""),
+                    item.getString("language"), item.getInt("height")));
+        }
+        return new Event(object.getString("title"), object.getString("release_date"),
+                object.getString("description"), object.getLong("length"),
+                object.getLong("view_count"), conferenceUrl, object.getString("frontend_link"),
+                object.getString("original_language"), List.copyOf(tags),
+                List.copyOf(recordings), getThumbnailsFromStreamItem(object));
+    }
+
+    private static String readConferenceLogo(final Downloader downloader, final String url)
+            throws IOException, ExtractionException {
+        return readObject(downloader, url, "conference").getString("logo_url");
+    }
+
+    private static JsonObject readObject(final Downloader downloader, final String url,
+                                         final String kind)
+            throws IOException, ExtractionException {
+        final Response response = downloader.get(url);
+        if (response == null) throw new ExtractionException("No " + kind + " response received.");
+        if (response.responseCode() < 200 || response.responseCode() >= 300) {
+            throw new ExtractionException(kind + " request failed with HTTP "
+                    + response.responseCode() + ".");
+        }
         try {
-            conference = JsonParser.object().from(downloader.get(conferenceUrl).responseBody());
+            return JsonParser.object().from(response.responseBody());
         } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse conference response from "
-                    + conferenceUrl, error);
+            throw new ExtractionException("Could not parse " + kind + " response from " + url,
+                    error);
         }
     }
 
-    @Nonnull @Override public String getName() throws ParsingException {
-        return event.getString("title");
-    }
-    @Nonnull @Override public String getOriginalUrl() {
-        return event.getString("frontend_link");
-    }
+    @Nonnull @Override public String getName() throws ParsingException { return event.title(); }
+    @Nonnull @Override public String getOriginalUrl() { return event.frontendLink(); }
     @Override public Locale getLanguageInfo() throws ParsingException {
-        return Localization.getLocaleFromThreeLetterCode(event.getString("original_language"));
+        return Localization.getLocaleFromThreeLetterCode(event.originalLanguage());
     }
-    @Nonnull @Override public List<String> getTags() {
-        final List<String> tags = new ArrayList<>();
-        for (final Object tag : event.getArray("tags")) {
-            if (tag instanceof String) tags.add((String) tag);
-        }
-        return List.copyOf(tags);
-    }
+    @Nonnull @Override public List<String> getTags() { return event.tags(); }
+
+    private record Event(@Nullable String title, @Nullable String releaseDate,
+                         @Nullable String description, long length, long viewCount,
+                         String conferenceUrl, @Nullable String frontendLink,
+                         @Nullable String originalLanguage, List<String> tags,
+                         List<Recording> recordings, List<Image> thumbnails) { }
+
+    private record Recording(String fileName, @Nullable String url, String mimeType,
+                             @Nullable String language, int height) { }
 }
