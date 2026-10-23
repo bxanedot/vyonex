@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.ListExtractor;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeChannelInfoItemExtractor;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YoutubeChannelInfoItemExtractorTest {
@@ -50,5 +52,16 @@ class YoutubeChannelInfoItemExtractorTest {
                 JsonParser.object().from("{\"channelId\":\"UC789\"}"));
         assertEquals(-1, noCounts.getSubscriberCount());
         assertEquals(ListExtractor.ITEM_COUNT_UNKNOWN, noCounts.getStreamCount());
+
+        final var malformed = new YoutubeChannelInfoItemExtractor(JsonParser.object().from(
+                "{\"channelId\":\"UC999\",\"videoCountText\":{\"simpleText\":\"many\"}}"));
+        assertThrows(ParsingException.class, malformed::getStreamCount);
+    }
+
+    @Test
+    void rejectsAChannelResultWithoutAnIdentifier() throws Exception {
+        final var channel = new YoutubeChannelInfoItemExtractor(JsonParser.object().from(
+                "{\"title\":{\"simpleText\":\"No ID\"}}"));
+        assertThrows(ParsingException.class, channel::getUrl);
     }
 }

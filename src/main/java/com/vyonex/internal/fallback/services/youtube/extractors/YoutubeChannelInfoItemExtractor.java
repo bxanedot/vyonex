@@ -3,9 +3,6 @@
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
-
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
@@ -25,7 +22,8 @@ public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor
 
     public YoutubeChannelInfoItemExtractor(final JsonObject channelInfoItem) {
         channel = channelInfoItem;
-        final String subscriberLabel = getTextFromObject(channel.getObject("subscriberCountText"));
+        final String subscriberLabel = YoutubeParsingHelper.getTextFromObject(
+                channel.getObject("subscriberCountText"));
         handleInSubscriberField = subscriberLabel != null && subscriberLabel.startsWith("@");
     }
 
@@ -33,23 +31,25 @@ public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor
     @Override
     public List<Image> getThumbnails() throws ParsingException {
         try {
-            return getThumbnailsFromInfoItem(channel);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not read channel thumbnails", e);
+            return YoutubeParsingHelper.getThumbnailsFromInfoItem(channel);
+        } catch (final Exception error) {
+            throw new ParsingException("Could not read channel thumbnails", error);
         }
     }
 
     @Override
     public String getName() throws ParsingException {
-        return getTextFromObject(channel.getObject("title"));
+        return YoutubeParsingHelper.getTextFromObject(channel.getObject("title"));
     }
 
     @Override
     public String getUrl() throws ParsingException {
+        final String id = channel.getString("channelId");
+        if (id == null || id.isBlank()) throw new ParsingException("Channel ID is missing");
         try {
             return YoutubeChannelLinkHandlerFactory.getInstance()
-                    .getUrl("channel/" + channel.getString("channelId"));
-        } catch (final Exception e) {
+                    .getUrl("channel/" + id);
+        } catch (final RuntimeException e) {
             throw new ParsingException("Could not read channel URL", e);
         }
     }
@@ -57,12 +57,14 @@ public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor
     @Override
     public long getSubscriberCount() throws ParsingException {
         if (!channel.has("subscriberCountText")) return -1;
-        final String value = getTextFromObject(channel.getObject(
+        final String value = YoutubeParsingHelper.getTextFromObject(channel.getObject(
                 handleInSubscriberField ? "videoCountText" : "subscriberCountText"));
-        if (value == null) throw new ParsingException("Could not read subscriber count");
+        if (value == null || value.isBlank()) {
+            throw new ParsingException("Could not read subscriber count");
+        }
         try {
             return Utils.mixedNumberWordToLong(value);
-        } catch (final Exception e) {
+        } catch (final ParsingException | RuntimeException e) {
             throw new ParsingException("Could not parse subscriber count", e);
         }
     }
@@ -72,10 +74,13 @@ public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor
         if (handleInSubscriberField || !channel.has("videoCountText")) {
             return ListExtractor.ITEM_COUNT_UNKNOWN;
         }
-        final String value = getTextFromObject(channel.getObject("videoCountText"));
+        final String value = YoutubeParsingHelper.getTextFromObject(channel.getObject("videoCountText"));
+        if (value == null || value.isBlank()) {
+            throw new ParsingException("Could not parse channel video count");
+        }
         try {
             return Long.parseLong(Utils.removeNonDigitCharacters(value));
-        } catch (final Exception e) {
+        } catch (final RuntimeException e) {
             throw new ParsingException("Could not parse channel video count", e);
         }
     }
@@ -88,6 +93,7 @@ public class YoutubeChannelInfoItemExtractor implements ChannelInfoItemExtractor
     @Override
     public String getDescription() {
         return channel.has("descriptionSnippet")
-                ? getTextFromObject(channel.getObject("descriptionSnippet")) : null;
+                ? YoutubeParsingHelper.getTextFromObject(channel.getObject("descriptionSnippet"))
+                : null;
     }
 }
