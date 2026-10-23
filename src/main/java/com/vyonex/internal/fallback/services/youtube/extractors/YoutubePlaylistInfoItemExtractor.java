@@ -1,8 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -10,104 +9,90 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubePlaylistLinkHandlerFactory;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromObject;
 
+/** VyonEx parser for playlist results returned by YouTube search and channel tabs. */
 public class YoutubePlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final JsonObject playlistInfoItem;
+    private final JsonObject item;
 
-    public YoutubePlaylistInfoItemExtractor(final JsonObject playlistInfoItem) {
-        this.playlistInfoItem = playlistInfoItem;
+    public YoutubePlaylistInfoItemExtractor(final JsonObject item) {
+        this.item = Objects.requireNonNull(item, "playlist item is required");
     }
 
     @Nonnull
     @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        try {
-            JsonArray thumbnails = playlistInfoItem.getArray("thumbnails")
-                    .getObject(0)
-                    .getArray("thumbnails");
-            if (thumbnails.isEmpty()) {
-                thumbnails = playlistInfoItem.getObject("thumbnail")
-                        .getArray("thumbnails");
-            }
-
-            return getImagesFromThumbnailsArray(thumbnails);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get thumbnails", e);
-        }
+    public List<Image> getThumbnails() {
+        final JsonArray groups = item.getArray("thumbnails");
+        final JsonArray primary = groups.isEmpty() ? new JsonArray() : groups.getObject(0).getArray("thumbnails");
+        final JsonArray thumbnails = primary.isEmpty()
+                ? item.getObject("thumbnail").getArray("thumbnails")
+                : primary;
+        return getImagesFromThumbnailsArray(thumbnails);
     }
 
     @Override
     public String getName() throws ParsingException {
-        try {
-            return getTextFromObject(playlistInfoItem.getObject("title"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get name", e);
+        final String name = getTextFromObject(item.getObject("title"));
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Playlist title is missing");
         }
+        return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        try {
-            final String id = playlistInfoItem.getString("playlistId");
-            return YoutubePlaylistLinkHandlerFactory.getInstance().getUrl(id);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get url", e);
+        final String id = item.getString("playlistId");
+        if (id == null || id.isBlank()) {
+            throw new ParsingException("Playlist ID is missing");
         }
+        return YoutubePlaylistLinkHandlerFactory.getInstance().getUrl(id);
     }
 
     @Override
     public String getUploaderName() throws ParsingException {
-        try {
-            return getTextFromObject(playlistInfoItem.getObject("longBylineText"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get uploader name", e);
-        }
+        return getTextFromObject(item.getObject("longBylineText"));
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        try {
-            return getUrlFromObject(playlistInfoItem.getObject("longBylineText"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get uploader url", e);
-        }
+        return getUrlFromObject(item.getObject("longBylineText"));
     }
 
     @Override
     public boolean isUploaderVerified() throws ParsingException {
-        try {
-            return YoutubeParsingHelper.isVerified(playlistInfoItem.getArray("ownerBadges"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get uploader verification info", e);
-        }
+        return YoutubeParsingHelper.isVerified(item.getArray("ownerBadges"));
     }
 
     @Override
     public long getStreamCount() throws ParsingException {
-        String videoCountText = playlistInfoItem.getString("videoCount");
-        if (videoCountText == null) {
-            videoCountText = getTextFromObject(playlistInfoItem.getObject("videoCountText"));
-        }
-
-        if (videoCountText == null) {
-            videoCountText = getTextFromObject(playlistInfoItem.getObject("videoCountShortText"));
-        }
-
-        if (videoCountText == null) {
-            throw new ParsingException("Could not get stream count");
+        String count = item.getString("videoCount");
+        if (count == null) count = getTextFromObject(item.getObject("videoCountText"));
+        if (count == null) count = getTextFromObject(item.getObject("videoCountShortText"));
+        if (count == null || count.isBlank()) {
+            throw new ParsingException("Playlist item count is missing");
         }
 
         try {
-            return Long.parseLong(Utils.removeNonDigitCharacters(videoCountText));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get stream count", e);
+            return containsMagnitude(count)
+                    ? Utils.mixedNumberWordToLong(count)
+                    : Long.parseLong(Utils.removeNonDigitCharacters(count));
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse playlist item count", error);
         }
+    }
+
+    private static boolean containsMagnitude(final String value) {
+        final String upperCase = value.toUpperCase(Locale.ROOT);
+        return upperCase.indexOf('K') >= 0 || upperCase.indexOf('M') >= 0 || upperCase.indexOf('B') >= 0;
     }
 }
