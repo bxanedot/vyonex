@@ -1,0 +1,76 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
+// bxane
+package com.vyonex.internal.fallback.services.bandcamp.extractors
+
+import com.vyonex.internal.fallback.InfoItem
+import com.vyonex.internal.fallback.MultiInfoItemsCollector
+import com.vyonex.internal.fallback.Page
+import com.vyonex.internal.fallback.StreamingService
+import com.vyonex.internal.fallback.channel.tabs.ChannelTabExtractor
+import com.vyonex.internal.fallback.channel.tabs.ChannelTabs
+import com.vyonex.internal.fallback.downloader.Downloader
+import com.vyonex.internal.fallback.exceptions.ExtractionException
+import com.vyonex.internal.fallback.exceptions.ParsingException
+import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
+import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampDiscographStreamInfoItemExtractor
+import com.vyonex.internal.json.JsonArray
+import com.vyonex.internal.json.JsonObject
+import java.io.IOException
+
+public class BandcampChannelTabExtractor(
+    service: StreamingService,
+    linkHandler: ListLinkHandler,
+) : ChannelTabExtractor(service, linkHandler) {
+    private val itemType = when (
+        linkHandler.contentFilters.firstOrNull()
+            ?: throw IllegalArgumentException("Channel tab is missing its type")
+    ) {
+        ChannelTabs.TRACKS -> "track"
+        ChannelTabs.ALBUMS -> "album"
+        else -> throw IllegalArgumentException("Unsupported Bandcamp channel tab")
+    }
+
+    private var items: List<JsonObject>? = null
+
+    @Throws(ParsingException::class)
+    override fun onFetchPage(downloader: Downloader) {
+        if (items == null) {
+            val discography = BandcampExtractorHelper.getArtistDetails(downloader, id)
+                .getArray("discography")
+            items = selectItems(discography, itemType)
+        }
+    }
+
+    @Throws(IOException::class, ExtractionException::class)
+    override fun getInitialPage(): InfoItemsPage<InfoItem> {
+        val discography = items ?: throw ParsingException("Bandcamp tab has not been fetched")
+        val collector = MultiInfoItemsCollector(serviceId)
+        for (item in discography) {
+            if (itemType == "track") {
+                collector.commit(BandcampDiscographStreamInfoItemExtractor(item, url))
+            } else {
+                collector.commit(BandcampAlbumInfoItemExtractor(item, url))
+            }
+        }
+        return InfoItemsPage(collector, null)
+    }
+
+    override fun getPage(page: Page): InfoItemsPage<InfoItem>? = null
+
+    public companion object {
+        @JvmStatic
+        public fun fromDiscography(
+            service: StreamingService,
+            linkHandler: ListLinkHandler,
+            discography: JsonArray,
+        ): BandcampChannelTabExtractor = BandcampChannelTabExtractor(service, linkHandler).apply {
+            items = selectItems(discography, itemType)
+        }
+
+        private fun selectItems(discography: JsonArray?, type: String): List<JsonObject> =
+            discography?.filterIsInstance<JsonObject>()
+                ?.filter { it.getString("item_type") == type }
+                .orEmpty()
+    }
+}
