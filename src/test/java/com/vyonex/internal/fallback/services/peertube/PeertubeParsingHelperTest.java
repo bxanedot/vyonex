@@ -31,6 +31,14 @@ class PeertubeParsingHelperTest {
     }
 
     @Test
+    void advancesPercentEncodedStartAndKeepsUrlSuffixes() {
+        assertEquals("https://tube.example/api/videos?filter=a%26b&start=24&count=12#page",
+                PeertubeParsingHelper.getNextPage(
+                        "https://tube.example/api/videos?filter=a%26b&start=%31%32&count=12#page",
+                        30).getUrl());
+    }
+
+    @Test
     void reportsUnavailableResponseErrors() throws Exception {
         assertThrows(ContentNotAvailableException.class, () -> PeertubeParsingHelper.validate(
                 JsonParser.object().from("{\"error\":\"Video unavailable\"}")));
