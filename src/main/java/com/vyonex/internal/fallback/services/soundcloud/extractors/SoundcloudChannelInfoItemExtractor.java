@@ -8,23 +8,35 @@ import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 public final class SoundcloudChannelInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final JsonObject user;
+    private final String name;
+    private final String url;
+    @Nullable private final String avatarUrl;
+    private final long followers;
+    private final long tracks;
+    private final boolean verified;
+    private final String description;
 
-    public SoundcloudChannelInfoItemExtractor(final JsonObject user) { this.user = user; }
-
-    @Override public String getName() { return user.getString("username", ""); }
-    @Override public String getUrl() {
-        return SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
+    public SoundcloudChannelInfoItemExtractor(final JsonObject user) {
+        name = user.getString("username", "");
+        url = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
+        avatarUrl = user.getString("avatar_url");
+        followers = user.getLong("followers_count");
+        tracks = user.getLong("track_count");
+        verified = user.getBoolean("verified");
+        description = user.getString("description", "");
     }
+
+    @Override public String getName() { return name; }
+    @Override public String getUrl() { return url; }
     @Override public List<Image> getThumbnails() {
-        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
-                user.getString("avatar_url"));
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(avatarUrl);
     }
-    @Override public long getSubscriberCount() { return user.getLong("followers_count"); }
-    @Override public long getStreamCount() { return user.getLong("track_count"); }
-    @Override public boolean isVerified() { return user.getBoolean("verified"); }
-    @Override public String getDescription() { return user.getString("description", ""); }
+    @Override public long getSubscriberCount() { return followers; }
+    @Override public long getStreamCount() { return tracks; }
+    @Override public boolean isVerified() { return verified; }
+    @Override public String getDescription() { return description; }
 }

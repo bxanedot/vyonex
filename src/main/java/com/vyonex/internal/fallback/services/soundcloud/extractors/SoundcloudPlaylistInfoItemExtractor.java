@@ -9,45 +9,54 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 public final class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final JsonObject playlist;
+    private final String title;
+    private final String url;
+    private final String uploaderName;
+    private final String uploaderUrl;
+    @Nullable private final String avatarUrl;
+    private final boolean uploaderVerified;
+    private final long trackCount;
+    @Nullable private final String artworkUrl;
 
-    public SoundcloudPlaylistInfoItemExtractor(final JsonObject playlist) { this.playlist = playlist; }
-
-    @Override public String getName() { return playlist.getString("title", ""); }
-    @Override public String getUrl() {
-        return SoundcloudParsingHelper.toHttpsUrl(playlist.getString("permalink_url", ""));
+    public SoundcloudPlaylistInfoItemExtractor(final JsonObject playlist) {
+        final JsonObject user = playlist.getObject("user");
+        title = playlist.getString("title", "");
+        url = SoundcloudParsingHelper.toHttpsUrl(playlist.getString("permalink_url", ""));
+        uploaderName = user.getString("username", "");
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
+        avatarUrl = user.getString("avatar_url");
+        uploaderVerified = user.getBoolean("verified");
+        trackCount = playlist.getLong("track_count");
+        artworkUrl = artworkUrl(playlist, avatarUrl);
     }
-    @Override public List<Image> getThumbnails() throws ParsingException {
-        String url = playlist.getString("artwork_url");
-        if (url == null || url.isBlank()) {
-            for (final Object value : playlist.getArray("tracks")) {
-                if (!(value instanceof JsonObject)) continue;
-                final JsonObject track = (JsonObject) value;
-                url = track.getString("artwork_url");
-                if (url == null || url.isBlank()) {
-                    url = track.getObject("user").getString("avatar_url");
+
+    private static String artworkUrl(final JsonObject playlist, @Nullable final String avatarUrl) {
+        String value = playlist.getString("artwork_url");
+        if (value == null || value.isBlank()) {
+            for (final Object item : playlist.getArray("tracks")) {
+                if (!(item instanceof JsonObject track)) continue;
+                value = track.getString("artwork_url");
+                if (value == null || value.isBlank()) {
+                    value = track.getObject("user").getString("avatar_url");
                 }
-                if (url != null && !url.isBlank()) break;
+                if (value != null && !value.isBlank()) return value;
             }
         }
-        if (url == null || url.isBlank()) {
-            url = playlist.getObject("user").getString("avatar_url");
-        }
-        if (url == null || url.isBlank()) throw new ParsingException("Playlist has no image");
-        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(url);
+        return value == null || value.isBlank() ? avatarUrl : value;
     }
-    @Override public String getUploaderName() {
-        return playlist.getObject("user").getString("username", "");
+
+    @Override public String getName() { return title; }
+    @Override public String getUrl() { return url; }
+    @Override public List<Image> getThumbnails() throws ParsingException {
+        if (artworkUrl == null || artworkUrl.isBlank()) throw new ParsingException("Playlist has no image");
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
     }
-    @Override public String getUploaderUrl() {
-        return SoundcloudParsingHelper.toHttpsUrl(
-                playlist.getObject("user").getString("permalink_url", ""));
-    }
-    @Override public boolean isUploaderVerified() {
-        return playlist.getObject("user").getBoolean("verified");
-    }
-    @Override public long getStreamCount() { return playlist.getLong("track_count"); }
+    @Override public String getUploaderName() { return uploaderName; }
+    @Override public String getUploaderUrl() { return uploaderUrl; }
+    @Override public boolean isUploaderVerified() { return uploaderVerified; }
+    @Override public long getStreamCount() { return trackCount; }
 }

@@ -56,12 +56,16 @@ class SoundcloudMappingTest {
         assertEquals("Producer", channel.getDescription());
 
         final var playlistJson = JsonParser.object().from("""
-                {"title":"Mix","track_count":1,"tracks":[{"artwork_url":"https://images.example/song.jpg"}],
+                {"title":"Mix","permalink_url":"http://soundcloud.com/alice/sets/mix",
+                 "track_count":1,"tracks":[{"artwork_url":"https://images.example/song.jpg"}],
                  "user":{"username":"Alice","permalink_url":"http://soundcloud.com/alice"}}
                 """);
         final SoundcloudPlaylistInfoItemExtractor playlist =
                 new SoundcloudPlaylistInfoItemExtractor(playlistJson);
         assertEquals("Mix", playlist.getName());
+        assertEquals("https://soundcloud.com/alice/sets/mix", playlist.getUrl());
+        assertEquals("Alice", playlist.getUploaderName());
+        assertEquals("https://soundcloud.com/alice", playlist.getUploaderUrl());
         assertEquals(1, playlist.getStreamCount());
         assertEquals("https://images.example/song.jpg", playlist.getThumbnails().get(0).getUrl());
 
