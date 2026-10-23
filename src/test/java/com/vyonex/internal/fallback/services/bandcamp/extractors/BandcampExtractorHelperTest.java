@@ -28,6 +28,7 @@ class BandcampExtractorHelperTest {
         assertTrue(BandcampExtractorHelper.isRadioUrl("https://bandcamp.com/?show=123"));
         assertFalse(BandcampExtractorHelper.isRadioUrl("https://example.test/?show=123"));
         assertFalse(BandcampExtractorHelper.isRadioUrl("https://bandcamp.com/?show=abc"));
+        assertFalse(BandcampExtractorHelper.isRadioUrl(null));
     }
 
     @Test
