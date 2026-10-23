@@ -8,57 +8,72 @@ import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
+import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import java.net.URI;
 import java.util.List;
-import java.util.Objects;
+import java.util.regex.Pattern;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
-
-/** Maps compact YouTube playlist and mix cards into VyonEx playlist items. */
 public class YoutubeMixOrPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
+    private static final Pattern PLUS_COUNT = Pattern.compile("^[\\d.,]+\\s*\\+.*$");
     private final JsonObject item;
 
     public YoutubeMixOrPlaylistInfoItemExtractor(final JsonObject item) {
-        this.item = Objects.requireNonNull(item, "playlist card is required");
+        if (item == null) throw new IllegalArgumentException("Playlist item is required");
+        this.item = item;
     }
 
     @Override
     public String getName() throws ParsingException {
-        final String name = getTextFromObject(item.getObject("title"));
-        if (name == null || name.isBlank()) {
-            throw new ParsingException("Playlist card title is missing");
-        }
+        final String name = YoutubeParsingHelper.getTextFromObject(item.getObject("title"));
+        if (name == null || name.isBlank()) throw new ParsingException("Playlist title is missing");
         return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        final String url = item.getString("shareUrl");
-        if (url == null || url.isBlank()) {
-            throw new ParsingException("Playlist card URL is missing");
+        final String value = item.getString("shareUrl");
+        if (value == null || value.isBlank()) throw new ParsingException("Playlist card URL is missing");
+        try {
+            final URI uri = URI.create(value);
+            final String host = uri.getHost();
+            final String path = uri.getPath();
+            final boolean youtubeHost = host != null && (host.equalsIgnoreCase("youtube.com")
+                    || host.equalsIgnoreCase("www.youtube.com")
+                    || host.equalsIgnoreCase("m.youtube.com")
+                    || host.equalsIgnoreCase("music.youtube.com")
+                    || host.equalsIgnoreCase("www.music.youtube.com"));
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !youtubeHost
+                    || uri.getRawUserInfo() != null || uri.getRawFragment() != null
+                    || uri.getRawQuery() == null
+                    || !("/watch".equals(path) || "/playlist".equals(path))) {
+                throw new ParsingException("Playlist card URL is not a YouTube watch or playlist URL");
+            }
+            return value;
+        } catch (IllegalArgumentException error) {
+            throw new ParsingException("Playlist card URL is invalid", error);
         }
-        return url;
     }
 
     @Nonnull
     @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromInfoItem(item);
+    public List<Image> getThumbnails() {
+        final JsonArray thumbnails = item.getObject("thumbnail").getArray("thumbnails");
+        return YoutubeParsingHelper.getImagesFromThumbnailsArray(thumbnails);
     }
 
     @Override
     public String getUploaderName() {
-        return getTextFromObject(item.getObject("longBylineText"));
+        return YoutubeParsingHelper.getTextFromObject(item.getObject("longBylineText"));
     }
 
     @Override
     public String getUploaderUrl() {
-        return null;
+        return YoutubeParsingHelper.getUrlFromObject(item.getObject("longBylineText"));
     }
 
     @Override
@@ -68,23 +83,18 @@ public class YoutubeMixOrPlaylistInfoItemExtractor implements PlaylistInfoItemEx
 
     @Override
     public long getStreamCount() throws ParsingException {
-        final String count = getTextFromObject(item.getObject("videoCountShortText"));
-        if (count == null || count.isBlank()) {
-            throw new ParsingException("Playlist card item count is missing");
-        }
-        if (count.strip().endsWith("+")) {
-            return ListExtractor.ITEM_COUNT_INFINITE;
-        }
+        final String value = YoutubeParsingHelper.getTextFromObject(item.getObject("videoCountShortText"));
+        if (value == null || value.isBlank()) throw new ParsingException("Playlist count is missing");
+        if (PLUS_COUNT.matcher(value.trim()).matches()) return ListExtractor.ITEM_COUNT_INFINITE;
         try {
-            return Utils.mixedNumberWordToLong(count);
-        } catch (final NumberFormatException | ParsingException error) {
-            throw new ParsingException("Could not parse playlist card item count", error);
+            return Utils.mixedNumberWordToLong(value);
+        } catch (NumberFormatException error) {
+            throw new ParsingException("Playlist count is invalid", error);
         }
     }
 
-    @Nonnull
     @Override
-    public PlaylistInfo.PlaylistType getPlaylistType() throws ParsingException {
-        return extractPlaylistTypeFromPlaylistUrl(getUrl());
+    public PlaylistInfo.PlaylistType getPlaylistType() {
+        return PlaylistInfo.PlaylistType.MIX_STREAM;
     }
 }
