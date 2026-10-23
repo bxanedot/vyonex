@@ -34,13 +34,17 @@ public suspend fun InnerTube.transcriptCues(
     val transcript = RESPONSE_JSON.decodeFromString<GetTranscriptResponse>(response.bodyAsTextLimited(MAX_TRANSCRIPT_BYTES))
     val groups =
         transcript.actions
-            ?.firstOrNull()
-            ?.updateEngagementPanelAction
-            ?.content
-            ?.transcriptRenderer
-            ?.body
-            ?.transcriptBodyRenderer
-            ?.cueGroups
+            .orEmpty()
+            .asSequence()
+            .mapNotNull { action ->
+                action.updateEngagementPanelAction
+                    ?.content
+                    ?.transcriptRenderer
+                    ?.body
+                    ?.transcriptBodyRenderer
+                    ?.cueGroups
+            }
+            .firstOrNull { it.isNotEmpty() }
             .orEmpty()
     require(groups.size <= MAX_TRANSCRIPT_CUES) { "Transcript cue count exceeded the supported limit" }
     return groups.mapNotNull { group ->
