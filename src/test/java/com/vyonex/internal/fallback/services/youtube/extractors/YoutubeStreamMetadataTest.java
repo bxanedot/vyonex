@@ -68,6 +68,19 @@ class YoutubeStreamMetadataTest {
     }
 
     @Test
+    void detectsAgeRestrictionWhenLabelIsSplitAcrossTextRuns() throws Exception {
+        final var splitLabel = JsonParser.object().from("""
+                {"metadataRowContainer":{"metadataRowContainerRenderer":{"rows":[
+                  {"metadataRowRenderer":{"contents":[{"runs":[
+                    {"text":"age-"},{"text":"restricted"}
+                  ]}]}}
+                ]}}}
+                """);
+
+        assertEquals(18, YoutubeStreamExtractor.parseAgeLimit(splitLabel));
+    }
+
+    @Test
     void prefersDeclaredDurationAndFallsBackToClientFormats() throws Exception {
         final var streamingData = JsonParser.object().from("{\"adaptiveFormats\":["
                 + "{\"approxDurationMs\":\"12678\"}]}");
