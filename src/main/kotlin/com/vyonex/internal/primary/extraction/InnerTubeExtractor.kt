@@ -564,42 +564,39 @@ class InnerTubeExtractor internal constructor(
         audioQuality: AudioQuality,
         diagnostics: ExtractionDiagnostics,
     ): ExtractedStream? {
-        val configStart = Clock.System.now().toEpochMilliseconds()
-        val config =
-            try {
-                configParser.fetchEmbeddedConfig(videoId, useLoginCookies = false)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                diagnostics.requestFailures += error
-                logger.w(TAG, "embedded config unavailable", details = mapOf("exceptionType" to (error::class.simpleName ?: "unknown")))
-                return null
-            }
-        if (config.encryptedHostFlags.isNullOrBlank()) {
-            logger.w(TAG, "embedded config missing encrypted host flags")
+        val startedAtMs = Clock.System.now().toEpochMilliseconds()
+        val config = try {
+            configParser.fetchEmbeddedConfig(videoId, useLoginCookies = false)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            diagnostics.requestFailures += error
+            logger.w(TAG, "embedded config unavailable", details = mapOf("exceptionType" to (error::class.simpleName ?: "unknown")))
             return null
         }
-        if (config.signatureTimestamp == null) {
-            logger.w(TAG, "embedded config missing signature timestamp")
+        val missingConfigField =
+            when {
+                config.encryptedHostFlags.isNullOrBlank() -> "encrypted host flags"
+                config.signatureTimestamp == null -> "signature timestamp"
+                else -> null
+            }
+        if (missingConfigField != null) {
+            logger.w(TAG, "embedded config missing $missingConfigField")
             return null
         }
         logger.d(
             TAG,
             "embedded config ready",
             details =
-                mapOf("elapsedMs" to (Clock.System.now().toEpochMilliseconds() - configStart).toString()),
+                mapOf("elapsedMs" to (Clock.System.now().toEpochMilliseconds() - startedAtMs).toString()),
         )
-        val fallbackHints =
-            hints.copy(
-                isAgeRestricted = true,
-                playbackClientOverrideId =
-                    hints.playbackClientOverrideId?.takeIf { id ->
-                        PlaybackClientCatalog.findManifest(id)?.request?.embedded == true
-                    } ?: WEB_EMBEDDED_PLAYER_ID,
-            )
+        val embeddedClientId =
+            hints.playbackClientOverrideId?.takeIf { id ->
+                PlaybackClientCatalog.findManifest(id)?.request?.embedded == true
+            } ?: WEB_EMBEDDED_PLAYER_ID
         return extractWithConfig(
             videoId = videoId,
-            hints = fallbackHints,
+            hints = hints.copy(isAgeRestricted = true, playbackClientOverrideId = embeddedClientId),
             excludedClients = excludedClients,
             clientPlaybackNonce = clientPlaybackNonce,
             playerConfig = config,
