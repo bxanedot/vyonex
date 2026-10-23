@@ -249,6 +249,23 @@ class MediaCCCExtractorTest {
     }
 
     @Test
+    void liveRoomRejectsUnknownConferenceAndRoomIds() throws Exception {
+        final String liveUrl = "https://streaming.media.ccc.de/streams/v2.json";
+        final StubDownloader downloader = new StubDownloader(Map.of(liveUrl, LIVE_STREAMS_BODY));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final StreamExtractor live = service.getStreamExtractor(
+                MediaCCCStreamLinkHandlerFactory.getInstance()
+                        .fromUrl("https://streaming.media.ccc.de/chaos-2026/missing"));
+
+        final ExtractionException error = assertThrows(ExtractionException.class,
+                () -> live.onFetchPage(downloader));
+
+        assertEquals("No live room matches chaos-2026/missing", error.getMessage());
+        assertEquals(List.of(liveUrl), downloader.requestedUrls);
+    }
+
+    @Test
     void searchCombinesMatchingConferencesAndReleasedEvents() throws Exception {
         final String eventsUrl = "https://media.ccc.de/public/events/search?q=fos";
         final String conferencesUrl = "https://media.ccc.de/public/conferences";
