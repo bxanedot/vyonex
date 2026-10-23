@@ -13,6 +13,7 @@ import com.vyonex.internal.fallback.exceptions.PaidContentException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
+import com.vyonex.internal.fallback.stream.StreamType;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +36,11 @@ class BandcampStreamExtractorTest {
         final String html = "<html><body><div data-tralbum='" + PAGE_DATA + "'></div>"
                 + "<img class='band-photo' src='https://img.example/artist.jpg'>"
                 + "<div class='tralbum-tags'><a class='tag'>Ambient</a></div>"
-                + "<div id='license'>CC BY</div><span itemprop='keywords'>ambient</span></body></html>";
+                + "<div id='license'>CC BY</div><span itemprop='keywords'>ambient</span>"
+                + "<div class='recommended-album'><a class='album-link' "
+                + "href='http://artist.bandcamp.com/album/record'></a>"
+                + "<span class='release-title'>Record</span><span class='by-artist'>by Artist</span>"
+                + "<img class='album-art' src='https://img.example/cover.jpg'></div></body></html>";
         final Downloader previous = VyonEx.getDownloader();
         final Downloader offline = new Downloader() {
             @Override
@@ -57,9 +62,19 @@ class BandcampStreamExtractorTest {
             assertEquals(123L, extractor.getLength());
             assertEquals("https://audio.example/song.mp3",
                     extractor.getAudioStreams().get(0).getContent());
+            assertEquals(1, extractor.getThumbnails().size());
+            assertEquals("https://f4.bcbits.com/img/a77_10.jpg",
+                    extractor.getThumbnails().get(0).getUrl());
+            assertEquals("https://img.example/artist.jpg",
+                    extractor.getUploaderAvatars().get(0).getUrl());
             assertEquals("Story\n\nWords\n\nPlayer", extractor.getDescription().getContent());
+            assertEquals(StreamType.AUDIO_STREAM, extractor.getStreamType());
+            assertEquals(0, extractor.getVideoStreams().size());
+            assertEquals(0, extractor.getVideoOnlyStreams().size());
+            assertEquals("Ambient", extractor.getCategory());
             assertEquals("CC BY", extractor.getLicence());
             assertEquals(List.of("ambient"), extractor.getTags());
+            assertEquals("Record", extractor.getRelatedItems().getItems().get(0).getName());
             assertEquals("2024-06-15T12:30:00Z", extractor.getUploadDate().getInstant().toString());
         } finally {
             VyonEx.init(previous);
