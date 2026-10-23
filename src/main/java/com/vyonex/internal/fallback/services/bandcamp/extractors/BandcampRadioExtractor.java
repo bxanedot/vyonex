@@ -12,20 +12,19 @@ import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.List;
 
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_API_URL;
 
 public class BandcampRadioExtractor extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_RADIO = "Radio";
     public static final String RADIO_API_URL = BASE_API_URL + "/bcweekly/3/list";
-    private JsonArray shows;
+    private List<BandcampRadioInfoItemExtractor> shows = List.of();
 
     public BandcampRadioExtractor(final StreamingService service,
                                   final ListLinkHandler linkHandler,
@@ -38,7 +37,8 @@ public class BandcampRadioExtractor extends KioskExtractor<StreamInfoItem> {
             throws IOException, ExtractionException {
         try {
             shows = JsonParser.object().from(downloader.get(RADIO_API_URL).responseBody())
-                    .getArray("results");
+                    .getArray("results").streamAsJsonObjects()
+                    .map(BandcampRadioInfoItemExtractor::new).toList();
         } catch (final JsonParserException e) {
             throw new ParsingException("Bandcamp radio response is invalid", e);
         }
@@ -52,9 +52,7 @@ public class BandcampRadioExtractor extends KioskExtractor<StreamInfoItem> {
     @Override
     public InfoItemsPage<StreamInfoItem> getInitialPage() {
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        for (final Object value : shows) {
-            if (value instanceof JsonObject show) items.commit(new BandcampRadioInfoItemExtractor(show));
-        }
+        shows.forEach(items::commit);
         return new InfoItemsPage<>(items, null);
     }
 
