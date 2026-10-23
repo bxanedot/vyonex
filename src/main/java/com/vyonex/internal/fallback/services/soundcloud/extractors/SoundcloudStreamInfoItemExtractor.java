@@ -11,32 +11,52 @@ import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 public class SoundcloudStreamInfoItemExtractor implements StreamInfoItemExtractor {
-    private final JsonObject track;
+    private final String url;
+    private final String name;
+    private final long duration;
+    private final String uploaderName;
+    private final String uploaderUrl;
+    private final String uploaderAvatarUrl;
+    private final boolean uploaderVerified;
+    private final String uploadDate;
+    private final long viewCount;
+    @Nullable private final String artworkUrl;
 
-    public SoundcloudStreamInfoItemExtractor(final JsonObject track) { this.track = track; }
-
-    @Override public String getUrl() { return SoundcloudParsingHelper.toHttpsUrl(track.getString("permalink_url", "")); }
-    @Override public String getName() { return track.getString("title", ""); }
-    @Override public long getDuration() { return track.getLong("duration") / 1000; }
-    @Override public String getUploaderName() { return track.getObject("user").getString("username", ""); }
-    @Override public String getUploaderUrl() {
-        return SoundcloudParsingHelper.toHttpsUrl(track.getObject("user").getString("permalink_url", ""));
+    public SoundcloudStreamInfoItemExtractor(final JsonObject track) {
+        final JsonObject user = track.getObject("user");
+        url = SoundcloudParsingHelper.toHttpsUrl(track.getString("permalink_url", ""));
+        name = track.getString("title", "");
+        duration = track.getLong("duration") / 1000;
+        uploaderName = user.getString("username", "");
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
+        uploaderAvatarUrl = user.getString("avatar_url");
+        uploaderVerified = user.getBoolean("verified");
+        uploadDate = track.getString("created_at", "");
+        viewCount = track.getLong("playback_count");
+        artworkUrl = track.getString("artwork_url", uploaderAvatarUrl);
     }
+
+    @Override public String getUrl() { return url; }
+    @Override public String getName() { return name; }
+    @Override public long getDuration() { return duration; }
+    @Override public String getUploaderName() { return uploaderName; }
+    @Override public String getUploaderUrl() { return uploaderUrl; }
     @Override public List<Image> getUploaderAvatars() {
-        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
-                track.getObject("user").getString("avatar_url"));
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(uploaderAvatarUrl);
     }
-    @Override public boolean isUploaderVerified() { return track.getObject("user").getBoolean("verified"); }
-    @Override public String getTextualUploadDate() { return track.getString("created_at", ""); }
+    @Override public boolean isUploaderVerified() { return uploaderVerified; }
+    @Override public String getTextualUploadDate() { return uploadDate; }
     @Override public DateWrapper getUploadDate() throws ParsingException {
-        return SoundcloudParsingHelper.parseDate(getTextualUploadDate());
+        return SoundcloudParsingHelper.parseDate(uploadDate);
     }
-    @Override public long getViewCount() { return track.getLong("playback_count"); }
+    @Override public long getViewCount() { return viewCount; }
     @Override public List<Image> getThumbnails() throws ParsingException {
-        return SoundcloudParsingHelper.getAllImagesFromTrackObject(track);
+        if (artworkUrl == null || artworkUrl.isBlank()) throw new ParsingException("Track has no artwork");
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
     }
     @Override public StreamType getStreamType() { return StreamType.AUDIO_STREAM; }
     @Override public boolean isAd() { return false; }
