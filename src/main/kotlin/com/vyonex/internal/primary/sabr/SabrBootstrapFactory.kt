@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.primary.sabr
 
@@ -39,54 +41,49 @@ fun PlayerResponse.toSabrBootstrap(
 ): SabrBootstrap {
     require(clientId > 0) { "SABR client ID must be positive" }
     val streaming = requireNotNull(streamingData) { "Player response has no streamingData" }
-    val serverAbrStreamingUrl =
-        serverAbrStreamingUrlOverride
-            ?: requireNotNull(streaming.serverAbrStreamingUrl) { "Player response has no serverAbrStreamingUrl" }
-    requireAllowedSabrUrl(serverAbrStreamingUrl)
-    val ustreamerConfig =
-        requireNotNull(
-            playerConfig
-                ?.mediaCommonConfig
-                ?.mediaUstreamerRequestConfig
-                ?.videoPlaybackUstreamerConfig,
-        ) { "Player response has no videoPlaybackUstreamerConfig" }
+    val endpoint = serverAbrStreamingUrlOverride ?: requireNotNull(streaming.serverAbrStreamingUrl) {
+        "Player response has no serverAbrStreamingUrl"
+    }
+    requireAllowedSabrUrl(endpoint)
+
+    val encodedConfig = requireNotNull(playerConfig?.mediaCommonConfig?.mediaUstreamerRequestConfig?.videoPlaybackUstreamerConfig) {
+        "Player response has no videoPlaybackUstreamerConfig"
+    }
     val discardVideo =
         streaming.adaptiveFormats
             .asSequence()
-            .filterNot(PlayerResponse.StreamingData.Format::isAudio)
+            .filterNot { it.isAudio }
             .filter { it.height != null }
             .minWithOrNull(compareBy({ it.height }, { it.bitrate }))
             ?: error("Player response has no SABR video format to discard")
+
     val durationMs =
         audioFormat.approxDurationMs?.toLongOrNull()
-            ?: videoDetails?.lengthSeconds?.toLongOrNull()?.times(1000)
+            ?: videoDetails?.lengthSeconds?.toLongOrNull()?.let { seconds ->
+                runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
+            }
             ?: error("Player response has no duration")
     require(durationMs > 0) { "Player response has an invalid duration" }
-    val audioFormatId = audioFormat.toSabrFormatId()
-    val discardVideoFormatId = discardVideo.toSabrFormatId()
-    val selectedVideoFormatId = videoFormat?.toSabrFormatId()
-    require(audioFormatId.lastModified > 0) { "SABR audio format has no last-modified identity" }
-    require(discardVideoFormatId.lastModified > 0) { "SABR video format has no last-modified identity" }
-    require(selectedVideoFormatId == null || selectedVideoFormatId.lastModified > 0) {
+
+    val audioId = audioFormat.toSabrFormatId()
+    val discardedVideoId = discardVideo.toSabrFormatId()
+    val selectedVideoId = videoFormat?.toSabrFormatId()
+    require(audioId.lastModified > 0) { "SABR audio format has no last-modified identity" }
+    require(discardedVideoId.lastModified > 0) { "SABR video format has no last-modified identity" }
+    require(selectedVideoId == null || selectedVideoId.lastModified > 0) {
         "Selected SABR video format has no last-modified identity"
     }
-    val videoId = requireNotNull(videoDetails?.videoId) { "Player response has no video ID" }
 
     return SabrBootstrap(
-        videoId = videoId,
-        serverAbrStreamingUrl = serverAbrStreamingUrl,
-        videoPlaybackUstreamerConfig =
-            decodeBase64Url(
-                value = ustreamerConfig,
-                fieldName = "videoPlaybackUstreamerConfig",
-                maxDecodedBytes = MAX_USTREAMER_CONFIG_BYTES,
-            ),
+        videoId = requireNotNull(videoDetails?.videoId) { "Player response has no video ID" },
+        serverAbrStreamingUrl = endpoint,
+        videoPlaybackUstreamerConfig = decodePlayerBytes(encodedConfig, "videoPlaybackUstreamerConfig", MAX_USTREAMER_CONFIG_BYTES),
         clientName = clientId,
         clientVersion = clientVersion,
-        audioFormat = audioFormatId,
-        discardVideoFormat = discardVideoFormatId,
+        audioFormat = audioId,
+        discardVideoFormat = discardedVideoId,
         discardVideoHeight = discardVideo.height ?: 144,
-        selectedVideoFormat = selectedVideoFormatId,
+        selectedVideoFormat = selectedVideoId,
         selectedVideoWidth = videoFormat?.width,
         selectedVideoHeight = videoFormat?.height,
         selectedVideoContentLengthBytes = videoFormat?.contentLength,
@@ -97,10 +94,7 @@ fun PlayerResponse.toSabrBootstrap(
         mimeType = audioFormat.mimeType.substringBefore(';').trim(),
         audioTrackId = audioFormat.audioTrack?.id,
         isDrc = audioFormat.isDrc,
-        poToken =
-            poToken?.takeIf(String::isNotBlank)?.let { value ->
-                decodeBase64Url(value, fieldName = "poToken", maxDecodedBytes = MAX_PO_TOKEN_BYTES)
-            },
+        poToken = poToken?.takeIf(String::isNotBlank)?.let { decodePlayerBytes(it, "poToken", MAX_PO_TOKEN_BYTES) },
         requestUserAgent = requestUserAgent,
         requestOrigin = requestOrigin,
     )
@@ -122,10 +116,11 @@ internal fun SabrFormatId.matches(other: SabrFormatId): Boolean =
 fun requireAllowedSabrUrl(value: String): String {
     val url = runCatching { Url(value) }.getOrElse { throw SabrProtocolException("Invalid SABR streaming URL") }
     val host = url.host.lowercase()
+    val allowedHost = host == "googlevideo.com" || host.endsWith(".googlevideo.com")
     if (
         url.protocol != URLProtocol.HTTPS ||
         url.port != 443 ||
-        (host != "googlevideo.com" && !host.endsWith(".googlevideo.com")) ||
+        !allowedHost ||
         url.encodedPath != "/videoplayback" ||
         url.user != null ||
         url.password != null
@@ -135,31 +130,19 @@ fun requireAllowedSabrUrl(value: String): String {
     return value
 }
 
-private fun PlayerResponse.StreamingData.Format.toSabrFormatId(): SabrFormatId =
-    SabrFormatId(
-        itag = itag,
-        lastModified = lastModified?.toLongOrNull() ?: 0,
-        xtags = xtags,
-    )
+private fun PlayerResponse.StreamingData.Format.toSabrFormatId() =
+    SabrFormatId(itag, lastModified?.toLongOrNull() ?: 0, xtags)
 
 @OptIn(ExperimentalEncodingApi::class)
-private fun decodeBase64Url(
-    value: String,
-    fieldName: String,
-    maxDecodedBytes: Int,
-): ByteArray {
-    val maxEncodedLength = ((maxDecodedBytes + 2) / 3) * 4
-    if (value.length > maxEncodedLength) {
-        throw SabrProtocolException("Player response $fieldName exceeded the size limit")
+private fun decodePlayerBytes(value: String, field: String, maximumBytes: Int): ByteArray {
+    val maxEncodedLength = ((maximumBytes + 2) / 3) * 4
+    if (value.length > maxEncodedLength) throw SabrProtocolException("Player response $field exceeded the size limit")
+    val normalized = value.replace('-', '+').replace('_', '/').let { source ->
+        source.padEnd(source.length + (4 - source.length % 4) % 4, '=')
     }
-    val standard = value.replace('-', '+').replace('_', '/')
-    val padded = standard.padEnd(standard.length + (4 - standard.length % 4) % 4, '=')
-    val decoded =
-        runCatching { Base64.decode(padded) }
-            .getOrElse { throw SabrProtocolException("Player response has an invalid $fieldName") }
-    if (decoded.size > maxDecodedBytes) {
-        throw SabrProtocolException("Player response $fieldName exceeded the size limit")
-    }
+    val decoded = runCatching { Base64.decode(normalized) }
+        .getOrElse { throw SabrProtocolException("Player response has an invalid $field") }
+    if (decoded.size > maximumBytes) throw SabrProtocolException("Player response $field exceeded the size limit")
     return decoded
 }
 
