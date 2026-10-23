@@ -11,7 +11,7 @@ Replace the bundled JSON parser with a VyonEx-owned JSON layer while preserving 
 - Remove the bundled parser source, its attribution row, and its standalone Apache license copy after the call sites compile against the replacement.
 - Keep ordinary Maven dependencies and the existing GPL-3.0-only project license unchanged.
 
-This is the first subproject of the larger clean-room rewrite. It does not remove code derived from the merged extractor projects, the EJS resources, the Zemer config URL, or their corresponding notices; those remain until their own replacements are completed.
+This is the first subproject of the larger clean-room rewrite. It does not replace the remaining YouTube client code or the bundled JavaScript solver; their notices remain until those replacements pass their compatibility checks.
 
 ## Compatibility surface
 
