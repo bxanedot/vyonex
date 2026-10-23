@@ -387,26 +387,20 @@ class InnerTubeExtractor internal constructor(
             details = mapOf("wantVideo" to hints.wantVideo.toString()),
         )
 
-        val embeddedOverrideId =
-            hints.playbackClientOverrideId?.takeIf { id ->
-                PlaybackClientCatalog.findManifest(id)?.let { manifest ->
-                    manifest.request.embedded
-                } == true
-            }
-        val embeddedOverride = embeddedOverrideId != null
+        val embeddedOverride =
+            hints.playbackClientOverrideId?.let { id ->
+                PlaybackClientCatalog.findManifest(id)?.request?.embedded == true
+            } == true
         if (embeddedOverride) {
-            val embeddedStream =
-                extractWithEmbeddedConfig(
-                    videoId = videoId,
-                    hints = hints,
-                    excludedClients = excludedClients,
-                    clientPlaybackNonce = clientPlaybackNonce,
-                    totalStartMs = totalStart,
-                    audioQuality = audioQuality,
-                    diagnostics = diagnostics,
-                )
-            if (embeddedStream != null) return embeddedStream
-            throwExtractionFailure(hints, diagnostics)
+            return extractWithEmbeddedConfig(
+                videoId = videoId,
+                hints = hints,
+                excludedClients = excludedClients,
+                clientPlaybackNonce = clientPlaybackNonce,
+                totalStartMs = totalStart,
+                audioQuality = audioQuality,
+                diagnostics = diagnostics,
+            ) ?: throwExtractionFailure(hints, diagnostics)
         }
 
         val authenticatedPremiumHighQuality =
@@ -470,22 +464,20 @@ class InnerTubeExtractor internal constructor(
                         hints.isUploaded == true ||
                         hints.wantVideo
                 )
-        val stream = extractWithWatchConfig(useLoginCookies = cookieFirst)
-        if (stream != null) return stream
-
-        if (cookieFirst) {
-            logger.w(TAG, "signed-out watch config fallback")
-            val signedOutConfigStream = extractWithWatchConfig(useLoginCookies = false)
-            if (signedOutConfigStream != null) return signedOutConfigStream
-        } else if (innerTube.hasSapCookieAuth()) {
-            logger.w(TAG, "authenticated watch page retry", details = mapOf("authenticated" to "true"))
-            val authenticatedStream = extractWithWatchConfig(useLoginCookies = true)
-            if (authenticatedStream != null) return authenticatedStream
+        for ((attemptIndex, useLoginCookies) in listOf(cookieFirst, !cookieFirst).withIndex()) {
+            if (attemptIndex > 0) {
+                if (cookieFirst) {
+                    logger.w(TAG, "signed-out watch config fallback")
+                } else {
+                    if (!innerTube.hasSapCookieAuth()) break
+                    logger.w(TAG, "authenticated watch page retry", details = mapOf("authenticated" to "true"))
+                }
+            }
+            val stream = extractWithWatchConfig(useLoginCookies)
+            if (stream != null) return stream
         }
 
-        // Embedded player context fallback when the regular watch-page clients fail.
-        // Uploaded songs intentionally do not use this path because embedded
-        // playback does not expose the user's private upload library.
+        // Uploaded tracks can be private to the account and lack an embeddable page.
         if (hints.playbackClientOverrideId == null && hints.isUploaded != true) {
             val embeddedStream =
                 extractWithEmbeddedConfig(
