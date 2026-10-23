@@ -25,7 +25,6 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
@@ -37,7 +36,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class SoundcloudStreamExtractor extends StreamExtractor {
-    private JsonObject track;
+    private String id;
+    private String name;
+    private String uploadDate;
+    private String artworkUrl;
+    private String description;
+    private long length;
+    private long viewCount;
+    private long likeCount;
+    private String uploaderUrl;
+    private String uploaderName;
+    private String uploaderAvatarUrl;
+    private boolean uploaderVerified;
+    private boolean streamable;
+    private String trackAuthorization;
+    private String sharing;
+    private String category;
+    private String licence;
+    private String tagList;
+    private List<Transcoding> transcodings = List.of();
     private boolean available = true;
 
     public SoundcloudStreamExtractor(final StreamingService service, final LinkHandler handler) {
@@ -46,60 +63,92 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
 
     @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        track = SoundcloudParsingHelper.resolveFor(downloader, getUrl());
+        final JsonObject track = SoundcloudParsingHelper.resolveFor(downloader, getUrl());
         final String policy = track.getString("policy", "");
-        if ("ALLOW".equals(policy) || "MONETIZE".equals(policy)) return;
-        available = false;
-        if ("SNIP".equals(policy)) throw new SoundCloudGoPlusContentException();
-        if ("BLOCK".equals(policy)) {
-            throw new GeographicRestrictionException("Track is unavailable in this region");
+        if (!"ALLOW".equals(policy) && !"MONETIZE".equals(policy)) {
+            available = false;
+            if ("SNIP".equals(policy)) throw new SoundCloudGoPlusContentException();
+            if ("BLOCK".equals(policy)) {
+                throw new GeographicRestrictionException("Track is unavailable in this region");
+            }
+            throw new ContentNotAvailableException("Track is unavailable (policy: " + policy + ")");
         }
-        throw new ContentNotAvailableException("Track is unavailable (policy: " + policy + ")");
+        available = true;
+
+        final JsonObject user = track.getObject("user");
+        id = String.valueOf(track.get("id"));
+        name = track.getString("title", "");
+        uploadDate = track.getString("created_at");
+        artworkUrl = track.getString("artwork_url");
+        if (artworkUrl == null) artworkUrl = user.getString("avatar_url");
+        description = track.getString("description", "");
+        length = track.getLong("duration") / 1000;
+        viewCount = track.getLong("playback_count");
+        likeCount = track.getLong("likes_count", -1);
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
+        uploaderName = user.getString("username", "");
+        uploaderAvatarUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("avatar_url", ""));
+        uploaderVerified = user.getBoolean("verified");
+        streamable = track.getBoolean("streamable");
+        trackAuthorization = track.getString("track_authorization");
+        sharing = track.getString("sharing", "");
+        category = track.getString("genre", "");
+        licence = track.getString("license", "");
+        tagList = track.getString("tag_list", "");
+
+        final List<Transcoding> availableTranscodings = new ArrayList<>();
+        for (final Object value : track.getObject("media").getArray("transcodings")) {
+            if (!(value instanceof JsonObject)) continue;
+            final JsonObject transcoding = (JsonObject) value;
+            availableTranscodings.add(new Transcoding(transcoding.getString("url"),
+                    transcoding.getObject("format").getString("protocol", ""),
+                    transcoding.getString("preset", Stream.ID_UNKNOWN)));
+        }
+        transcodings = List.copyOf(availableTranscodings);
     }
 
-    @Override public String getId() { return String.valueOf(track.get("id")); }
-    @Override public String getName() { return track.getString("title", ""); }
-    @Override public String getTextualUploadDate() { return track.getString("created_at"); }
+    @Override public String getId() { return id; }
+    @Override public String getName() { return name; }
+    @Override public String getTextualUploadDate() { return uploadDate; }
     @Override public DateWrapper getUploadDate() throws ParsingException {
         return SoundcloudParsingHelper.parseDate(getTextualUploadDate());
     }
     @Override public List<Image> getThumbnails() throws ParsingException {
-        return SoundcloudParsingHelper.getAllImagesFromTrackObject(track);
+        if (artworkUrl == null || artworkUrl.isBlank()) throw new ParsingException("Track has no artwork");
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(artworkUrl);
     }
     @Override public Description getDescription() {
-        return new Description(track.getString("description", ""), Description.PLAIN_TEXT);
+        return new Description(description, Description.PLAIN_TEXT);
     }
-    @Override public long getLength() { return track.getLong("duration") / 1000; }
+    @Override public long getLength() { return length; }
     @Override public long getTimeStamp() throws ParsingException {
         final long seconds = getTimestampSeconds("(#t=\\d{0,3}h?\\d{0,3}m?\\d{1,3}s?)");
         return seconds < 0 ? 0 : seconds;
     }
-    @Override public long getViewCount() { return track.getLong("playback_count"); }
-    @Override public long getLikeCount() { return track.getLong("likes_count", -1); }
-    @Override public String getUploaderUrl() { return SoundcloudParsingHelper.getUploaderUrl(track); }
-    @Override public String getUploaderName() { return SoundcloudParsingHelper.getUploaderName(track); }
-    @Override public boolean isUploaderVerified() { return track.getObject("user").getBoolean("verified"); }
+    @Override public long getViewCount() { return viewCount; }
+    @Override public long getLikeCount() { return likeCount; }
+    @Override public String getUploaderUrl() { return uploaderUrl; }
+    @Override public String getUploaderName() { return uploaderName; }
+    @Override public boolean isUploaderVerified() { return uploaderVerified; }
     @Override public List<Image> getUploaderAvatars() {
         return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
-                SoundcloudParsingHelper.getAvatarUrl(track));
+                uploaderAvatarUrl);
     }
 
     @Override public List<AudioStream> getAudioStreams() throws IOException, ExtractionException {
         final List<AudioStream> streams = new ArrayList<>();
-        if (!available || !track.getBoolean("streamable")) return streams;
-        for (final Object value : track.getObject("media").getArray("transcodings")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject transcoding = (JsonObject) value;
-            final String endpoint = transcoding.getString("url");
-            final String protocol = transcoding.getObject("format").getString("protocol", "");
+        if (!available || !streamable) return streams;
+        for (final Transcoding transcoding : transcodings) {
+            final String endpoint = transcoding.endpoint();
+            final String protocol = transcoding.protocol();
             if (endpoint == null || endpoint.isBlank() || protocol.contains("encrypted")) continue;
-            final String preset = transcoding.getString("preset", Stream.ID_UNKNOWN);
+            final String preset = transcoding.preset();
             final MediaFormat format = formatFor(preset);
             if (format == null) continue;
             try {
                 final AudioStream.Builder builder = new AudioStream.Builder()
                         .setId(preset).setMediaFormat(format)
-                        .setContent(getTranscodingUrl(endpoint), true);
+                        .setContent(getTranscodingUrl(endpoint, trackAuthorization), true);
                 if ("hls".equals(protocol)) builder.setDeliveryMethod(DeliveryMethod.HLS);
                 if (format == MediaFormat.MP3) builder.setAverageBitrate(128);
                 else if (format == MediaFormat.OPUS) builder.setAverageBitrate(64);
@@ -113,10 +162,10 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
         return streams;
     }
 
-    private String getTranscodingUrl(final String endpoint) throws IOException, ExtractionException {
+    private String getTranscodingUrl(final String endpoint, final String authorization)
+            throws IOException, ExtractionException {
         final String separator = endpoint.contains("?") ? "&" : "?";
         String requestUrl = endpoint + separator + "client_id=" + SoundcloudParsingHelper.clientId();
-        final String authorization = track.getString("track_authorization");
         if (authorization != null && !authorization.isBlank()) {
             requestUrl += "&track_authorization="
                     + URLEncoder.encode(authorization, StandardCharsets.UTF_8);
@@ -154,16 +203,18 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
         return related;
     }
     @Override public Privacy getPrivacy() {
-        return switch (track.getString("sharing", "")) {
+        return switch (sharing) {
             case "public" -> Privacy.PUBLIC;
             case "private" -> Privacy.PRIVATE;
             case "unlisted" -> Privacy.UNLISTED;
             default -> Privacy.OTHER;
         };
     }
-    @Override public String getCategory() { return track.getString("genre", ""); }
-    @Override public String getLicence() { return track.getString("license", ""); }
-    @Override public List<String> getTags() { return parseTags(track.getString("tag_list", "")); }
+    @Override public String getCategory() { return category; }
+    @Override public String getLicence() { return licence; }
+    @Override public List<String> getTags() { return parseTags(tagList); }
+
+    private record Transcoding(String endpoint, String protocol, String preset) { }
 
     private static List<String> parseTags(final String input) {
         final List<String> tags = new ArrayList<>();

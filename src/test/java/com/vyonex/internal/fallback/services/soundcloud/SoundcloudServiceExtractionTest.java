@@ -117,7 +117,14 @@ class SoundcloudServiceExtractionTest {
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 resolveUrl, """
-                        {"id":42,"policy":"ALLOW","streamable":true,
+                        {"id":42,"title":"Song","policy":"ALLOW","streamable":true,
+                         "created_at":"2026-10-22T12:30:00Z","duration":125000,
+                         "playback_count":9,"likes_count":3,
+                         "description":"Rainy day","sharing":"public","genre":"ambient",
+                         "license":"cc-by","tag_list":"ambient \\\"chill beats\\\"",
+                         "artwork_url":"https://images.example/song.jpg",
+                         "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
+                           "avatar_url":"https://images.example/alice.jpg","verified":true},
                          "media":{"transcodings":[{"url":"https://api-v2.soundcloud.com/media/track/42/stream",
                            "preset":"mp3_0_0","format":{"protocol":"progressive"}}]}}
                         """,
@@ -129,6 +136,21 @@ class SoundcloudServiceExtractionTest {
                     new SoundcloudService(31), new LinkHandler(trackUrl, trackUrl, "42"));
             extractor.onFetchPage(downloader);
             final List<AudioStream> streams = extractor.getAudioStreams();
+            assertEquals("42", extractor.getId());
+            assertEquals("Song", extractor.getName());
+            assertEquals("2026-10-22T12:30:00Z", extractor.getTextualUploadDate());
+            assertEquals("Rainy day", extractor.getDescription().getContent());
+            assertEquals(125, extractor.getLength());
+            assertEquals(9, extractor.getViewCount());
+            assertEquals(3, extractor.getLikeCount());
+            assertEquals("Alice", extractor.getUploaderName());
+            assertEquals("https://soundcloud.com/alice", extractor.getUploaderUrl());
+            assertTrue(extractor.isUploaderVerified());
+            assertEquals("https://images.example/song.jpg", extractor.getThumbnails().get(0).getUrl());
+            assertEquals("public", extractor.getPrivacy().name().toLowerCase());
+            assertEquals("ambient", extractor.getCategory());
+            assertEquals("cc-by", extractor.getLicence());
+            assertEquals(List.of("ambient", "chill beats"), extractor.getTags());
             assertEquals(1, streams.size());
             assertEquals("https://audio.example/song.mp3", streams.get(0).getContent());
         } finally {
