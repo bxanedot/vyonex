@@ -314,7 +314,7 @@ data class YouTubeClient(
         val WEB =
             YouTubeClient(
                 clientName = "WEB",
-                clientVersion = "2.20260708.00.00",
+                clientVersion = "2.20261022.01.00",
                 clientId = "1",
                 userAgent = USER_AGENT_WEB,
                 loginSupported = true,
@@ -351,7 +351,7 @@ data class YouTubeClient(
         val WEB_EMBEDDED_PLAYER =
             YouTubeClient(
                 clientName = "WEB_EMBEDDED_PLAYER",
-                clientVersion = "2.20260708.00.00",
+                clientVersion = "2.20261022.01.00",
                 clientId = "56",
                 userAgent = USER_AGENT_WEB,
                 friendlyName = "Web Embedded",
