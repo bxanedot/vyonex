@@ -1,9 +1,8 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonWriter;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
@@ -18,6 +17,9 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeChannelHelper;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelTabLinkHandlerFactory;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -32,60 +34,38 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.YOUTUBEI_V1_URL;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getJsonPostResponse;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
-/**
- * A {@link ChannelTabExtractor} implementation for the YouTube service.
- *
- * <p>
- * It currently supports {@code Videos}, {@code Shorts}, {@code Live}, {@code Playlists},
- * {@code Albums} and {@code Channels} tabs.
- * </p>
- */
+/** Maps channel tab responses into VyonEx items and preserves channel data across pages. */
 public class YoutubeChannelTabExtractor extends ChannelTabExtractor {
-
-    @Nullable
-    protected YoutubeChannelHelper.ChannelHeader channelHeader;
-
-    private JsonObject jsonResponse;
-    private String channelId;
+    private static final String LOCKUP_ITEM = "lockupViewModel";
+    @Nullable protected YoutubeChannelHelper.ChannelHeader channelHeader;
+    @Nullable private JsonObject response;
+    @Nullable private String channelId;
 
     public YoutubeChannelTabExtractor(final StreamingService service,
                                       final ListLinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    @Nonnull
-    private String getChannelTabsParameters() throws ParsingException {
-        final String name = getName();
-        switch (name) {
-            case ChannelTabs.VIDEOS:
-                return "EgZ2aWRlb3PyBgQKAjoA";
-            case ChannelTabs.SHORTS:
-                return "EgZzaG9ydHPyBgUKA5oBAA%3D%3D";
-            case ChannelTabs.LIVESTREAMS:
-                return "EgdzdHJlYW1z8gYECgJ6AA%3D%3D";
-            case ChannelTabs.ALBUMS:
-                return "EghyZWxlYXNlc_IGBQoDsgEA";
-            case ChannelTabs.PLAYLISTS:
-                return "EglwbGF5bGlzdHPyBgQKAkIA";
-            default:
-                throw new ParsingException("Unsupported channel tab: " + name);
-        }
+    private String tabParameters() throws ParsingException {
+        return switch (getName()) {
+            case ChannelTabs.VIDEOS -> "EgZ2aWRlb3PyBgQKAjoA";
+            case ChannelTabs.SHORTS -> "EgZzaG9ydHPyBgUKA5oBAA%3D%3D";
+            case ChannelTabs.LIVESTREAMS -> "EgdzdHJlYW1z8gYECgJ6AA%3D%3D";
+            case ChannelTabs.ALBUMS -> "EghyZWxlYXNlc_IGBQoDsgEA";
+            case ChannelTabs.PLAYLISTS -> "EglwbGF5bGlzdHPyBgQKAkIA";
+            default -> throw new ParsingException("Unsupported channel tab: " + getName());
+        };
     }
 
     @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws IOException,
-            ExtractionException {
-        final String channelIdFromId = resolveChannelId(super.getId());
-
-        final String params = getChannelTabsParameters();
-
-        final YoutubeChannelHelper.ChannelResponseData data = getChannelResponse(channelIdFromId,
-                params, getExtractorLocalization(), getExtractorContentCountry());
-
-        jsonResponse = data.jsonResponse;
-        channelHeader = YoutubeChannelHelper.getChannelHeader(jsonResponse);
+    public void onFetchPage(@Nonnull final Downloader downloader)
+            throws IOException, ExtractionException {
+        final YoutubeChannelHelper.ChannelResponseData data = getChannelResponse(
+                resolveChannelId(super.getId()), tabParameters(), getExtractorLocalization(),
+                getExtractorContentCountry());
+        response = data.jsonResponse;
+        channelHeader = YoutubeChannelHelper.getChannelHeader(response);
         channelId = data.channelId;
     }
 
@@ -93,9 +73,9 @@ public class YoutubeChannelTabExtractor extends ChannelTabExtractor {
     @Override
     public String getUrl() throws ParsingException {
         try {
-            return YoutubeChannelTabLinkHandlerFactory.getInstance()
-                    .getUrl("channel/" + getId(), List.of(getName()), "");
-        } catch (final ParsingException e) {
+            return YoutubeChannelTabLinkHandlerFactory.getInstance().getUrl(
+                    "channel/" + getId(), List.of(getName()), "");
+        } catch (final ParsingException ignored) {
             return super.getUrl();
         }
     }
@@ -103,550 +83,353 @@ public class YoutubeChannelTabExtractor extends ChannelTabExtractor {
     @Nonnull
     @Override
     public String getId() throws ParsingException {
-       return YoutubeChannelHelper.getChannelId(channelHeader, jsonResponse, channelId);
+        return YoutubeChannelHelper.getChannelId(channelHeader, requireResponse(), channelId);
     }
 
     protected String getChannelName() throws ParsingException {
         return YoutubeChannelHelper.getChannelName(channelHeader,
-                YoutubeChannelHelper.getChannelAgeGateRenderer(jsonResponse),
-                jsonResponse);
+                YoutubeChannelHelper.getChannelAgeGateRenderer(requireResponse()), requireResponse());
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        final JsonArray initialItems = tabItems(getTabData());
+        final VerifiedStatus verified = channelHeader == null ? VerifiedStatus.UNKNOWN
+                : YoutubeChannelHelper.isChannelVerified(channelHeader)
+                ? VerifiedStatus.VERIFIED : VerifiedStatus.UNVERIFIED;
+        final String name = getChannelName();
+        final String url = getUrl();
+        final List<String> channelData = List.of(name, url, verified.name());
+        final JsonObject continuation = collectItems(initialItems, items, verified, name, url);
+        return new InfoItemsPage<>(items, nextPage(continuation, channelData));
+    }
 
-        JsonArray items = new JsonArray();
-        final Optional<JsonObject> tab = getTabData();
-
-        if (tab.isPresent()) {
-            final JsonObject tabContent = tab.get().getObject("content");
-
-            items = tabContent.getObject("sectionListRenderer")
-                    .getArray("contents")
-                    .getObject(0)
-                    .getObject("itemSectionRenderer")
-                    .getArray("contents")
-                    .getObject(0)
-                    .getObject("gridRenderer")
-                    .getArray("items");
-
-            if (items.isEmpty()) {
-                items = tabContent.getObject("richGridRenderer")
-                        .getArray("contents");
-
-                if (items.isEmpty()) {
-                    items = tabContent.getObject("sectionListRenderer")
-                            .getArray("contents");
-                }
-            }
-        }
-
-        final VerifiedStatus verifiedStatus;
-        if (channelHeader == null) {
-            verifiedStatus = VerifiedStatus.UNKNOWN;
-        } else {
-            verifiedStatus = YoutubeChannelHelper.isChannelVerified(channelHeader)
-                    ? VerifiedStatus.VERIFIED
-                    : VerifiedStatus.UNVERIFIED;
-        }
-
-        // If a channel tab is fetched, the next page requires channel ID and name, as channel
-        // streams don't have their channel specified.
-        // We also need to set the visitor data here when it should be enabled, as it is required
-        // to get continuations on some channel tabs, and we need a way to pass it between pages
-        final String channelName = getChannelName();
-        final String channelUrl = getUrl();
-
-        final JsonObject continuation = collectItemsFrom(collector, items, verifiedStatus,
-                channelName, channelUrl)
-                .orElse(null);
-
-        final Page nextPage = getNextPageFrom(
-                continuation, List.of(channelName, channelUrl, verifiedStatus.toString()));
-
-        return new InfoItemsPage<>(collector, nextPage);
+    @Nonnull
+    private JsonArray tabItems(final Optional<JsonObject> tab) {
+        if (tab.isEmpty()) return new JsonArray();
+        final JsonObject content = tab.get().getObject("content");
+        final JsonArray sections = content.getObject("sectionListRenderer").getArray("contents");
+        final JsonArray rows = sections.getObject(0).getObject("itemSectionRenderer")
+                .getArray("contents");
+        final JsonArray grid = rows.getObject(0).getObject("gridRenderer").getArray("items");
+        if (!grid.isEmpty()) return grid;
+        final JsonArray richGrid = content.getObject("richGridRenderer").getArray("contents");
+        return richGrid.isEmpty() ? sections : richGrid;
     }
 
     @Override
     public InfoItemsPage<InfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+        if (page == null || page.getBody() == null) {
+            throw new IllegalArgumentException("Channel continuation body is missing");
+        }
+        final JsonObject result = getJsonPostResponse("browse", page.getBody(),
+                getExtractorLocalization());
+        final JsonArray actions = result.getArray("onResponseReceivedActions");
+        JsonArray entries = new JsonArray();
+        for (final JsonObject action : actions.streamAsJsonObjects().toList()) {
+            final JsonArray appended = action.getObject("appendContinuationItemsAction")
+                    .getArray("continuationItems");
+            if (!appended.isEmpty()) {
+                entries = appended;
+                break;
+            }
         }
 
-        final List<String> channelIds = page.getIds();
-
-        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
-
-        final JsonObject ajaxJson = getJsonPostResponse("browse", page.getBody(),
-                getExtractorLocalization());
-
-        final JsonObject sectionListContinuation = ajaxJson.getArray("onResponseReceivedActions")
-                .streamAsJsonObjects()
-                .filter(jsonObject -> jsonObject.has("appendContinuationItemsAction"))
-                .map(jsonObject -> jsonObject.getObject("appendContinuationItemsAction"))
-                .findFirst()
-                .orElse(new JsonObject());
-
-        final JsonObject continuation = collectItemsFrom(collector,
-                sectionListContinuation.getArray("continuationItems"), channelIds)
-                .orElse(null);
-
-        return new InfoItemsPage<>(collector, getNextPageFrom(continuation, channelIds));
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
+        final ChannelData channelData = readChannelData(page.getIds());
+        final JsonObject continuation = collectItems(entries, items, channelData.verified,
+                channelData.name, channelData.url);
+        final List<String> channelIds = page.getIds() == null ? List.of() : page.getIds();
+        return new InfoItemsPage<>(items, nextPage(continuation, channelIds));
     }
 
     Optional<JsonObject> getTabData() {
-        final String urlSuffix = YoutubeChannelTabLinkHandlerFactory.getUrlSuffix(getName());
-
-        return jsonResponse.getObject("contents")
-                .getObject("twoColumnBrowseResultsRenderer")
-                .getArray("tabs")
-                .streamAsJsonObjects()
-                .filter(tab -> tab.has("tabRenderer"))
+        if (response == null) return Optional.empty();
+        final String suffix;
+        try {
+            suffix = YoutubeChannelTabLinkHandlerFactory.getUrlSuffix(getName());
+        } catch (final RuntimeException ignored) {
+            return Optional.empty();
+        }
+        return response.getObject("contents").getObject("twoColumnBrowseResultsRenderer")
+                .getArray("tabs").streamAsJsonObjects()
                 .map(tab -> tab.getObject("tabRenderer"))
-                .filter(tabRenderer -> tabRenderer.getObject("endpoint")
-                        .getObject("commandMetadata").getObject("webCommandMetadata")
-                        .getString("url", "").endsWith(urlSuffix))
-                .findFirst()
-                // Check if tab has no content
-                .filter(tabRenderer -> {
-                    final JsonArray tabContents = tabRenderer.getObject("content")
-                            .getObject("sectionListRenderer")
-                            .getArray("contents")
-                            .getObject(0)
-                            .getObject("itemSectionRenderer")
-                            .getArray("contents");
-                    return tabContents.size() != 1
-                            || !tabContents.getObject(0).has("messageRenderer");
-                });
+                .filter(tab -> tab.getObject("endpoint").getObject("commandMetadata")
+                        .getObject("webCommandMetadata").getString("url", "").endsWith(suffix))
+                .findFirst();
     }
 
-    private Optional<JsonObject> collectItemsFrom(@Nonnull final MultiInfoItemsCollector collector,
-                                                  @Nonnull final JsonArray items,
-                                                  @Nonnull final List<String> channelIds) {
-        final String channelName;
-        final String channelUrl;
-        VerifiedStatus verifiedStatus;
-
-        if (channelIds.size() >= 3) {
-            channelName = channelIds.get(0);
-            channelUrl = channelIds.get(1);
-            try {
-                verifiedStatus = VerifiedStatus.valueOf(channelIds.get(2));
-            } catch (final IllegalArgumentException e) {
-                // An IllegalArgumentException can be thrown if someone passes a third channel ID
-                // which is not of the enum type in the getPage method, use the UNKNOWN
-                // VerifiedStatus enum value in this case
-                verifiedStatus = VerifiedStatus.UNKNOWN;
-            }
-        } else {
-            channelName = null;
-            channelUrl = null;
-            verifiedStatus = VerifiedStatus.UNKNOWN;
-        }
-
-        return collectItemsFrom(collector, items, verifiedStatus, channelName, channelUrl);
-    }
-
-    private Optional<JsonObject> collectItemsFrom(@Nonnull final MultiInfoItemsCollector collector,
-                                                  @Nonnull final JsonArray items,
-                                                  @Nonnull final VerifiedStatus verifiedStatus,
-                                                  @Nullable final String channelName,
-                                                  @Nullable final String channelUrl) {
-        return items.streamAsJsonObjects()
-                .map(item -> collectItem(
-                        collector, item, verifiedStatus, channelName, channelUrl))
-                .reduce(Optional.empty(), (c1, c2) -> c1.or(() -> c2));
-    }
-
-    private Optional<JsonObject> collectItem(@Nonnull final MultiInfoItemsCollector collector,
-                                             @Nonnull final JsonObject item,
-                                             @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                             @Nullable final String channelName,
-                                             @Nullable final String channelUrl) {
-        final TimeAgoParser timeAgoParser = getTimeAgoParser();
-
-        if (item.has("richItemRenderer")) {
-            final JsonObject richItem = item.getObject("richItemRenderer")
-                    .getObject("content");
-
-            if (richItem.has("videoRenderer")) {
-                commitVideo(collector, timeAgoParser, richItem.getObject("videoRenderer"),
-                        channelVerifiedStatus, channelName, channelUrl);
-            } else if (richItem.has("reelItemRenderer")) {
-                commitReel(collector, richItem.getObject("reelItemRenderer"),
-                        channelVerifiedStatus, channelName, channelUrl);
-            } else if (richItem.has("shortsLockupViewModel")) {
-                commitShortsLockup(collector, richItem.getObject("shortsLockupViewModel"),
-                        channelVerifiedStatus, channelName, channelUrl);
-            } else if (richItem.has("playlistRenderer")) {
-                commitPlaylist(collector, richItem.getObject("playlistRenderer"),
-                        channelVerifiedStatus, channelName, channelUrl);
-            } else if (richItem.has("lockupViewModel")) {
-                commitLockup(collector, channelVerifiedStatus, channelName, channelUrl,
-                        timeAgoParser, richItem);
-            }
-        } else if (item.has("gridVideoRenderer")) {
-            commitVideo(collector, timeAgoParser, item.getObject("gridVideoRenderer"),
-                    channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("gridPlaylistRenderer")) {
-            commitPlaylist(collector, item.getObject("gridPlaylistRenderer"),
-                    channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("gridShowRenderer")) {
-            collector.commit(new YoutubeGridShowRendererChannelInfoItemExtractor(
-                    item.getObject("gridShowRenderer"), channelVerifiedStatus, channelName,
-                    channelUrl));
-        } else if (item.has("shelfRenderer")) {
-            return collectItem(collector, item.getObject("shelfRenderer")
-                    .getObject("content"), channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("itemSectionRenderer")) {
-            return collectItemsFrom(collector, item.getObject("itemSectionRenderer")
-                    .getArray("contents"), channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("horizontalListRenderer")) {
-            return collectItemsFrom(collector, item.getObject("horizontalListRenderer")
-                    .getArray("items"), channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("expandedShelfContentsRenderer")) {
-            return collectItemsFrom(collector, item.getObject("expandedShelfContentsRenderer")
-                    .getArray("items"), channelVerifiedStatus, channelName, channelUrl);
-        } else if (item.has("lockupViewModel")) {
-            commitLockup(collector, channelVerifiedStatus, channelName, channelUrl, timeAgoParser,
-                    item);
-        } else if (item.has("continuationItemRenderer")) {
-            return Optional.ofNullable(item.getObject("continuationItemRenderer"));
-        }
-
-        return Optional.empty();
-    }
-
-    private void commitLockup(@Nonnull final MultiInfoItemsCollector collector,
-                              @Nonnull final VerifiedStatus channelVerifiedStatus,
-                              @Nullable final String channelName,
-                              @Nullable final String channelUrl,
-                              @Nonnull final TimeAgoParser timeAgoParser,
-                              @Nonnull final JsonObject richItem) {
-        final JsonObject lockupViewModel = richItem.getObject("lockupViewModel");
-        final String contentType = lockupViewModel.getString("contentType");
-        if ("LOCKUP_CONTENT_TYPE_PLAYLIST".equals(contentType)
-                || "LOCKUP_CONTENT_TYPE_PODCAST".equals(contentType)) {
-            commitPlaylistLockup(collector, lockupViewModel, channelVerifiedStatus,
-                    channelName, channelUrl);
-        } else if ("LOCKUP_CONTENT_TYPE_VIDEO".equals(contentType)) {
-            commitVideoLockup(collector, timeAgoParser, lockupViewModel,
-                    channelVerifiedStatus, channelName, channelUrl);
-        }
-    }
-
-    private static void commitReel(@Nonnull final MultiInfoItemsCollector collector,
-                                   @Nonnull final JsonObject reelItemRenderer,
-                                   @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                   @Nullable final String channelName,
-                                   @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubeReelInfoItemExtractor(reelItemRenderer) {
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @Override
-                    public boolean isUploaderVerified() {
-                        return channelVerifiedStatus == VerifiedStatus.VERIFIED;
-                    }
-                });
-    }
-
-    private static void commitShortsLockup(@Nonnull final MultiInfoItemsCollector collector,
-                                           @Nonnull final JsonObject shortsLockupViewModel,
-                                           @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                           @Nullable final String channelName,
-                                           @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubeShortsLockupInfoItemExtractor(shortsLockupViewModel) {
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @Override
-                    public boolean isUploaderVerified() {
-                        return channelVerifiedStatus == VerifiedStatus.VERIFIED;
-                    }
-                });
-    }
-
-    private static void commitVideoLockup(@Nonnull final MultiInfoItemsCollector collector,
-                                          @Nonnull final TimeAgoParser timeAgoParser,
-                                          @Nonnull final JsonObject lockupViewModel,
-                                          @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                          @Nullable final String channelName,
-                                          @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubeStreamInfoItemLockupExtractor(lockupViewModel, timeAgoParser) {
-                    @Override
-                    protected boolean isChannelOrCoursePlaylistLockupItem() {
-                        return true;
-                    }
-
-                    @Nonnull
-                    @Override
-                    public List<Image> getUploaderAvatars() throws ParsingException {
-                        // Uploader avatars are not available in channels' video items
-                        return List.of();
-                    }
-
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @Override
-                    public boolean isUploaderVerified() {
-                        return channelVerifiedStatus == VerifiedStatus.VERIFIED;
-                    }
-                });
-    }
-
-    private void commitPlaylistLockup(@Nonnull final MultiInfoItemsCollector collector,
-                                      @Nonnull final JsonObject playlistLockupViewModel,
-                                      @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                      @Nullable final String channelName,
-                                      @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubeMixOrPlaylistLockupInfoItemExtractor(playlistLockupViewModel) {
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @Override
-                    public boolean isUploaderVerified() throws ParsingException {
-                        switch (channelVerifiedStatus) {
-                            case VERIFIED:
-                                return true;
-                            case UNVERIFIED:
-                                return false;
-                            default:
-                                return super.isUploaderVerified();
-                        }
-                    }
-                });
-    }
-
-    private void commitVideo(@Nonnull final MultiInfoItemsCollector collector,
-                             @Nonnull final TimeAgoParser timeAgoParser,
-                             @Nonnull final JsonObject jsonObject,
-                             @Nonnull final VerifiedStatus channelVerifiedStatus,
-                             @Nullable final String channelName,
-                             @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubeStreamInfoItemExtractor(jsonObject, timeAgoParser) {
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @SuppressWarnings("DuplicatedCode")
-                    @Override
-                    public boolean isUploaderVerified() throws ParsingException {
-                        switch (channelVerifiedStatus) {
-                            case VERIFIED:
-                                return true;
-                            case UNVERIFIED:
-                                return false;
-                            default:
-                                return super.isUploaderVerified();
-                        }
-                    }
-                });
-    }
-
-    private void commitPlaylist(@Nonnull final MultiInfoItemsCollector collector,
-                                @Nonnull final JsonObject jsonObject,
-                                @Nonnull final VerifiedStatus channelVerifiedStatus,
-                                @Nullable final String channelName,
-                                @Nullable final String channelUrl) {
-        collector.commit(
-                new YoutubePlaylistInfoItemExtractor(jsonObject) {
-                    @Override
-                    public String getUploaderName() throws ParsingException {
-                        return isNullOrEmpty(channelName) ? super.getUploaderName() : channelName;
-                    }
-
-                    @Override
-                    public String getUploaderUrl() throws ParsingException {
-                        return isNullOrEmpty(channelUrl) ? super.getUploaderName() : channelUrl;
-                    }
-
-                    @SuppressWarnings("DuplicatedCode")
-                    @Override
-                    public boolean isUploaderVerified() throws ParsingException {
-                        switch (channelVerifiedStatus) {
-                            case VERIFIED:
-                                return true;
-                            case UNVERIFIED:
-                                return false;
-                            default:
-                                return super.isUploaderVerified();
-                        }
-                    }
-                });
+    @Nonnull
+    private JsonObject requireResponse() throws ParsingException {
+        if (response == null) throw new ParsingException("Channel tab was not fetched");
+        return response;
     }
 
     @Nullable
-    private Page getNextPageFrom(final JsonObject continuations,
-                                 final List<String> channelIds) throws IOException,
-            ExtractionException {
-        if (isNullOrEmpty(continuations)) {
-            return null;
+    private JsonObject collectItems(final JsonArray entries,
+                                    final MultiInfoItemsCollector collector,
+                                    final VerifiedStatus verified,
+                                    @Nullable final String channelName,
+                                    @Nullable final String channelUrl) {
+        for (final JsonObject entry : entries.streamAsJsonObjects().toList()) {
+            final JsonObject continuation = collectItem(entry, collector, verified,
+                    channelName, channelUrl);
+            if (continuation != null) return continuation;
         }
-
-        final JsonObject continuationEndpoint = continuations.getObject("continuationEndpoint");
-        final String continuation = continuationEndpoint.getObject("continuationCommand")
-                .getString("token");
-
-        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(getExtractorLocalization(),
-                        getExtractorContentCountry())
-                        .value("continuation", continuation)
-                        .done())
-                .getBytes(StandardCharsets.UTF_8);
-
-        return new Page(YOUTUBEI_V1_URL + "browse?" + DISABLE_PRETTY_PRINT_PARAMETER, null,
-                channelIds, null, body);
+        return null;
     }
 
-    /**
-     * A {@link YoutubeChannelTabExtractor} for the {@code Videos} tab, if it has been already
-     * fetched.
-     */
+    @Nullable
+    private JsonObject collectItem(final JsonObject entry,
+                                   final MultiInfoItemsCollector collector,
+                                   final VerifiedStatus verified,
+                                   @Nullable final String channelName,
+                                   @Nullable final String channelUrl) {
+        final TimeAgoParser dates = getTimeAgoParser();
+        if (entry.has("continuationItemRenderer")) return entry.getObject("continuationItemRenderer");
+        if (entry.has("richItemRenderer")) {
+            return collectItem(entry.getObject("richItemRenderer").getObject("content"), collector,
+                    verified, channelName, channelUrl);
+        }
+        if (entry.has("gridVideoRenderer")) {
+            commitVideo(collector, entry.getObject("gridVideoRenderer"), dates, verified,
+                    channelName, channelUrl);
+        } else if (entry.has("videoRenderer")) {
+            commitVideo(collector, entry.getObject("videoRenderer"), dates, verified,
+                    channelName, channelUrl);
+        } else if (entry.has("gridPlaylistRenderer")) {
+            commitPlaylist(collector, entry.getObject("gridPlaylistRenderer"), verified,
+                    channelName, channelUrl);
+        } else if (entry.has("playlistRenderer")) {
+            commitPlaylist(collector, entry.getObject("playlistRenderer"), verified,
+                    channelName, channelUrl);
+        } else if (entry.has("gridShowRenderer")) {
+            collector.commit(new ChannelShowItem(entry.getObject("gridShowRenderer"), verified,
+                    channelName, channelUrl));
+        } else if (entry.has("reelItemRenderer")) {
+            commitReel(collector, entry.getObject("reelItemRenderer"), verified,
+                    channelName, channelUrl);
+        } else if (entry.has("shortsLockupViewModel")) {
+            commitShorts(collector, entry.getObject("shortsLockupViewModel"), verified,
+                    channelName, channelUrl);
+        } else if (entry.has(LOCKUP_ITEM)) {
+            commitLockup(collector, entry.getObject(LOCKUP_ITEM), dates, verified,
+                    channelName, channelUrl);
+        } else {
+            for (final String childKey : List.of("shelfRenderer", "itemSectionRenderer",
+                    "horizontalListRenderer", "expandedShelfContentsRenderer")) {
+                if (!entry.has(childKey)) continue;
+                final JsonObject container = entry.getObject(childKey);
+                final JsonArray children = switch (childKey) {
+                    case "shelfRenderer" -> new JsonArray(List.of(container.getObject("content")));
+                    case "itemSectionRenderer" -> container.getArray("contents");
+                    default -> container.getArray("items");
+                };
+                final JsonObject continuation = collectItems(children, collector, verified,
+                        channelName, channelUrl);
+                if (continuation != null) return continuation;
+            }
+        }
+        return null;
+    }
+
+    private void commitVideo(final MultiInfoItemsCollector collector, final JsonObject video,
+                             final TimeAgoParser dates, final VerifiedStatus verified,
+                             @Nullable final String channelName, @Nullable final String channelUrl) {
+        collector.commit(new YoutubeStreamInfoItemExtractor(video, dates) {
+            @Override public String getUploaderName() throws ParsingException {
+                return has(channelName) ? channelName : super.getUploaderName();
+            }
+            @Override public String getUploaderUrl() throws ParsingException {
+                return has(channelUrl) ? channelUrl : super.getUploaderUrl();
+            }
+            @Override public boolean isUploaderVerified() throws ParsingException {
+                return verified == VerifiedStatus.UNKNOWN ? super.isUploaderVerified()
+                        : verified == VerifiedStatus.VERIFIED;
+            }
+        });
+    }
+
+    private void commitPlaylist(final MultiInfoItemsCollector collector, final JsonObject playlist,
+                                final VerifiedStatus verified, @Nullable final String channelName,
+                                @Nullable final String channelUrl) {
+        collector.commit(new YoutubePlaylistInfoItemExtractor(playlist) {
+            @Override public String getUploaderName() throws ParsingException {
+                return has(channelName) ? channelName : super.getUploaderName();
+            }
+            @Override public String getUploaderUrl() throws ParsingException {
+                return has(channelUrl) ? channelUrl : super.getUploaderUrl();
+            }
+            @Override public boolean isUploaderVerified() throws ParsingException {
+                return verified == VerifiedStatus.UNKNOWN ? super.isUploaderVerified()
+                        : verified == VerifiedStatus.VERIFIED;
+            }
+        });
+    }
+
+    private static void commitReel(final MultiInfoItemsCollector collector, final JsonObject reel,
+                                   final VerifiedStatus verified, @Nullable final String name,
+                                   @Nullable final String url) {
+        collector.commit(new YoutubeReelInfoItemExtractor(reel) {
+            @Override public String getUploaderName() throws ParsingException {
+                return has(name) ? name : super.getUploaderName();
+            }
+            @Override public String getUploaderUrl() throws ParsingException {
+                return has(url) ? url : super.getUploaderUrl();
+            }
+            @Override public boolean isUploaderVerified() {
+                return verified == VerifiedStatus.VERIFIED;
+            }
+        });
+    }
+
+    private static void commitShorts(final MultiInfoItemsCollector collector,
+                                     final JsonObject shorts, final VerifiedStatus verified,
+                                     @Nullable final String name, @Nullable final String url) {
+        collector.commit(new YoutubeShortsLockupInfoItemExtractor(shorts) {
+            @Override public String getUploaderName() throws ParsingException {
+                return has(name) ? name : super.getUploaderName();
+            }
+            @Override public String getUploaderUrl() throws ParsingException {
+                return has(url) ? url : super.getUploaderUrl();
+            }
+            @Override public boolean isUploaderVerified() {
+                return verified == VerifiedStatus.VERIFIED;
+            }
+        });
+    }
+
+    private void commitLockup(final MultiInfoItemsCollector collector, final JsonObject lockup,
+                              final TimeAgoParser dates, final VerifiedStatus verified,
+                              @Nullable final String name, @Nullable final String url) {
+        switch (lockup.getString("contentType", "")) {
+            case "LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST" ->
+                    collector.commit(new YoutubeMixOrPlaylistLockupInfoItemExtractor(lockup) {
+                        @Override public String getUploaderName() throws ParsingException {
+                            return has(name) ? name : super.getUploaderName();
+                        }
+                        @Override public String getUploaderUrl() throws ParsingException {
+                            return has(url) ? url : super.getUploaderUrl();
+                        }
+                        @Override public boolean isUploaderVerified() throws ParsingException {
+                            return verified == VerifiedStatus.UNKNOWN ? super.isUploaderVerified()
+                                    : verified == VerifiedStatus.VERIFIED;
+                        }
+                    });
+            case "LOCKUP_CONTENT_TYPE_VIDEO" -> collector.commit(
+                    new YoutubeStreamInfoItemLockupExtractor(lockup, dates) {
+                        @Override protected boolean isChannelOrCoursePlaylistLockupItem() {
+                            return true;
+                        }
+                        @Override public List<Image> getUploaderAvatars() { return List.of(); }
+                        @Override public String getUploaderName() throws ParsingException {
+                            return has(name) ? name : super.getUploaderName();
+                        }
+                        @Override public String getUploaderUrl() throws ParsingException {
+                            return has(url) ? url : super.getUploaderUrl();
+                        }
+                        @Override public boolean isUploaderVerified() {
+                            return verified == VerifiedStatus.VERIFIED;
+                        }
+                    });
+            default -> { }
+        }
+    }
+
+    private static boolean has(@Nullable final String value) {
+        return value != null && !value.isBlank();
+    }
+
+    @Nullable
+    private Page nextPage(@Nullable final JsonObject renderer, final List<String> channelData)
+            throws IOException, ExtractionException {
+        if (renderer == null) return null;
+        final String token = renderer.getObject("continuationEndpoint")
+                .getObject("continuationCommand").getString("token");
+        if (!has(token)) return null;
+        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(getExtractorLocalization(),
+                        getExtractorContentCountry()).value("continuation", token).done())
+                .getBytes(StandardCharsets.UTF_8);
+        return new Page(YOUTUBEI_V1_URL + "browse?" + DISABLE_PRETTY_PRINT_PARAMETER,
+                null, channelData, null, body);
+    }
+
+    private static ChannelData readChannelData(@Nullable final List<String> values) {
+        if (values == null || values.size() < 3) {
+            return new ChannelData(null, null, VerifiedStatus.UNKNOWN);
+        }
+        VerifiedStatus status;
+        try {
+            status = VerifiedStatus.valueOf(values.get(2));
+        } catch (final RuntimeException ignored) {
+            status = VerifiedStatus.UNKNOWN;
+        }
+        return new ChannelData(values.get(0), values.get(1), status);
+    }
+
+    private static final class ChannelData {
+        @Nullable private final String name;
+        @Nullable private final String url;
+        private final VerifiedStatus verified;
+        private ChannelData(@Nullable final String name, @Nullable final String url,
+                            final VerifiedStatus verified) {
+            this.name = name;
+            this.url = url;
+            this.verified = verified;
+        }
+    }
+
     public static final class VideosTabExtractor extends YoutubeChannelTabExtractor {
         private final JsonObject tabRenderer;
         private final String channelId;
         private final String channelName;
         private final String channelUrl;
 
-        VideosTabExtractor(final StreamingService service,
-                           final ListLinkHandler linkHandler,
+        VideosTabExtractor(final StreamingService service, final ListLinkHandler linkHandler,
                            final JsonObject tabRenderer,
                            @Nullable final YoutubeChannelHelper.ChannelHeader channelHeader,
-                           final String channelName,
-                           final String channelId,
+                           final String channelName, final String channelId,
                            final String channelUrl) {
             super(service, linkHandler);
-            this.channelHeader = channelHeader;
-
             this.tabRenderer = tabRenderer;
+            this.channelHeader = channelHeader;
+            this.channelName = channelName;
             this.channelId = channelId;
+            this.channelUrl = channelUrl;
+        }
+
+        @Override public void onFetchPage(@Nonnull final Downloader downloader) { }
+        @Nonnull @Override public String getId() { return channelId; }
+        @Nonnull @Override public String getUrl() { return channelUrl; }
+        @Override protected String getChannelName() { return channelName; }
+        @Override Optional<JsonObject> getTabData() { return Optional.of(tabRenderer); }
+    }
+
+    private enum VerifiedStatus { VERIFIED, UNVERIFIED, UNKNOWN }
+
+    private static final class ChannelShowItem extends YoutubeBaseShowInfoItemExtractor {
+        private final VerifiedStatus verified;
+        @Nullable private final String channelName;
+        @Nullable private final String channelUrl;
+
+        private ChannelShowItem(final JsonObject renderer, final VerifiedStatus verified,
+                                @Nullable final String channelName, @Nullable final String channelUrl) {
+            super(renderer);
+            this.verified = verified;
             this.channelName = channelName;
             this.channelUrl = channelUrl;
         }
 
-        @Override
-        public void onFetchPage(@Nonnull final Downloader downloader) {
-            // Nothing to do, the initial data was already fetched and is stored in the link handler
-        }
-
-        @Nonnull
-        @Override
-        public String getId() throws ParsingException {
-            return channelId;
-        }
-
-        @Nonnull
-        @Override
-        public String getUrl() throws ParsingException {
-            return channelUrl;
-        }
-
-        @Override
-        protected String getChannelName() {
-            return channelName;
-        }
-
-        @Override
-        Optional<JsonObject> getTabData() {
-            return Optional.of(tabRenderer);
-        }
-    }
-
-    /**
-     * Enum representing the verified state of a channel
-     */
-    private enum VerifiedStatus {
-        VERIFIED,
-        UNVERIFIED,
-        UNKNOWN
-    }
-
-    private static final class YoutubeGridShowRendererChannelInfoItemExtractor
-            extends YoutubeBaseShowInfoItemExtractor {
-
-        @Nonnull
-        private final VerifiedStatus verifiedStatus;
-
-        @Nullable
-        private final String channelName;
-
-        @Nullable
-        private final String channelUrl;
-
-        private YoutubeGridShowRendererChannelInfoItemExtractor(
-                @Nonnull final JsonObject gridShowRenderer,
-                @Nonnull final VerifiedStatus verifiedStatus,
-                @Nullable final String channelName,
-                @Nullable final String channelUrl) {
-            super(gridShowRenderer);
-            this.verifiedStatus = verifiedStatus;
-            this.channelName = channelName;
-            this.channelUrl = channelUrl;
-        }
-
-        @Override
-        public String getUploaderName() {
-            return channelName;
-        }
-
-        @Override
-        public String getUploaderUrl() {
-            return channelUrl;
-        }
-
-        @Override
-        public boolean isUploaderVerified() throws ParsingException {
-            switch (verifiedStatus) {
-                case VERIFIED:
-                    return true;
-                case UNVERIFIED:
-                    return false;
-                default:
-                    throw new ParsingException("Could not get uploader verification status");
+        @Override public String getUploaderName() { return channelName; }
+        @Override public String getUploaderUrl() { return channelUrl; }
+        @Override public boolean isUploaderVerified() throws ParsingException {
+            if (verified == VerifiedStatus.UNKNOWN) {
+                throw new ParsingException("Channel verification status is unavailable");
             }
+            return verified == VerifiedStatus.VERIFIED;
         }
     }
 }
