@@ -111,6 +111,22 @@ class PeertubeSearchAndKioskExtractorTest {
         assertNotNull(page.getNextPage());
     }
 
+    @Test
+    void rejectsMissingPagesBeforeMakingRequests() throws Exception {
+        final PeertubeService service = new PeertubeService(3,
+                new PeertubeInstance("https://tube.example", "Offline"));
+        final String queryUrl = PeertubeSearchQueryHandlerFactory.getInstance().getUrl(
+                "hello", List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), "",
+                "https://tube.example");
+        final SearchExtractor search = service.getSearchExtractor(new SearchQueryHandler(
+                queryUrl, queryUrl, "hello",
+                List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), ""));
+        final KioskExtractor<?> kiosk = service.getKioskList().getDefaultKioskExtractor();
+
+        assertThrows(IllegalArgumentException.class, () -> search.getPage(null));
+        assertThrows(IllegalArgumentException.class, () -> kiosk.getPage(null));
+    }
+
     private static String videoResponse(final String id, final String embedUrl) {
         final String embed = embedUrl == null ? "" : ",\"embedUrl\":\"" + embedUrl + "\"";
         return "{\"total\":13,\"data\":[{\"uuid\":\"" + id
