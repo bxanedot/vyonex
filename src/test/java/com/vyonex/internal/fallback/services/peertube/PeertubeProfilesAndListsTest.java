@@ -17,9 +17,13 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.localization.ContentCountry;
+import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubePlaylistLinkHandlerFactory;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -29,6 +33,21 @@ import java.util.Map;
 
 class PeertubeProfilesAndListsTest {
     private static final String BASE = "https://tube.example";
+    private Downloader previousDownloader;
+    private Localization previousLocalization;
+    private ContentCountry previousContentCountry;
+
+    @BeforeEach
+    void rememberVyonExState() {
+        previousDownloader = VyonEx.getDownloader();
+        previousLocalization = VyonEx.getPreferredLocalization();
+        previousContentCountry = VyonEx.getPreferredContentCountry();
+    }
+
+    @AfterEach
+    void restoreVyonExState() {
+        VyonEx.init(previousDownloader, previousLocalization, previousContentCountry);
+    }
 
     @Test
     void accountIncludesFollowerCountsFromItsChannels() throws Exception {
