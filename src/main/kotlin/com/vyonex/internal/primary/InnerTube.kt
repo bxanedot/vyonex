@@ -1,9 +1,9 @@
 // bxane
 package com.vyonex.internal.primary
 
+import com.vyonex.internal.primary.models.Context
 import com.vyonex.internal.primary.models.YouTubeClient
 import com.vyonex.internal.primary.models.YouTubeLocale
-import com.vyonex.internal.primary.models.body.GetTranscriptBody
 import com.vyonex.internal.primary.models.body.PlayerBody
 import com.vyonex.internal.primary.utils.parseCookieString
 import com.vyonex.internal.primary.utils.sanitizeCookieString
@@ -52,6 +52,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.encoding.Base64
@@ -80,6 +82,7 @@ class InnerTube(
         private const val API_BASE_MUSIC = "$ORIGIN_MUSIC/youtubei/v1"
         private const val VISITOR_DATA_URL = "$ORIGIN_WWW/sw.js_data"
         private const val TRANSCRIPT_API_KEY = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+        private val TRANSCRIPT_REQUEST_JSON = Json { explicitNulls = false; encodeDefaults = true }
 
         private const val ORIGIN_STUDIO = "https://studio.youtube.com"
         private const val REFERER_STUDIO = "$ORIGIN_STUDIO/"
@@ -700,12 +703,18 @@ class InnerTube(
                     append("Content-Type", "application/json")
                 }
                 setBody(
-                    GetTranscriptBody(
-                        context = client.toContext(requestSession.locale, null, null),
-                        params =
-                            Base64.encode(
-                                "\n${11.toChar()}$videoId".encodeToByteArray(),
-                            ),
+                    JsonObject(
+                        mapOf(
+                            "context" to
+                                TRANSCRIPT_REQUEST_JSON.encodeToJsonElement(
+                                    Context.serializer(),
+                                    client.toContext(requestSession.locale, null, null),
+                                ),
+                            "params" to
+                                JsonPrimitive(
+                                    Base64.encode("\n${11.toChar()}$videoId".encodeToByteArray()),
+                                ),
+                        ),
                     ),
                 )
             }
