@@ -272,6 +272,37 @@ class InnerTubeExtractorDirectMappingContractTest {
     }
 
     @Test
+    fun refetchesPlayerConfigAfterTheCacheTtl() = runBlocking {
+        val requests = mutableListOf<String>()
+        val client = playerClient(CIPHER_RESPONSE, requests)
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser()
+        val cipher =
+            RecordingCipherService { format ->
+                format.copy(url = RESOLVED_AUDIO_URL, signatureCipher = null, cipher = null)
+            }
+        var currentTime = Instant.fromEpochSeconds(1_800_000_000)
+        try {
+            val extractor = extractor(innerTube, parser, InnerTubeLogger.NONE, cipher) { currentTime }
+
+            assertEquals(
+                "$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE",
+                extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)?.audioUrl,
+            )
+            currentTime += kotlin.time.Duration.parse("30m1s")
+            assertEquals(
+                "$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE",
+                extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)?.audioUrl,
+            )
+
+            assertEquals(2, parser.watchConfigFetches)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
     fun retriesAllAudioFormatsWhenThePreferredCipherCannotBeResolved() = runBlocking {
         val requests = mutableListOf<String>()
         val client = playerClient(CIPHER_FALLBACK_RESPONSE, requests)
@@ -348,6 +379,7 @@ class InnerTubeExtractorDirectMappingContractTest {
         logger: InnerTubeLogger,
         cipher: RecordingCipherService = RecordingCipherService(),
         fallbackStrategy: ClientFallbackStrategy = TEST_CLIENT,
+        now: () -> Instant = { kotlin.time.Clock.System.now() },
     ) =
         InnerTubeExtractor(
             configParser = parser,
@@ -361,6 +393,7 @@ class InnerTubeExtractorDirectMappingContractTest {
             cipherService = cipher,
             innerTube = innerTube,
             logger = logger,
+            now = now,
         )
 
     private fun playerClient(response: String, requests: MutableList<String>) =
