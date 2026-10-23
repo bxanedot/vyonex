@@ -51,10 +51,16 @@ class BandcampRadioStreamExtractorTest {
 
             assertEquals("Weekly episode", extractor.getName());
             assertEquals("Host", extractor.getUploaderName());
+            assertEquals("2024-06-15", extractor.getTextualUploadDate());
+            assertEquals("Episode description", extractor.getDescription().getContent());
             assertEquals(3600, extractor.getLength());
             assertEquals(2, extractor.getAudioStreams().size());
+            assertEquals("https://audio.example/episode.mp3",
+                    extractor.getAudioStreams().get(0).getContent());
             assertEquals("Song", extractor.getStreamSegments().get(0).getTitle());
             assertEquals("Artist", extractor.getStreamSegments().get(0).getChannelName());
+            assertEquals("https://f4.bcbits.com/img/a34_10.jpg",
+                    extractor.getStreamSegments().get(0).getPreviewUrl());
         } finally {
             VyonEx.init(previous);
         }
