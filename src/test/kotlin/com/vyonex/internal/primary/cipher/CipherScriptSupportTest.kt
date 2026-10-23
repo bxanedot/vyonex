@@ -26,6 +26,15 @@ class CipherScriptSupportTest {
         };
     """.trimIndent()
 
+    private val declaredFunctionPlayerCode = """
+        function nTransform(value) {
+            value = value.split(""); value.reverse(); return value.join("");
+        }
+        function signatureTransform(value) {
+            value = value.split(""); value.splice(0, 2); return value.join("");
+        }
+    """.trimIndent()
+
     @Test
     fun runsSignatureTransformFromPlayerCode() {
         val script = requireNotNull(CipherScriptSupport.signatureSolverScript(playerCode))
@@ -45,6 +54,15 @@ class CipherScriptSupportTest {
         val nScript = requireNotNull(CipherScriptSupport.nSolverScript(helperPlayerCode))
 
         assertEquals("bcdef", JavaScript.run(signatureScript, "deobfuscate", "abcdef"))
+        assertEquals("fedcba", JavaScript.run(nScript, "_solveN", "abcdef"))
+    }
+
+    @Test
+    fun supportsNamedTransformDeclarations() {
+        val signatureScript = requireNotNull(CipherScriptSupport.signatureSolverScript(declaredFunctionPlayerCode))
+        val nScript = requireNotNull(CipherScriptSupport.nSolverScript(declaredFunctionPlayerCode))
+
+        assertEquals("cdef", JavaScript.run(signatureScript, "deobfuscate", "abcdef"))
         assertEquals("fedcba", JavaScript.run(nScript, "_solveN", "abcdef"))
     }
 }

@@ -18,7 +18,9 @@ internal object PlayerScriptParser {
     )
 
     private val functionPattern =
-        Regex("""(?:(?:var|let|const)\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\)\s*\{""")
+        Regex(
+            """(?:(?:(?:var|let|const)\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function|function\s+([a-zA-Z_$][a-zA-Z0-9_$]*))\s*\(\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\)\s*\{""",
+        )
 
     /**
      * N-parameter transform: first split/join-style function in the player is often (not always) the n-function.
@@ -263,14 +265,14 @@ internal object PlayerScriptParser {
                 val end = findFunctionEnd(code, match.range.first)
                 if (end <= match.range.first) return@mapNotNull null
                 val body = code.substring(match.range.first, end)
-                val parameter = match.groupValues[2]
+                val parameter = match.groupValues[3]
                 val escapedParameter = Regex.escape(parameter)
                 if (Regex("""$escapedParameter\s*=\s*$escapedParameter\.split\s*\(\s*(?:""|'')\s*\)""")
                         .containsMatchIn(body) &&
                     Regex("""return\s+$escapedParameter\.join\s*\(\s*(?:""|'')\s*\)""")
                         .containsMatchIn(body)
                 ) {
-                    FunctionMatch(match.groupValues[1])
+                    FunctionMatch(match.groupValues[1].ifEmpty { match.groupValues[2] })
                 } else {
                     null
                 }

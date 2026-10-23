@@ -147,13 +147,87 @@ internal class EjsChallengeSolver(
                 if (fullPlayerJs.isBlank()) return cachedResult
             }
 
-            solveOnce(playerUrl, fullPlayerJs, requestOrder, preprocessed = false).also { result ->
-                result.preprocessedPlayer?.let { persistPreprocessedPlayer(cacheKey, it) }
-            }
+            val ejsResult =
+                try {
+                    solveOnce(playerUrl, fullPlayerJs, requestOrder, preprocessed = false)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    logger.d(TAG, "bundled player parser failed type=${error.logType()}")
+                    SolveResult(emptyMap(), emptyMap(), null)
+                }
+            ejsResult.preprocessedPlayer?.let { persistPreprocessedPlayer(cacheKey, it) }
+            if (ejsResult.solvesAll(requestOrder)) return ejsResult
+
+            val nativeResult = solveWithPlayerParser(fullPlayerJs, requestOrder)
+            SolveResult(
+                sigByChallenge = nativeResult.sigByChallenge + ejsResult.sigByChallenge,
+                nByChallenge = nativeResult.nByChallenge + ejsResult.nByChallenge,
+                preprocessedPlayer = ejsResult.preprocessedPlayer,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             logger.w(TAG, "EJS solve failed player=${playerUrl.logId()} type=${e.logType()}")
+            SolveResult(emptyMap(), emptyMap(), null)
+        }
+    }
+
+    private suspend fun solveWithPlayerParser(
+        playerCode: String,
+        requestOrder: List<Pair<String, List<String>>>,
+    ): SolveResult {
+        val parsed = PlayerScriptParser.parse(playerCode)
+        if (parsed.nFunctionCode == null && parsed.sigFunctionCode == null) {
+            return SolveResult(emptyMap(), emptyMap(), null)
+        }
+
+        val parserScript = PlayerScriptParser.generateSolverScript(parsed)
+        if (parserScript.isBlank()) return SolveResult(emptyMap(), emptyMap(), null)
+        val isolatedScript =
+            """
+            (function() {
+              delete globalThis._solveN;
+              delete globalThis._solveSig;
+              $parserScript
+              globalThis._solveN = typeof _solveN === "function" ? _solveN : undefined;
+              globalThis._solveSig = typeof _solveSig === "function" ? _solveSig : undefined;
+            })();
+            """.trimIndent()
+
+        return try {
+            engine.execute(isolatedScript)
+            val sigMap = mutableMapOf<String, String>()
+            val nMap = mutableMapOf<String, String>()
+            for ((kind, challenges) in requestOrder) {
+                val functionName = when (kind) {
+                    "sig" -> "_solveSig"
+                    "n" -> "_solveN"
+                    else -> continue
+                }
+                for (challenge in challenges.distinct()) {
+                    val solved =
+                        try {
+                            engine.callFunction(functionName, challenge)
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            logger.d(TAG, "VyonEx player parser failed kind=$kind type=${error.logType()}")
+                            null
+                        }?.takeIf { it.isNotBlank() && it.length <= MAX_SOLVER_OUTPUT_LENGTH }
+                    if (solved != null) {
+                        when (kind) {
+                            "sig" -> sigMap[challenge] = solved
+                            "n" -> nMap[challenge] = solved
+                        }
+                    }
+                }
+            }
+            SolveResult(sigMap, nMap, null)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            logger.d(TAG, "VyonEx player parser failed type=${error.logType()}")
             SolveResult(emptyMap(), emptyMap(), null)
         }
     }
