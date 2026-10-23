@@ -6,7 +6,6 @@ package com.vyonex.internal.fallback.services.bandcamp.extractors;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.StreamingService;
-import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ContentNotSupportedException;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
@@ -41,9 +40,7 @@ public class BandcampRadioStreamExtractor extends BandcampStreamExtractor {
         super(service, linkHandler);
     }
 
-    static JsonObject query(final int id) throws ParsingException {
-        final Downloader downloader = VyonEx.getDownloader();
-        if (downloader == null) throw new ParsingException("VyonEx has not been initialized");
+    static JsonObject query(final Downloader downloader, final int id) throws ParsingException {
         try {
             return JsonParser.object().from(downloader.get(
                     BASE_API_URL + "/bcweekly/1/get?id=" + id).responseBody());
@@ -55,7 +52,7 @@ public class BandcampRadioStreamExtractor extends BandcampStreamExtractor {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader) throws ExtractionException {
         try {
-            show = query(Integer.parseInt(getId()));
+            show = query(downloader, Integer.parseInt(getId()));
         } catch (final NumberFormatException e) {
             throw new ParsingException("Invalid Bandcamp radio show ID", e);
         }
