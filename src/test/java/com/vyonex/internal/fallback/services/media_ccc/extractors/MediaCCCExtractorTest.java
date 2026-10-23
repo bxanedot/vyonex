@@ -15,6 +15,8 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCService;
+import com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCLiveStreamExtractor;
+import com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCStreamExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCStreamLinkHandlerFactory;
@@ -36,6 +38,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MediaCCCExtractorTest {
     static final String LIVE_STREAMS_BODY = """
@@ -64,6 +67,17 @@ class MediaCCCExtractorTest {
 
         assertEquals(Set.of("conferences", "recent", "live"), kiosks.getAvailableKiosks());
         assertEquals("recent", kiosks.getDefaultKioskId());
+    }
+
+    @Test
+    void serviceRoutesRecordingsAndLiveRoomsToTheirExtractors() throws Exception {
+        final MediaCCCService service = new MediaCCCService(8);
+        final var factory = MediaCCCStreamLinkHandlerFactory.getInstance();
+
+        assertTrue(service.getStreamExtractor(factory.fromUrl("https://media.ccc.de/v/talk-1"))
+                instanceof MediaCCCStreamExtractor);
+        assertTrue(service.getStreamExtractor(factory.fromUrl(
+                "https://streaming.media.ccc.de/chaos-2026/a")) instanceof MediaCCCLiveStreamExtractor);
     }
 
     @Test
