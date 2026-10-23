@@ -49,7 +49,8 @@ public class BandcampChannelTabExtractor extends ChannelTabExtractor {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader) throws ParsingException {
         if (discography == null) {
-            discography = BandcampExtractorHelper.getArtistDetails(getId()).getArray("discography");
+            discography = BandcampExtractorHelper.getArtistDetails(downloader, getId())
+                    .getArray("discography");
         }
     }
 
