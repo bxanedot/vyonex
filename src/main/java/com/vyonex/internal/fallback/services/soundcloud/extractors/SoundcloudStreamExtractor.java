@@ -122,7 +122,8 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
     }
     @Override public long getLength() { return length; }
     @Override public long getTimeStamp() throws ParsingException {
-        final long seconds = getTimestampSeconds("(#t=\\d{0,3}h?\\d{0,3}m?\\d{1,3}s?)");
+        final long seconds = getTimestampSeconds(
+                "(#t=(?=\\d)(?:\\d+h)?(?:\\d+m)?\\d*s?(?![\\dA-Za-z]))");
         return seconds < 0 ? 0 : seconds;
     }
     @Override public long getViewCount() { return viewCount; }
