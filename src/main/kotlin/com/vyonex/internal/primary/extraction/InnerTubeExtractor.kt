@@ -1358,49 +1358,55 @@ class InnerTubeExtractor internal constructor(
             ).withResponseMetadata(response)
         }
 
-        // Fallback to HLS if no playable direct URLs were found across all clients
-        val fallbackResult = results.firstOrNull { it.response.streamingData?.hlsManifestUrl != null }
-        if (hints.allowHls && fallbackResult != null) {
-            val hlsManifestUrl =
-                fallbackResult.response.streamingData
-                    ?.hlsManifestUrl
-                    ?.withPoToken(fallbackResult.streamingDataPoToken)
-                    ?.let { appendClientPlaybackNonce(it, clientPlaybackNonce) }
-            if (!hlsManifestUrl.isNullOrBlank() && isAllowedHlsUrl(hlsManifestUrl)) {
-                logger.i(
-                    TAG,
-                    "HLS fallback selected",
-                    details =
-                        mapOf(
-                            "client" to fallbackResult.clientName,
-                            "profile" to fallbackResult.profileId,
-                        ),
-                )
-                return ExtractedStream(
-                    videoId = videoId,
-                    audioUrl = hlsManifestUrl,
-                    videoUrl = hlsManifestUrl,
-                    headers = buildHeaders(fallbackResult.clientName, fallbackResult.userAgent),
-                    loudnessDb = null,
-                    expiresAt = null,
-                    contentLengthBytes = null,
-                    itag = 96,
-                    mimeType = "application/x-mpegURL",
-                    codecs = null,
-                    bitrate = null,
-                    sampleRate = null,
-                    clientName = fallbackResult.clientName,
-                    profileId = fallbackResult.profileId,
-                    requireBoundedRange = false,
-                    useRangeChunks = false,
-                    rangeChunkSizeBytes = mediaRangeChunkSize(fallbackResult.clientName),
-                    playbackTracking =
-                        fallbackResult.response.playbackTracking
-                            .toPlaybackTrackingData(clientPlaybackNonce)
-                            .takeUnless { fallbackResult.bearerAuthenticated },
-                    streamDiagnostics = diagnostics.snapshot(),
-                ).withResponseMetadata(fallbackResult.response)
+        val hlsFallback =
+            if (hints.allowHls) {
+                results.firstNotNullOfOrNull { result ->
+                    val url =
+                        result.response.streamingData
+                            ?.hlsManifestUrl
+                            ?.withPoToken(result.streamingDataPoToken)
+                            ?.let { appendClientPlaybackNonce(it, clientPlaybackNonce) }
+                            ?.takeIf(::isAllowedHlsUrl)
+                    url?.let { result to it }
+                }
+            } else {
+                null
             }
+        if (hlsFallback != null) {
+            val (fallbackResult, hlsManifestUrl) = hlsFallback
+            logger.i(
+                TAG,
+                "HLS fallback selected",
+                details =
+                    mapOf(
+                        "client" to fallbackResult.clientName,
+                        "profile" to fallbackResult.profileId,
+                    ),
+            )
+            return ExtractedStream(
+                videoId = videoId,
+                audioUrl = hlsManifestUrl,
+                videoUrl = hlsManifestUrl,
+                headers = buildHeaders(fallbackResult.clientName, fallbackResult.userAgent),
+                loudnessDb = null,
+                expiresAt = null,
+                contentLengthBytes = null,
+                itag = 96,
+                mimeType = "application/x-mpegURL",
+                codecs = null,
+                bitrate = null,
+                sampleRate = null,
+                clientName = fallbackResult.clientName,
+                profileId = fallbackResult.profileId,
+                requireBoundedRange = false,
+                useRangeChunks = false,
+                rangeChunkSizeBytes = mediaRangeChunkSize(fallbackResult.clientName),
+                playbackTracking =
+                    fallbackResult.response.playbackTracking
+                        .toPlaybackTrackingData(clientPlaybackNonce)
+                        .takeUnless { fallbackResult.bearerAuthenticated },
+                streamDiagnostics = diagnostics.snapshot(),
+            ).withResponseMetadata(fallbackResult.response)
         }
 
         logger.d(TAG, "playable clients produced no usable audio")

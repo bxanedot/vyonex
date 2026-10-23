@@ -102,6 +102,54 @@ class InnerTubeExtractorDirectMappingContractTest {
     }
 
     @Test
+    fun skipsAnInvalidHlsManifestAndUsesTheNextAllowedClientManifest() = runBlocking {
+        val requests = mutableListOf<String>()
+        val invalidManifest = "https://attacker.test/manifest/hls_variant/live"
+        val client =
+            HttpClient(
+                MockEngine { request ->
+                    requests += request.url.toString()
+                    val response = if (requests.size == 1) invalidManifest else HLS_URL
+                    respond(
+                        ByteReadChannel(
+                            CIPHER_RESPONSE.replace(
+                                "\"streamingData\":{",
+                                "\"streamingData\":{\"hlsManifestUrl\":\"$response\",",
+                            ),
+                        ),
+                        HttpStatusCode.OK,
+                        headers { append(HttpHeaders.ContentType, "application/json") },
+                    )
+                },
+            ) {
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }) }
+            }
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser()
+        val clients = TEST_CLIENT.resolveClients(ContentHints()) + TEST_CLIENT.resolveClients(ContentHints()).single().copy(clientName = "TEST_PLAYER_2", clientId = "100")
+        val fallbackStrategy =
+            object : ClientFallbackStrategy {
+                override fun resolveClients(hints: ContentHints): List<YouTubeClient> = clients
+            }
+        try {
+            val stream =
+                extractor(innerTube, parser, InnerTubeLogger.NONE, fallbackStrategy = fallbackStrategy).extract(
+                    videoId = VIDEO_ID,
+                    hints = ContentHints(),
+                    clientPlaybackNonce = CLIENT_NONCE,
+                )
+
+            assertEquals(HLS_URL, stream?.audioUrl)
+            assertEquals("application/x-mpegURL", stream?.mimeType)
+            assertNull(parser.watchConfigVideoId)
+            assertEquals(2, requests.size)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
     fun mapsAudioAfterCipherServiceResolvesItsEncryptedUrl() = runBlocking {
         val requests = mutableListOf<String>()
         val client = playerClient(CIPHER_RESPONSE, requests)
@@ -208,13 +256,14 @@ class InnerTubeExtractorDirectMappingContractTest {
         parser: RecordingConfigParser,
         logger: InnerTubeLogger,
         cipher: RecordingCipherService = RecordingCipherService(),
+        fallbackStrategy: ClientFallbackStrategy = TEST_CLIENT,
     ) =
         InnerTubeExtractor(
             configParser = parser,
             clientDirector =
                 PlayerClientDirector(
                     innerTube = innerTube,
-                    fallbackStrategy = TEST_CLIENT,
+                    fallbackStrategy = fallbackStrategy,
                     tokenProvider = UnavailableTokenProvider,
                     logger = logger,
                 ),

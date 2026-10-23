@@ -10,7 +10,6 @@ import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampSearchStreamInfoItemExtractor;
@@ -25,7 +24,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 public final class BandcampSearchExtractor extends SearchExtractor {
     public BandcampSearchExtractor(final StreamingService service,
@@ -50,87 +48,85 @@ public final class BandcampSearchExtractor extends SearchExtractor {
         final String html = getDownloader().get(page.getUrl(), Map.of("Cookie", List.of("identity")))
                 .responseBody();
         final Document document = Jsoup.parse(html, page.getUrl());
-        final MultiInfoItemsCollector results = new MultiInfoItemsCollector(getServiceId());
+        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
 
-        for (final Element result : document.select(".searchresult")) {
-            final Element type = result.selectFirst(".result-info .itemtype");
-            if (type == null) continue;
+        for (final Element card : document.select(".searchresult")) {
+            final Element label = card.selectFirst(".result-info .itemtype");
+            if (label == null) continue;
 
-            switch (type.text().trim().toUpperCase(Locale.ROOT)) {
-                case "ARTIST" -> results.commit(new BandcampChannelInfoItemExtractor(result));
-                case "ALBUM" -> results.commit(new BandcampPlaylistInfoItemExtractor(result));
-                case "TRACK" -> results.commit(new BandcampSearchStreamInfoItemExtractor(result, null));
+            switch (label.text().trim().toUpperCase(Locale.ROOT)) {
+                case "ARTIST" -> items.commit(new BandcampChannelInfoItemExtractor(card));
+                case "ALBUM" -> items.commit(new BandcampPlaylistInfoItemExtractor(card));
+                case "TRACK" -> items.commit(new BandcampSearchStreamInfoItemExtractor(card, null));
                 default -> { }
             }
         }
 
-        return new InfoItemsPage<>(results, findNextPage(document, page.getUrl()));
+        return new InfoItemsPage<>(items, findNextPage(document, page.getUrl()));
     }
 
     static Page findNextPage(final Document document, final String currentUrl) {
-        Element link = document.selectFirst(
+        Element next = document.selectFirst(
                 ".pagelist a.next[href], .pagelist a[rel~=next][href], .pagelist li.next a[href]");
-        if (link == null) {
-            final Element current = currentPage(document.selectFirst(".pagelist"));
-            final Element following = current == null ? null : current.nextElementSibling();
-            link = following == null ? null : following.selectFirst("a[href]");
+        if (next == null) {
+            final Element pages = document.selectFirst(".pagelist");
+            final Element selected = pages == null ? null : selectedPage(pages);
+            final Element following = selected == null ? null : selected.nextElementSibling();
+            next = following == null ? null : following.selectFirst("a[href]");
         }
-        if (link == null) return null;
+        if (next == null) return null;
 
         try {
             final URI base = URI.create(currentUrl);
-            final URI next = resolvePage(base, URI.create(link.attr("href"))).normalize();
-            if (!sameOrigin(base, next)
-                    || (Objects.equals(base.getRawPath(), next.getRawPath())
-                    && Objects.equals(base.getRawQuery(), next.getRawQuery()))) {
+            final URI target = resolvePageLink(base, URI.create(next.attr("href"))).normalize();
+            if (!sameWebOrigin(base, target)
+                    || (java.util.Objects.equals(base.getRawPath(), target.getRawPath())
+                    && java.util.Objects.equals(base.getRawQuery(), target.getRawQuery()))) {
                 return null;
             }
-            return new Page(next.toString());
+            return new Page(target.toString());
         } catch (final IllegalArgumentException | NullPointerException ignored) {
             return null;
         }
     }
 
-    private static URI resolvePage(final URI base, final URI reference) {
-        if (reference.getScheme() == null && reference.getRawAuthority() == null
-                && (reference.getRawPath() == null || reference.getRawPath().isEmpty())
-                && reference.getRawQuery() != null) {
+    private static URI resolvePageLink(final URI base, final URI link) {
+        if (link.getScheme() == null && link.getRawAuthority() == null
+                && (link.getRawPath() == null || link.getRawPath().isEmpty())
+                && link.getRawQuery() != null) {
             final String path = base.getRawPath() == null ? "" : base.getRawPath();
-            final String fragment = reference.getRawFragment() == null
-                    ? "" : "#" + reference.getRawFragment();
+            final String fragment = link.getRawFragment() == null ? "" : "#" + link.getRawFragment();
             return URI.create(base.getScheme() + "://" + base.getRawAuthority() + path
-                    + "?" + reference.getRawQuery() + fragment);
+                    + "?" + link.getRawQuery() + fragment);
         }
-        return base.resolve(reference);
+        return base.resolve(link);
     }
 
-    private static Element currentPage(final Element pagination) {
-        if (pagination == null) return null;
-        Element current = pagination.selectFirst("li.current, li.selected, li.active");
-        if (current == null) {
+    private static Element selectedPage(final Element pagination) {
+        Element selected = pagination.selectFirst("li.current, li.selected, li.active");
+        if (selected == null) {
             final Element number = pagination.selectFirst("li span");
-            if (number != null) current = number.closest("li");
+            if (number != null) selected = number.closest("li");
         }
-        return current;
+        return selected;
     }
 
-    private static boolean sameOrigin(final URI first, final URI second) {
-        final String scheme = first.getScheme();
-        if (!isHttp(scheme) || !isHttp(second.getScheme()) || first.getHost() == null
-                || second.getHost() == null || first.getRawUserInfo() != null
-                || second.getRawUserInfo() != null) {
+    private static boolean sameWebOrigin(final URI base, final URI target) {
+        if (!isWebUrl(base) || !isWebUrl(target)
+                || base.getHost() == null || target.getHost() == null
+                || base.getRawUserInfo() != null || target.getRawUserInfo() != null) {
             return false;
         }
-        return scheme.equalsIgnoreCase(second.getScheme())
-                && first.getHost().equalsIgnoreCase(second.getHost())
-                && port(first) == port(second);
+        return base.getScheme().equalsIgnoreCase(target.getScheme())
+                && base.getHost().equalsIgnoreCase(target.getHost())
+                && effectivePort(base) == effectivePort(target);
     }
 
-    private static boolean isHttp(final String scheme) {
-        return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
+    private static boolean isWebUrl(final URI uri) {
+        return "http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme());
     }
 
-    private static int port(final URI uri) {
+    private static int effectivePort(final URI uri) {
         if (uri.getPort() >= 0) return uri.getPort();
         return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
     }
@@ -142,6 +138,5 @@ public final class BandcampSearchExtractor extends SearchExtractor {
     }
 
     @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
-            throws IOException, ExtractionException { }
+    public void onFetchPage(@Nonnull final Downloader downloader) { }
 }
