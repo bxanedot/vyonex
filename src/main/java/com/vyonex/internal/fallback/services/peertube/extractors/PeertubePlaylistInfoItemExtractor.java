@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
+// bxane
 package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
@@ -8,36 +9,52 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getThumbnailsFromPlaylistOrVideoItem;
-import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public final class PeertubePlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final JsonObject item;
-    private final String baseUrl;
+    @Nullable private final String displayName;
+    @Nullable private final String url;
+    @Nullable private final String uploaderName;
+    @Nullable private final String uploaderUrl;
+    @Nullable private final String description;
+    private final long streamCount;
+    private final List<Image> thumbnails;
 
     public PeertubePlaylistInfoItemExtractor(final JsonObject item, final String baseUrl) {
-        this.item = item;
-        this.baseUrl = baseUrl;
+        displayName = item.getString("displayName");
+        url = item.getString("url");
+        final JsonObject uploader = item.getObject("uploader");
+        uploaderName = uploader.getString("displayName");
+        uploaderUrl = uploader.getString("url");
+        description = item.getString("description");
+        streamCount = item.getLong("videosLength", -1);
+        thumbnails = getThumbnailsFromPlaylistOrVideoItem(baseUrl, item);
     }
 
-    @Override public String getName() throws ParsingException { return requiredString(item, "displayName"); }
-    @Override public String getUrl() throws ParsingException { return requiredString(item, "url"); }
-    @Override public List<Image> getThumbnails() {
-        return getThumbnailsFromPlaylistOrVideoItem(baseUrl, item);
+    @Override public String getName() throws ParsingException {
+        return required(displayName, "displayName");
     }
+    @Override public String getUrl() throws ParsingException { return required(url, "url"); }
+    @Override public List<Image> getThumbnails() { return thumbnails; }
     @Override public String getUploaderName() throws ParsingException {
-        return requiredString(item, "uploader.displayName");
+        return required(uploaderName, "uploader.displayName");
     }
     @Override public String getUploaderUrl() throws ParsingException {
-        return requiredString(item, "uploader.url");
+        return required(uploaderUrl, "uploader.url");
     }
     @Override public boolean isUploaderVerified() { return false; }
-    @Override public long getStreamCount() { return item.getLong("videosLength", -1); }
+    @Override public long getStreamCount() { return streamCount; }
     @Override public Description getDescription() {
-        final String text = item.getString("description");
-        return text == null || text.isEmpty()
-                ? Description.EMPTY_DESCRIPTION : new Description(text, Description.PLAIN_TEXT);
+        return description == null || description.isEmpty()
+                ? Description.EMPTY_DESCRIPTION : new Description(description, Description.PLAIN_TEXT);
+    }
+
+    private static String required(@Nullable final String value, final String field)
+            throws ParsingException {
+        if (value == null) throw new ParsingException("Missing string field: " + field);
+        return value;
     }
 }
