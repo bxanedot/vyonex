@@ -10,6 +10,7 @@ import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeStreamLi
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
@@ -19,19 +20,26 @@ import java.util.Locale;
 import java.util.Objects;
 
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
 
 /** Maps legacy YouTube short-form cards into VyonEx stream items. */
 public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
-    private final JsonObject item;
+    @Nullable private final String name;
+    @Nullable private final String videoId;
+    @Nullable private final String viewCountText;
+    private final List<Image> thumbnails;
 
     public YoutubeReelInfoItemExtractor(@Nonnull final JsonObject item) {
-        this.item = Objects.requireNonNull(item, "reel item is required");
+        final JsonObject reel = Objects.requireNonNull(item, "reel item is required");
+        name = getTextFromObject(reel.getObject("headline"));
+        videoId = reel.getString("videoId");
+        viewCountText = getTextFromObject(reel.getObject("viewCountText"));
+        final JsonArray thumbnailItems = reel.getObject("thumbnail").getArray("thumbnails");
+        thumbnails = getImagesFromThumbnailsArray(thumbnailItems);
     }
 
     @Override
     public String getName() throws ParsingException {
-        final String name = getTextFromObject(item.getObject("headline"));
         if (name == null || name.isBlank()) {
             throw new ParsingException("Short-form title is missing");
         }
@@ -40,7 +48,6 @@ public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
 
     @Override
     public String getUrl() throws ParsingException {
-        final String videoId = item.getString("videoId");
         if (videoId == null || videoId.isBlank()) {
             throw new ParsingException("Short-form video ID is missing");
         }
@@ -53,9 +60,7 @@ public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
 
     @Nonnull
     @Override
-    public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromInfoItem(item);
-    }
+    public List<Image> getThumbnails() throws ParsingException { return thumbnails; }
 
     @Override
     public StreamType getStreamType() {
@@ -64,13 +69,12 @@ public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
 
     @Override
     public long getViewCount() throws ParsingException {
-        final String text = getTextFromObject(item.getObject("viewCountText"));
-        if (text == null || text.isBlank()) {
+        if (viewCountText == null || viewCountText.isBlank()) {
             throw new ParsingException("Short-form view count is missing");
         }
-        if (text.toLowerCase(Locale.ROOT).contains("no views")) return 0;
+        if (viewCountText.toLowerCase(Locale.ROOT).contains("no views")) return 0;
         try {
-            return Utils.mixedNumberWordToLong(text);
+            return Utils.mixedNumberWordToLong(viewCountText);
         } catch (final NumberFormatException | ParsingException error) {
             throw new ParsingException("Could not parse short-form view count", error);
         }

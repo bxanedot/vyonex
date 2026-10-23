@@ -12,11 +12,15 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 public class BandcampCommentsInfoItemExtractor implements CommentsInfoItemExtractor {
-    private final JsonObject review;
+    private final String text;
+    private final String uploaderName;
+    private final long avatarId;
     private final String url;
 
     public BandcampCommentsInfoItemExtractor(final JsonObject review, final String url) {
-        this.review = review;
+        text = review.getString("why", "");
+        uploaderName = review.getString("name", "");
+        avatarId = review.getLong("image_id");
         this.url = url;
     }
 
@@ -33,15 +37,15 @@ public class BandcampCommentsInfoItemExtractor implements CommentsInfoItemExtrac
     @Nonnull
     @Override
     public Description getCommentText() {
-        return new Description(review.getString("why", ""), Description.PLAIN_TEXT);
+        return new Description(text, Description.PLAIN_TEXT);
     }
 
     @Override
-    public String getUploaderName() { return review.getString("name", ""); }
+    public String getUploaderName() { return uploaderName; }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() {
-        return BandcampExtractorHelper.getImagesFromImageId(review.getLong("image_id"), false);
+        return BandcampExtractorHelper.getImagesFromImageId(avatarId, false);
     }
 }

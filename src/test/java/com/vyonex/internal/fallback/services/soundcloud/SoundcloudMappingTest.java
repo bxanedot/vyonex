@@ -56,25 +56,36 @@ class SoundcloudMappingTest {
         assertEquals("Producer", channel.getDescription());
 
         final var playlistJson = JsonParser.object().from("""
-                {"title":"Mix","track_count":1,"tracks":[{"artwork_url":"https://images.example/song.jpg"}],
+                {"title":"Mix","permalink_url":"http://soundcloud.com/alice/sets/mix",
+                 "track_count":1,"tracks":[{"artwork_url":"https://images.example/song.jpg"}],
                  "user":{"username":"Alice","permalink_url":"http://soundcloud.com/alice"}}
                 """);
         final SoundcloudPlaylistInfoItemExtractor playlist =
                 new SoundcloudPlaylistInfoItemExtractor(playlistJson);
         assertEquals("Mix", playlist.getName());
+        assertEquals("https://soundcloud.com/alice/sets/mix", playlist.getUrl());
+        assertEquals("Alice", playlist.getUploaderName());
+        assertEquals("https://soundcloud.com/alice", playlist.getUploaderUrl());
         assertEquals(1, playlist.getStreamCount());
         assertEquals("https://images.example/song.jpg", playlist.getThumbnails().get(0).getUrl());
 
         final var commentJson = JsonParser.object().from("""
                 {"id":9,"body":"Nice","timestamp":4200,"created_at":"2026-10-22T12:30:00Z",
-                 "user":{"username":"Alice","permalink":"alice","verified":false}}
+                 "user":{"username":"Alice","permalink":"alice",
+                   "permalink_url":"http://soundcloud.com/alice",
+                   "avatar_url":"https://images.example/alice.jpg","verified":true}}
                 """);
         final SoundcloudCommentsInfoItemExtractor comment =
                 new SoundcloudCommentsInfoItemExtractor(commentJson, "https://soundcloud.com/comment/9");
         assertEquals("9", comment.getCommentId());
         assertEquals("Nice", comment.getCommentText().getContent());
+        assertEquals("Alice", comment.getUploaderName());
+        assertEquals("https://soundcloud.com/alice", comment.getUploaderUrl());
+        assertTrue(comment.isUploaderVerified());
         assertEquals(4, comment.getStreamPosition());
         assertEquals("alice", comment.getName());
+        assertEquals("2026-10-22T12:30:00Z", comment.getTextualUploadDate());
+        assertEquals("https://images.example/alice.jpg", comment.getUploaderAvatars().get(0).getUrl());
     }
 
     @Test

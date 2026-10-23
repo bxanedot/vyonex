@@ -10,54 +10,77 @@ import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonObject;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getThumbnailsFromPlaylistOrVideoItem;
-import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.optionalString;
-import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public class PeertubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
-    protected final JsonObject item;
+    @Nullable private final String uuid;
+    @Nullable private final String name;
+    @Nullable protected final String embedUrl;
+    private final JsonObject account;
+    @Nullable private final String thumbnailPath;
+    @Nullable private final String previewPath;
+    @Nullable private final String publishedAt;
+    private final long views;
+    private final long duration;
+    private final boolean live;
     private String baseUrl;
 
     public PeertubeStreamInfoItemExtractor(final JsonObject item, final String baseUrl) {
-        this.item = item;
+        uuid = item.getString("uuid");
+        name = item.getString("name");
+        embedUrl = item.getString("embedUrl");
+        account = item.getObject("account");
+        thumbnailPath = item.getString("thumbnailPath");
+        previewPath = item.getString("previewPath");
+        publishedAt = item.getString("publishedAt");
+        views = item.getLong("views", -1);
+        duration = item.getLong("duration", -1);
+        live = item.getBoolean("isLive");
         this.baseUrl = baseUrl;
     }
 
     @Override public String getUrl() throws ParsingException {
-        final String id = requiredString(item, "uuid");
-        return ServiceList.PeerTube.getStreamLHFactory().fromId(id, baseUrl).getUrl();
+        return ServiceList.PeerTube.getStreamLHFactory()
+                .fromId(required(uuid, "uuid"), baseUrl).getUrl();
     }
     @Override public List<Image> getThumbnails() {
-        return getThumbnailsFromPlaylistOrVideoItem(baseUrl, item);
+        return getThumbnailsFromPlaylistOrVideoItem(baseUrl, thumbnailPath, previewPath);
     }
-    @Override public String getName() throws ParsingException { return requiredString(item, "name"); }
+    @Override public String getName() throws ParsingException { return required(name, "name"); }
     @Override public boolean isAd() { return false; }
-    @Override public long getViewCount() { return item.getLong("views", -1); }
+    @Override public long getViewCount() { return views; }
     @Override public String getUploaderUrl() throws ParsingException {
-        final String account = requiredString(item, "account.name");
-        final String host = requiredString(item, "account.host");
-        final String id = "accounts/" + account + "@" + host;
+        final String accountName = required(account.getString("name"), "account.name");
+        final String host = required(account.getString("host"), "account.host");
+        final String id = "accounts/" + accountName + "@" + host;
         return ServiceList.PeerTube.getChannelLHFactory().fromId(id, baseUrl).getUrl();
     }
     @Override public List<Image> getUploaderAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, item.getObject("account"));
+        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, account);
     }
     @Override public boolean isUploaderVerified() { return false; }
     @Override public String getUploaderName() throws ParsingException {
-        return requiredString(item, "account.displayName");
+        return required(account.getString("displayName"), "account.displayName");
     }
-    @Override public String getTextualUploadDate() { return optionalString(item, "publishedAt"); }
+    @Override public String getTextualUploadDate() { return publishedAt; }
     @Override public DateWrapper getUploadDate() throws ParsingException {
         final String date = getTextualUploadDate();
         return date == null ? null : DateWrapper.fromInstant(date);
     }
     @Override public StreamType getStreamType() {
-        return item.getBoolean("isLive") ? StreamType.LIVE_STREAM : StreamType.VIDEO_STREAM;
+        return live ? StreamType.LIVE_STREAM : StreamType.VIDEO_STREAM;
     }
-    @Override public long getDuration() { return item.getLong("duration", -1); }
+    @Override public long getDuration() { return duration; }
 
     protected void setBaseUrl(final String value) { baseUrl = value; }
+
+    private static String required(@Nullable final String value, final String field)
+            throws ParsingException {
+        if (value == null) throw new ParsingException("Missing string field: " + field);
+        return value;
+    }
 }

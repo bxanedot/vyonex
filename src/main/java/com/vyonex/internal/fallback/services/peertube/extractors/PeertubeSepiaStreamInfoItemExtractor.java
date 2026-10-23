@@ -13,7 +13,7 @@ public final class PeertubeSepiaStreamInfoItemExtractor extends PeertubeStreamIn
     }
 
     @Override public String getUrl() throws ParsingException {
-        final String embed = item.getString("embedUrl");
+        final String embed = embedUrl;
         if (embed != null) {
             try {
                 final URI location = URI.create(embed);

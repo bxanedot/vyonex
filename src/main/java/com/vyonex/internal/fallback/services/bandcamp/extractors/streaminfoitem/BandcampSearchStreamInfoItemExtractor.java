@@ -13,42 +13,45 @@ import java.util.List;
 import java.util.Locale;
 
 public final class BandcampSearchStreamInfoItemExtractor extends BandcampStreamInfoItemExtractor {
-    private final Element result;
+    private final String uploaderName;
+    private final String name;
+    private final String url;
+    private final String imageUrl;
 
     public BandcampSearchStreamInfoItemExtractor(final Element result, final String uploaderUrl) {
         super(uploaderUrl);
-        this.result = result;
-    }
-
-    @Override
-    public String getUploaderName() {
-        final String subtitle = text(".subhead");
+        final String subtitle = text(result, ".subhead");
         final int separator = subtitle.toLowerCase(Locale.ROOT).lastIndexOf(" by ");
-        return separator < 0 ? subtitle : subtitle.substring(separator + 4).trim();
+        uploaderName = separator < 0 ? subtitle : subtitle.substring(separator + 4).trim();
+        name = text(result, ".heading");
+        url = text(result, ".itemurl");
+        final Element image = result.selectFirst(".art img[src]");
+        imageUrl = image == null ? "" : image.attr("src");
     }
 
-    @Override
-    public String getName() throws ParsingException { return requiredText(".heading"); }
+    @Override public String getUploaderName() { return uploaderName; }
 
     @Override
-    public String getUrl() throws ParsingException { return requiredText(".itemurl"); }
+    public String getName() throws ParsingException { return required(name, ".heading"); }
+
+    @Override
+    public String getUrl() throws ParsingException { return required(url, ".itemurl"); }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromSearchResult(result);
+        return BandcampExtractorHelper.getImagesFromImageUrl(imageUrl);
     }
 
     @Override
     public long getDuration() { return -1; }
 
-    private String requiredText(final String selector) throws ParsingException {
-        final String value = text(selector);
+    private String required(final String value, final String selector) throws ParsingException {
         if (value.isBlank()) throw new ParsingException("Bandcamp search result is missing " + selector);
         return value;
     }
 
-    private String text(final String selector) {
+    private static String text(final Element result, final String selector) {
         final Element value = result.selectFirst(".result-info " + selector);
         return value == null ? "" : value.text();
     }

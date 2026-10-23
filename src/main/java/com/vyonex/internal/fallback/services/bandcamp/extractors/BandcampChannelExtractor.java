@@ -20,12 +20,17 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class BandcampChannelExtractor extends ChannelExtractor {
-    private JsonObject artist;
+    @Nullable private String artistName;
+    @Nullable private String artistUrl;
+    private String bio = "";
+    private long bioImageId;
+    private JsonArray discography;
 
     public BandcampChannelExtractor(final StreamingService service,
                                     final ListLinkHandler linkHandler) {
@@ -35,13 +40,13 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     @Nonnull
     @Override
     public List<Image> getAvatars() {
-        return BandcampExtractorHelper.getImagesFromImageId(artist.getLong("bio_image_id"), false);
+        return BandcampExtractorHelper.getImagesFromImageId(bioImageId, false);
     }
 
     @Nonnull
     @Override
     public List<Image> getBanners() throws ParsingException {
-        final String url = artist.getString("bandcamp_url");
+        final String url = artistUrl;
         if (url == null || url.isBlank()) return List.of();
         try {
             final String html = getDownloader().get(https(url)).responseBody();
@@ -62,7 +67,7 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     public long getSubscriberCount() { return -1; }
 
     @Override
-    public String getDescription() { return artist.getString("bio", ""); }
+    public String getDescription() { return bio; }
 
     @Override
     public String getParentChannelName() { return null; }
@@ -80,7 +85,6 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     @Nonnull
     @Override
     public List<ListLinkHandler> getTabs() throws ParsingException {
-        final JsonArray discography = artist.getArray("discography");
         final ReadyTabBuilder builder = new ReadyTabBuilder(discography);
         boolean tracks = false;
         boolean albums = false;
@@ -105,15 +109,21 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        artist = BandcampExtractorHelper.getArtistDetails(downloader, getId());
+        final JsonObject artist = BandcampExtractorHelper.getArtistDetails(downloader, getId());
+        artistName = artist.getString("name");
+        artistUrl = artist.getString("bandcamp_url");
+        bio = artist.getString("bio", "");
+        bioImageId = artist.getLong("bio_image_id");
+        discography = artist.getArray("discography");
     }
 
     @Nonnull
     @Override
     public String getName() throws ParsingException {
-        final String name = artist.getString("name");
-        if (name == null || name.isBlank()) throw new ParsingException("Artist has no name");
-        return name;
+        if (artistName == null || artistName.isBlank()) {
+            throw new ParsingException("Artist has no name");
+        }
+        return artistName;
     }
 
     private ListLinkHandler tab(final String type, final ReadyTabBuilder builder)
