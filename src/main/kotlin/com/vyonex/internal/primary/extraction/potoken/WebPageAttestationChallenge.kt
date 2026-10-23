@@ -2,7 +2,9 @@
 package com.vyonex.internal.primary.extraction.potoken
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -11,9 +13,12 @@ private const val WEB_PAGE_LIMIT = 4 * 1024 * 1024
 private const val IDENTIFIER_LIMIT = 1024
 private const val JSON_FIELD_LIMIT = 256
 
-/**
- * Sensitive BotGuard page data. Do not log this value: it contains an event ID and raw challenge data.
- */
+private val ATTESTATION_CALL = Regex("(?<![A-Za-z0-9_$])window\\s*\\.\\s*ytAtN\\s*\\(")
+private val ATTESTATION_ASSIGNMENT = Regex("(?<![A-Za-z0-9_$])window\\s*\\.\\s*ytAtR\\s*=")
+private val CONFIG_CALL = Regex("(?<![A-Za-z0-9_$])ytcfg\\s*\\.\\s*set\\s*\\(")
+private val R_PROPERTY = Regex("(?<![A-Za-z0-9_$])R\\s*:")
+
+/** Sensitive BotGuard page data. Do not log this value: it contains an event ID and raw challenge data. */
 public class WebPageAttestationContext(
     public val challenge: String,
     public val eventId: String,
@@ -24,199 +29,229 @@ public class WebPageAttestationContext(
 /** Returns the paired page challenge and event ID, or null when the page is not usable. */
 public fun extractWebPageAttestationContext(webPage: String): WebPageAttestationContext? {
     requireSize(webPage, WEB_PAGE_LIMIT, "web page")
-    val challenge = extractWebPageAttestationChallenge(webPage) ?: return null
-    val eventId = extractYtConfigEventId(webPage) ?: return null
-    return WebPageAttestationContext(challenge = challenge, eventId = eventId)
+    val code = maskNonCode(webPage)
+    val challenge = findChallenge(webPage, code) ?: return null
+    val eventId = findEventId(webPage, code) ?: return null
+    return WebPageAttestationContext(challenge = encodeChallenge(challenge), eventId = eventId)
 }
 
 /** Returns the BotGuard challenge from a page, or null when it cannot be extracted. */
 public fun extractWebPageAttestationChallenge(webPage: String): String? {
     requireSize(webPage, WEB_PAGE_LIMIT, "web page")
-    val rawChallengeData = extractYtAtN(webPage) ?: extractYtAtR(webPage) ?: return null
-    val challenge =
-        runCatching {
-            val root = Json.parseToJsonElement(rawChallengeData).jsonObject
-            requireFieldCount(root)
-            root["bgChallenge"] ?: return@runCatching null
-        }.getOrNull() ?: return null
-    return Json.encodeToString(JsonObject.serializer(), JsonObject(mapOf("bgChallenge" to challenge)))
+    val challenge = findChallenge(webPage, maskNonCode(webPage)) ?: return null
+    return encodeChallenge(challenge)
 }
 
-private fun extractYtConfigEventId(webPage: String): String? {
-    for (call in Regex("ytcfg\\s*\\.\\s*set").findAll(webPage)) {
-        val openParenthesis = webPage.indexOf('(', call.range.last + 1)
-        if (openParenthesis < 0) continue
-        val rawConfig = extractJavaScriptObject(webPage, openParenthesis + 1) ?: continue
-        val eventId =
-            runCatching {
-                val config = Json.parseToJsonElement(rawConfig).jsonObject
-                requireFieldCount(config)
-                config["EVENT_ID"]?.jsonPrimitive?.contentOrNull
-            }.getOrNull()
+private fun findChallenge(
+    source: String,
+    code: String,
+): JsonElement? {
+    for (call in ATTESTATION_CALL.findAll(code)) {
+        val wrapper = callObjectRange(code, call.range.last) ?: continue
+        val rawChallenge = challengeValue(source, code, wrapper) ?: continue
+        parseChallenge(rawChallenge)?.let { return it }
+    }
+    for (assignment in ATTESTATION_ASSIGNMENT.findAll(code)) {
+        val start = skipTrivia(source, assignment.range.last + 1)
+        val rawChallenge = decodeString(source, start) ?: continue
+        parseChallenge(rawChallenge)?.let { return it }
+    }
+    return null
+}
+
+private fun findEventId(
+    source: String,
+    code: String,
+): String? {
+    for (call in CONFIG_CALL.findAll(code)) {
+        val range = callObjectRange(code, call.range.last) ?: continue
+        val config = parseObject(source.substring(range)) ?: continue
+        val eventId = runCatching { config["EVENT_ID"]?.jsonPrimitive?.contentOrNull }.getOrNull()
         if (!eventId.isNullOrBlank() && eventId.length <= IDENTIFIER_LIMIT) return eventId
     }
     return null
 }
 
-private fun extractYtAtN(webPage: String): String? {
-    for (call in Regex("window\\s*\\.\\s*ytAtN").findAll(webPage)) {
-        extractYtAtNCall(webPage, call.range.last + 1)?.let { return it }
-    }
-    return null
-}
-
-private fun extractYtAtNCall(
-    webPage: String,
-    callEnd: Int,
-): String? {
-    val openParenthesis = webPage.indexOf('(', callEnd)
-    if (openParenthesis < 0) return null
-    var position = openParenthesis + 1
-    var quote: Char? = null
-    var escaped = false
-    while (position < webPage.length) {
-        val char = webPage[position]
-        if (quote != null) {
-            if (escaped) {
-                escaped = false
-            } else if (char == '\\') {
-                escaped = true
-            } else if (char == quote) {
-                quote = null
-            }
-        } else {
-            when (char) {
-                '\'', '"' -> quote = char
-                '{' -> break
-                ')' -> return null
-            }
-        }
-        position++
-    }
-    if (position >= webPage.length || webPage[position] != '{') return null
-    return extractYtAtNRawChallenge(extractJavaScriptObject(webPage, position) ?: return null)
-}
-
-private fun extractJavaScriptObject(
+private fun challengeValue(
     source: String,
-    start: Int,
+    code: String,
+    range: IntRange,
 ): String? {
-    var position = start
-    while (position < source.length && source[position].isWhitespace()) position++
-    if (position >= source.length || source[position] != '{') return null
-    val objectStart = position
-    var depth = 0
-    var quote: Char? = null
-    var escaped = false
-    while (position < source.length) {
-        val char = source[position++]
-        if (quote != null) {
-            if (escaped) {
-                escaped = false
-            } else if (char == '\\') {
-                escaped = true
-            } else if (char == quote) {
-                quote = null
-            }
-            continue
-        }
-        when (char) {
-            '\'', '"' -> {
-                quote = char
-            }
-
-            '{' -> {
-                depth++
-            }
-
-            '}' -> {
-                depth--
-                if (depth == 0) return source.substring(objectStart, position)
-            }
-        }
+    val wrapper = source.substring(range)
+    val parsed = parseObject(wrapper)
+    parsed?.get("R")?.let { value ->
+        return if (value is JsonPrimitive && value.isString) value.content else value.toString()
     }
-    return null
-}
 
-private fun extractYtAtNRawChallenge(wrapper: String): String? {
-    val key = Regex("(?:[\\\"']R[\\\"']|\\bR)\\s*:").find(wrapper) ?: return null
-    var position = key.range.last + 1
-    while (position < wrapper.length && wrapper[position].isWhitespace()) position++
-    return when (wrapper.getOrNull(position)) {
-        '\'', '"' -> decodeJavaScriptString(wrapper, position)
-        '{' -> extractJavaScriptObject(wrapper, position)
+    val wrapperCode = code.substring(range)
+    val property = R_PROPERTY.find(wrapperCode) ?: return null
+    val start = skipTrivia(source, range.first + property.range.last + 1)
+    if (start >= source.length) return null
+    return when (source[start]) {
+        '{' -> balancedObject(source, code, start)
+        '\'', '"' -> decodeString(source, start)
         else -> null
     }
 }
 
-private fun extractYtAtR(webPage: String): String? {
-    val assignment = Regex("window\\s*\\.\\s*ytAtR").find(webPage) ?: return null
-    val equals = webPage.indexOf('=', assignment.range.last + 1)
-    if (equals < 0) return null
-    var position = equals + 1
-    while (position < webPage.length && webPage[position].isWhitespace()) position++
-    return decodeJavaScriptString(webPage, position)
+private fun parseChallenge(raw: String): JsonElement? = parseObject(raw)?.get("bgChallenge")
+
+private fun parseObject(value: String): JsonObject? =
+    runCatching {
+        Json.parseToJsonElement(value).jsonObject.also(::requireFieldCount)
+    }.getOrNull()
+
+private fun encodeChallenge(challenge: JsonElement): String =
+    Json.encodeToString(JsonObject.serializer(), JsonObject(mapOf("bgChallenge" to challenge)))
+
+private fun callObjectRange(
+    code: String,
+    openParenthesis: Int,
+): IntRange? {
+    var cursor = openParenthesis + 1
+    while (cursor < code.length && code[cursor] != ')' && code[cursor] != '{') cursor++
+    if (cursor >= code.length || code[cursor] != '{') return null
+    val endExclusive = balancedObjectEnd(code, cursor) ?: return null
+    return cursor until endExclusive
 }
 
-private fun decodeJavaScriptString(
+private fun balancedObject(
+    source: String,
+    code: String,
+    start: Int,
+): String? {
+    val endExclusive = balancedObjectEnd(code, start) ?: return null
+    return source.substring(start, endExclusive)
+}
+
+private fun balancedObjectEnd(
+    code: String,
+    start: Int,
+): Int? {
+    if (code.getOrNull(start) != '{') return null
+    var depth = 0
+    var cursor = start
+    while (cursor < code.length) {
+        when (code[cursor]) {
+            '{' -> depth++
+            '}' -> {
+                depth--
+                if (depth == 0) return cursor + 1
+            }
+        }
+        cursor++
+    }
+    return null
+}
+
+private fun decodeString(
     source: String,
     start: Int,
 ): String? {
-    var position = start
-    if (position >= source.length || source[position] !in charArrayOf('\'', '"')) return null
-    val quote = source[position++]
-    val decoded = StringBuilder()
-    while (position < source.length) {
-        val char = source[position++]
-        if (char == quote) return decoded.toString()
+    val quote = source.getOrNull(start)?.takeIf { it == '\'' || it == '"' } ?: return null
+    val value = StringBuilder()
+    var cursor = start + 1
+    while (cursor < source.length) {
+        val char = source[cursor++]
+        if (char == quote) return value.toString()
         if (char != '\\') {
-            decoded.append(char)
+            value.append(char)
             continue
         }
-        if (position >= source.length) return null
-        when (val escaped = source[position++]) {
-            '\'', '"', '\\', '/' -> {
-                decoded.append(escaped)
-            }
-
-            'b' -> {
-                decoded.append('\b')
-            }
-
-            'f' -> {
-                decoded.append('\u000c')
-            }
-
-            'n' -> {
-                decoded.append('\n')
-            }
-
-            'r' -> {
-                decoded.append('\r')
-            }
-
-            't' -> {
-                decoded.append('\t')
-            }
-
+        if (cursor >= source.length) return null
+        when (val escaped = source[cursor++]) {
+            '\'', '"', '\\', '/' -> value.append(escaped)
+            'b' -> value.append('\b')
+            'f' -> value.append('\u000c')
+            'n' -> value.append('\n')
+            'r' -> value.append('\r')
+            't' -> value.append('\t')
             'u', 'x' -> {
                 val digits = if (escaped == 'u') 4 else 2
-                if (position + digits > source.length) return null
-                val codePoint = source.substring(position, position + digits).toIntOrNull(16) ?: return null
-                decoded.append(codePoint.toChar())
-                position += digits
+                if (cursor + digits > source.length) return null
+                val codePoint = source.substring(cursor, cursor + digits).toIntOrNull(16) ?: return null
+                value.append(codePoint.toChar())
+                cursor += digits
             }
-
-            '\n' -> {
-                continue
-            }
-
-            else -> {
-                decoded.append(escaped)
-            }
+            '\n' -> Unit
+            '\r' -> if (source.getOrNull(cursor) == '\n') cursor++
+            else -> value.append(escaped)
         }
     }
     return null
+}
+
+private fun skipTrivia(
+    source: String,
+    from: Int,
+): Int {
+    var cursor = from
+    while (cursor < source.length) {
+        when {
+            source[cursor].isWhitespace() -> cursor++
+            source.startsWith("//", cursor) -> {
+                while (cursor < source.length && source[cursor] != '\n' && source[cursor] != '\r') cursor++
+            }
+            source.startsWith("/*", cursor) -> {
+                val end = source.indexOf("*/", cursor + 2)
+                if (end < 0) return source.length
+                cursor = end + 2
+            }
+            else -> return cursor
+        }
+    }
+    return cursor
+}
+
+private fun maskNonCode(source: String): String {
+    val chars = source.toCharArray()
+    var cursor = 0
+    while (cursor < source.length) {
+        when {
+            source.startsWith("<!--", cursor) -> {
+                val start = cursor
+                val end = source.indexOf("-->", cursor + 4)
+                cursor = if (end < 0) source.length else end + 3
+                blank(chars, start, cursor)
+            }
+            source.startsWith("//", cursor) -> {
+                val start = cursor
+                while (cursor < source.length && source[cursor] != '\n' && source[cursor] != '\r') cursor++
+                blank(chars, start, cursor)
+            }
+            source.startsWith("/*", cursor) -> {
+                val start = cursor
+                cursor += 2
+                while (cursor < source.length && !source.startsWith("*/", cursor)) cursor++
+                cursor = (cursor + 2).coerceAtMost(source.length)
+                blank(chars, start, cursor)
+            }
+            source[cursor] == '\'' || source[cursor] == '"' || source[cursor] == '`' -> {
+                val start = cursor
+                val quote = source[cursor++]
+                while (cursor < source.length) {
+                    if (source[cursor] == '\\') {
+                        cursor = (cursor + 2).coerceAtMost(source.length)
+                    } else if (source[cursor++] == quote) {
+                        break
+                    }
+                }
+                blank(chars, start, cursor)
+            }
+            else -> cursor++
+        }
+    }
+    return String(chars)
+}
+
+private fun blank(
+    chars: CharArray,
+    start: Int,
+    end: Int,
+) {
+    for (index in start until end) {
+        if (chars[index] != '\n' && chars[index] != '\r') chars[index] = ' '
+    }
 }
 
 internal fun requireSize(
