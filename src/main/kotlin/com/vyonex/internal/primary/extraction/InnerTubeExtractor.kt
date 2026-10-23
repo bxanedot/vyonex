@@ -211,44 +211,46 @@ class InnerTubeExtractor internal constructor(
     }
 
     override suspend fun prewarm() {
-        val startMs = Clock.System.now().toEpochMilliseconds()
+        val startedAtMs = Clock.System.now().toEpochMilliseconds()
         try {
-            val initialSession = innerTube.sessionSnapshot()
+            val sessionAtStart = innerTube.sessionSnapshot()
             val fetchedVisitorData =
-                if (tokenProvider.capabilities.providers.isNotEmpty()) {
-                    initialSession.visitorData ?: innerTube.fetchFreshVisitorData(initialSession)
-                } else {
-                    null
-                }
+                sessionAtStart.visitorData
+                    ?: if (tokenProvider.capabilities.providers.isNotEmpty()) {
+                        innerTube.fetchFreshVisitorData(sessionAtStart)
+                    } else {
+                        null
+                    }
 
-            suspend fun fetchConfig(useLoginCookies: Boolean) =
+            suspend fun playerConfig(useLoginCookies: Boolean): PlayerConfig =
                 playerConfigFetchMutex.withLock {
                     getCachedPlayerConfigLocked(
                         useLoginCookies = useLoginCookies,
                         nowMs = Clock.System.now().toEpochMilliseconds(),
                     )?.config
                         ?: run {
-                            val expectedSession = innerTube.sessionSnapshot()
+                            val sessionUsedForRequest = innerTube.sessionSnapshot()
                             val config = configParser.fetchConfig(PREWARM_VIDEO_ID, useLoginCookies)
-                            if (innerTube.sessionSnapshot() != expectedSession) {
+                            if (innerTube.sessionSnapshot() != sessionUsedForRequest) {
                                 throw CancellationException("InnerTube session changed")
                             }
                             cachePlayerConfig(
                                 useLoginCookies = useLoginCookies,
                                 config = config,
-                                sessionIdentity = expectedSession,
+                                sessionIdentity = sessionUsedForRequest,
                             ).config
                         }
                 }
+
             val configs =
                 coroutineScope {
-                    val defaultConfigFetch = async { fetchConfig(useLoginCookies = false) }
+                    val defaultConfigFetch = async { playerConfig(useLoginCookies = false) }
                     cipherService.initialize()
-                    buildList {
-                        add(defaultConfigFetch.await())
+                    val defaultConfig = defaultConfigFetch.await()
+                    val authenticatedConfig =
                         if (innerTube.hasSapCookieAuth()) {
                             try {
-                                add(fetchConfig(useLoginCookies = true))
+                                playerConfig(useLoginCookies = true)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
@@ -257,34 +259,38 @@ class InnerTubeExtractor internal constructor(
                                     "authenticated player config prewarm failed",
                                     details = mapOf("exceptionType" to (e::class.simpleName ?: "unknown")),
                                 )
+                                null
                             }
+                        } else {
+                            null
                         }
-                    }
+                    listOfNotNull(defaultConfig, authenticatedConfig)
                 }
             coroutineScope {
-                val session = innerTube.sessionSnapshot()
+                val currentSession = innerTube.sessionSnapshot()
+                val visitorData =
+                    currentSession.visitorData
+                        ?: configs.firstNotNullOfOrNull(PlayerConfig::visitorData)
+                        ?: fetchedVisitorData
                 val tokenWarmup =
-                    (session.visitorData ?: configs.firstNotNullOfOrNull(PlayerConfig::visitorData) ?: fetchedVisitorData)
-                        ?.takeIf { it.isNotBlank() && tokenProvider.capabilities.providers.isNotEmpty() }
-                        ?.let { visitorData ->
-                            async {
-                                withTimeoutOrNull(PO_TOKEN_PREFETCH_TIMEOUT) {
-                                    try {
-                                        tokenProvider.getPoToken(PREWARM_VIDEO_ID, visitorData, session.cookie)
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (_: Exception) {
-                                        null
-                                    }
+                    if (visitorData.isNullOrBlank() || tokenProvider.capabilities.providers.isEmpty()) {
+                        null
+                    } else {
+                        async {
+                            withTimeoutOrNull(PO_TOKEN_PREFETCH_TIMEOUT) {
+                                try {
+                                    tokenProvider.getPoToken(PREWARM_VIDEO_ID, visitorData, currentSession.cookie)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    null
                                 }
                             }
                         }
-                // ponytail: prewarm the authenticated player when available.
-                // Warm both only if normal cipher fallbacks become common.
-                configs
-                    .asReversed()
-                    .firstOrNull { it.playerUrl.isNotBlank() }
-                    ?.let { cipherService.preloadPlayerCode(it.playerUrl) }
+                    }
+                configs.lastOrNull { it.playerUrl.isNotBlank() }?.let { config ->
+                    cipherService.preloadPlayerCode(config.playerUrl)
+                }
                 tokenWarmup?.await()
             }
         } catch (e: CancellationException) {
@@ -293,7 +299,7 @@ class InnerTubeExtractor internal constructor(
             logger.w(TAG, "player config prewarm failed", details = mapOf("exceptionType" to (e::class.simpleName ?: "unknown")))
             cipherService.prewarmPlayerCipher()
         }
-        logger.d(TAG, "prewarm completed", details = mapOf("elapsedMs" to (Clock.System.now().toEpochMilliseconds() - startMs).toString()))
+        logger.d(TAG, "prewarm completed", details = mapOf("elapsedMs" to (Clock.System.now().toEpochMilliseconds() - startedAtMs).toString()))
     }
 
     override suspend fun extract(
@@ -1599,27 +1605,23 @@ class InnerTubeExtractor internal constructor(
 
     private fun Format.hasReadyVideoUrl(): Boolean = url?.let { !it.hasNParameter() && isAllowedMediaUrl(it) } == true
 
-    private fun isAllowedMediaUrl(value: String): Boolean =
-        runCatching { Url(value) }.getOrNull()?.let {
-            it.protocol == URLProtocol.HTTPS &&
-                it.port == 443 &&
-                (
-                    it.host == "googlevideo.com" || it.host.endsWith(".googlevideo.com") ||
-                        it.host == "youtube.com" || it.host.endsWith(".youtube.com")
-                ) &&
-                it.encodedPath == "/videoplayback" && it.user == null && it.password == null
-        } == true
-
-    private fun isAllowedHlsUrl(value: String): Boolean =
-        runCatching { Url(value) }.getOrNull()?.let {
-            it.protocol == URLProtocol.HTTPS && it.port == 443 && it.user == null && it.password == null &&
-                (
-                    it.host == "googlevideo.com" || it.host.endsWith(".googlevideo.com") ||
-                        it.host == "youtube.com" || it.host.endsWith(".youtube.com")
-                ) &&
-                (it.encodedPath.startsWith("/manifest/") || it.encodedPath.startsWith("/api/manifest/"))
-        } == true
 }
+
+internal fun isAllowedMediaUrl(value: String): Boolean =
+    runCatching { Url(value) }.getOrNull()?.let { it.isYouTubeDeliveryUrl() && it.encodedPath == "/videoplayback" } == true
+
+internal fun isAllowedHlsUrl(value: String): Boolean =
+    runCatching { Url(value) }.getOrNull()?.let {
+        it.isYouTubeDeliveryUrl() &&
+            (it.encodedPath.startsWith("/manifest/") || it.encodedPath.startsWith("/api/manifest/"))
+    } == true
+
+private fun Url.isYouTubeDeliveryUrl(): Boolean =
+    protocol == URLProtocol.HTTPS &&
+        port == 443 &&
+        user == null &&
+        password == null &&
+        (host == "googlevideo.com" || host.endsWith(".googlevideo.com") || host == "youtube.com" || host.endsWith(".youtube.com"))
 
 internal fun requiresBoundedMediaRange(clientName: String): Boolean =
     clientName == "ANDROID_VR" || clientName == "IOS" || clientName == "TVHTML5_SIMPLY"
