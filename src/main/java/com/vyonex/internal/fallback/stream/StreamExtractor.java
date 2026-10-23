@@ -22,11 +22,14 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Common extraction contract for audio and video pages. */
 public abstract class StreamExtractor extends Extractor {
     public static final int NO_AGE_LIMIT = 0;
     public static final long UNKNOWN_SUBSCRIBER_COUNT = -1;
+    private static final Pattern TIMESTAMP_COMPONENT = Pattern.compile("(\\d+)([hms]?)");
 
     public StreamExtractor(final StreamingService service, final LinkHandler linkHandler) {
         super(service, linkHandler);
@@ -91,25 +94,55 @@ public abstract class StreamExtractor extends Extractor {
         }
         if (timestamp.isEmpty()) return 0;
 
+        final int separator = timestamp.indexOf('=');
+        final String components = separator < 0 ? timestamp : timestamp.substring(separator + 1);
+        final Matcher matcher = TIMESTAMP_COMPONENT.matcher(components);
+        int consumed = 0;
+        int lastUnitOrder = 4;
+        long totalSeconds = 0;
         try {
-            String seconds = "";
-            String minutes = "";
-            String hours = "";
-            try {
-                seconds = Parser.matchGroup1("(\\d+)s", timestamp);
-                minutes = Parser.matchGroup1("(\\d+)m", timestamp);
-                hours = Parser.matchGroup1("(\\d+)h", timestamp);
-            } catch (final Parser.RegexException labelledTimestamp) {
-                if (seconds.isEmpty() && minutes.isEmpty()) {
-                    seconds = Parser.matchGroup1("t=(\\d+)", timestamp);
+            while (matcher.find()) {
+                if (matcher.start() != consumed) {
+                    throw new ParsingException("Could not get timestamp.");
                 }
+
+                final String unit = matcher.group(2);
+                final long multiplier;
+                if (unit.isEmpty()) {
+                    if (consumed != 0 || matcher.end() != components.length()) {
+                        throw new ParsingException("Could not get timestamp.");
+                    }
+                    multiplier = 1;
+                } else {
+                    final int unitOrder = switch (unit) {
+                        case "h" -> 3;
+                        case "m" -> 2;
+                        case "s" -> 1;
+                        default -> throw new ParsingException("Could not get timestamp.");
+                    };
+                    if (unitOrder >= lastUnitOrder) {
+                        throw new ParsingException("Could not get timestamp.");
+                    }
+                    lastUnitOrder = unitOrder;
+                    multiplier = switch (unitOrder) {
+                        case 3 -> 3600;
+                        case 2 -> 60;
+                        default -> 1;
+                    };
+                }
+
+                totalSeconds = Math.addExact(totalSeconds,
+                        Math.multiplyExact(Long.parseLong(matcher.group(1)), multiplier));
+                consumed = matcher.end();
             }
-            return (seconds.isEmpty() ? 0 : Long.parseLong(seconds))
-                    + 60L * (minutes.isEmpty() ? 0 : Long.parseLong(minutes))
-                    + 3600L * (hours.isEmpty() ? 0 : Long.parseLong(hours));
-        } catch (final NumberFormatException | ParsingException error) {
-            throw new ParsingException("Could not get timestamp.", error);
+        } catch (final NumberFormatException | ArithmeticException malformedTimestamp) {
+            throw new ParsingException("Could not get timestamp.", malformedTimestamp);
         }
+
+        if (consumed != components.length()) {
+            throw new ParsingException("Could not get timestamp.");
+        }
+        return totalSeconds;
     }
 
     @Nonnull public String getHost() throws ParsingException { return ""; }
