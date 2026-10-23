@@ -102,6 +102,41 @@ class InnerTubeExtractorDirectMappingContractTest {
     }
 
     @Test
+    fun mapsAValidSabrAudioResponseIntoAPlaybackStream() = runBlocking {
+        val requests = mutableListOf<String>()
+        val client = playerClient(SABR_RESPONSE, requests)
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser()
+        val sabrClient = TEST_CLIENT.resolveClients(ContentHints()).single().copy(clientName = "TEST_SABR", useSabr = true)
+        val fallbackStrategy =
+            object : ClientFallbackStrategy {
+                override fun resolveClients(hints: ContentHints): List<YouTubeClient> = listOf(sabrClient)
+            }
+        try {
+            val stream =
+                extractor(innerTube, parser, InnerTubeLogger.NONE, fallbackStrategy = fallbackStrategy).extract(
+                    videoId = VIDEO_ID,
+                    hints = ContentHints(),
+                    clientPlaybackNonce = CLIENT_NONCE,
+                )
+
+            assertEquals("sabr://$VIDEO_ID", stream?.audioUrl)
+            assertEquals(140, stream?.itag)
+            assertEquals("audio/mp4", stream?.mimeType)
+            assertEquals("TEST_SABR", stream?.clientName)
+            assertEquals(
+                "https://rr1.googlevideo.com/videoplayback?expire=2000000000&cpn=$CLIENT_NONCE",
+                stream?.sabrBootstrap?.serverAbrStreamingUrl,
+            )
+            assertNull(parser.watchConfigVideoId)
+            assertEquals(1, requests.size)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
     fun skipsAnInvalidHlsManifestAndUsesTheNextAllowedClientManifest() = runBlocking {
         val requests = mutableListOf<String>()
         val invalidManifest = "https://attacker.test/manifest/hls_variant/live"
@@ -174,6 +209,62 @@ class InnerTubeExtractorDirectMappingContractTest {
             assertEquals(listOf(listOf(140)), cipher.processedItags)
             assertEquals(VIDEO_ID, parser.watchConfigVideoId)
             assertEquals(2, requests.size)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
+    fun reusesAPlayerConfigAfterItResolvesAPlayableStream() = runBlocking {
+        val requests = mutableListOf<String>()
+        val client = playerClient(CIPHER_RESPONSE, requests)
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser()
+        val cipher =
+            RecordingCipherService { format ->
+                format.copy(url = RESOLVED_AUDIO_URL, signatureCipher = null, cipher = null)
+            }
+        try {
+            val extractor = extractor(innerTube, parser, InnerTubeLogger.NONE, cipher)
+            val first = extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)
+            val second = extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)
+
+            assertEquals("$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE", first?.audioUrl)
+            assertEquals("$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE", second?.audioUrl)
+            assertEquals(1, parser.watchConfigFetches)
+            assertEquals(4, requests.size)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
+    fun dropsCachedPlayerConfigWhenTheSessionChanges() = runBlocking {
+        val requests = mutableListOf<String>()
+        val client = playerClient(CIPHER_RESPONSE, requests)
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser()
+        val cipher =
+            RecordingCipherService { format ->
+                format.copy(url = RESOLVED_AUDIO_URL, signatureCipher = null, cipher = null)
+            }
+        try {
+            val extractor = extractor(innerTube, parser, InnerTubeLogger.NONE, cipher)
+            assertEquals(
+                "$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE",
+                extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)?.audioUrl,
+            )
+
+            innerTube.cookie = "SID=session; SAPISID=credential"
+
+            assertEquals(
+                "$RESOLVED_AUDIO_URL&cpn=$CLIENT_NONCE",
+                extractor.extract(VIDEO_ID, ContentHints(), clientPlaybackNonce = CLIENT_NONCE)?.audioUrl,
+            )
+            assertEquals(2, parser.watchConfigFetches)
+            assertEquals(4, requests.size)
         } finally {
             innerTube.close()
             client.close()
@@ -288,8 +379,10 @@ class InnerTubeExtractorDirectMappingContractTest {
 
     private class RecordingConfigParser : YtConfigParser {
         var watchConfigVideoId: String? = null
+        var watchConfigFetches = 0
 
         override suspend fun fetchConfig(videoId: String, useLoginCookies: Boolean): PlayerConfig {
+            watchConfigFetches++
             watchConfigVideoId = videoId
             return WATCH_CONFIG
         }
@@ -323,6 +416,8 @@ class InnerTubeExtractorDirectMappingContractTest {
         const val RESOLVED_VIDEO_URL = "https://rr1.googlevideo.com/videoplayback?expire=2000000000&itag=137"
         const val HLS_RESPONSE =
             """{"playabilityStatus":{"status":"OK"},"streamingData":{"hlsManifestUrl":"$HLS_URL","adaptiveFormats":[]},"videoDetails":{"videoId":"abcdefghijk","isLiveContent":true}}"""
+        const val SABR_RESPONSE =
+            """{"playabilityStatus":{"status":"OK"},"streamingData":{"serverAbrStreamingUrl":"https://rr1.googlevideo.com/videoplayback?expire=2000000000","adaptiveFormats":[{"itag":140,"mimeType":"audio/mp4; codecs=\"mp4a.40.2\"","bitrate":128000,"contentLength":456789,"approxDurationMs":"123000","audioSampleRate":44100,"audioChannels":2,"lastModified":"111"},{"itag":137,"mimeType":"video/mp4; codecs=\"avc1.640028\"","bitrate":400000,"width":640,"height":360,"lastModified":"222"}],"expiresInSeconds":3600},"videoDetails":{"videoId":"abcdefghijk","title":"Song title","author":"Artist name","lengthSeconds":"123","isLiveContent":false},"playerConfig":{"mediaCommonConfig":{"mediaUstreamerRequestConfig":{"videoPlaybackUstreamerConfig":"YWJj"}}}}"""
         val WATCH_CONFIG = PlayerConfig(PLAYER_SCRIPT_URL, 12345, null, null)
         const val PLAYER_RESPONSE =
             """{"playabilityStatus":{"status":"OK"},"streamingData":{"formats":[{"itag":140,"url":"https://rr1.googlevideo.com/videoplayback?expire=2000000000&itag=140","mimeType":"audio/mp4; codecs=\"mp4a.40.2\"","bitrate":128000,"contentLength":456789,"audioSampleRate":44100,"audioChannels":2}],"adaptiveFormats":[]},"videoDetails":{"videoId":"abcdefghijk","title":"Song title","author":"Artist name","channelId":"channel-1","lengthSeconds":"123","isLiveContent":false},"playbackTracking":{"videostatsPlaybackUrl":{"baseUrl":"https://youtube.com/ptracking?cpn=old"}}}"""

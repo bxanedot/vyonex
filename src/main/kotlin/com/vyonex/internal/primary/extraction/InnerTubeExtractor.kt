@@ -917,8 +917,8 @@ class InnerTubeExtractor internal constructor(
                         }.getOrNull()
                     }
                 if (processedSabrUrl != null && trackedSabrUrl == null) continue
-                val bootstrapResult =
-                    runCatching {
+                val bootstrap =
+                    try {
                         response.toSabrBootstrap(
                             clientId = result.clientId,
                             clientVersion = result.clientVersion,
@@ -929,20 +929,16 @@ class InnerTubeExtractor internal constructor(
                             serverAbrStreamingUrlOverride = trackedSabrUrl,
                             videoFormat = videoFormat,
                         )
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        logger.w(
+                            TAG,
+                            "SABR bootstrap rejected",
+                            details = mapOf("client" to result.clientName, "exceptionType" to (error::class.simpleName ?: "unknown")),
+                        )
+                        continue
                     }
-                val bootstrap = bootstrapResult.getOrNull()
-                if (bootstrap == null) {
-                    logger.w(
-                        TAG,
-                        "SABR bootstrap rejected",
-                        details =
-                            mapOf(
-                                "client" to result.clientName,
-                                "exceptionType" to (bootstrapResult.exceptionOrNull()?.let { it::class.simpleName } ?: "unknown"),
-                            ),
-                    )
-                    continue
-                }
                 val expiresAt =
                     streamingData.expiresInSeconds
                         ?.takeIf { it > 0 }
