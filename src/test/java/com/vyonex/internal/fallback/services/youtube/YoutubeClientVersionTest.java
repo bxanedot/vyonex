@@ -8,9 +8,12 @@ import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +70,13 @@ class YoutubeClientVersionTest {
 
         assertEquals(ClientsConstants.WEB_REMIX_HARDCODED_CLIENT_VERSION,
                 withDownloader(downloader, YoutubeParsingHelper::getYoutubeMusicClientVersion));
+        final Request request = downloader.requests.get(0);
+        final JsonObject payload = JsonParser.object().from(new String(
+                request.dataToSend(), StandardCharsets.UTF_8));
+        assertEquals(ClientsConstants.WEB_REMIX_HARDCODED_CLIENT_VERSION,
+                payload.getObject("context").getObject("client").getString("clientVersion"));
+        assertEquals(List.of(ClientsConstants.WEB_REMIX_HARDCODED_CLIENT_VERSION),
+                request.headers().get("X-YouTube-Client-Version"));
         assertEquals(List.of("https://music.youtube.com/youtubei/v1/music/"
                         + "get_search_suggestions?prettyPrint=false"), downloader.urls);
     }
@@ -104,9 +114,11 @@ class YoutubeClientVersionTest {
         private String htmlBody = "";
         private String guideBody = "";
         private final List<String> urls = new ArrayList<>();
+        private final List<Request> requests = new ArrayList<>();
 
         @Override
         public Response execute(final Request request) throws IOException, ReCaptchaException {
+            requests.add(request);
             urls.add(request.url());
             if (request.url().endsWith("/sw.js")) {
                 return response(request.url(), workerBody);
