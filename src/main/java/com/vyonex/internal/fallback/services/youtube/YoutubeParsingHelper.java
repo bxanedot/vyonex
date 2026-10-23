@@ -65,7 +65,6 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.stream.AudioTrackType;
 import com.vyonex.internal.fallback.utils.JsonUtils;
 import com.vyonex.internal.fallback.utils.Parser;
-import com.vyonex.internal.fallback.utils.Utils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -887,7 +886,7 @@ public final class YoutubeParsingHelper {
     public static String fixThumbnailUrl(@Nonnull final String thumbnailUrl) {
         final String value = thumbnailUrl.startsWith("//")
                 ? thumbnailUrl.substring(2) : thumbnailUrl;
-        return value.startsWith(HTTP) ? Utils.replaceHttpWithHttps(value)
+        return value.startsWith(HTTP) ? HTTPS + value.substring(HTTP.length())
                 : value.startsWith(HTTPS) ? value : "https://" + value;
     }
 
@@ -929,7 +928,8 @@ public final class YoutubeParsingHelper {
     public static List<Image> getImagesFromThumbnailsArray(
             @Nonnull final JsonArray thumbnails) {
         final List<Image> images = new java.util.ArrayList<>(thumbnails.size());
-        for (final JsonObject thumbnail : thumbnails.streamAsJsonObjects().toList()) {
+        for (int index = 0; index < thumbnails.size(); index++) {
+            final JsonObject thumbnail = thumbnails.getObject(index);
             final String url = thumbnail.getString("url");
             if (isNullOrEmpty(url)) continue;
             final int height = thumbnail.getInt("height", Image.HEIGHT_UNKNOWN);

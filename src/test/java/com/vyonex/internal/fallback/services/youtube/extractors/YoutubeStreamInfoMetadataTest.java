@@ -37,6 +37,13 @@ class YoutubeStreamInfoMetadataTest {
                         + "\"simpleText\":\"Creative Commons\"}]}}]}}}")));
         assertEquals("YouTube licence",
                 YoutubeStreamExtractor.parseLicense(JsonParser.object().from("{}")));
+        assertEquals("CC BY", YoutubeStreamExtractor.parseLicense(JsonParser.object().from(
+                "{\"metadataRowContainer\":{\"metadataRowContainerRenderer\":{"
+                        + "\"rows\":[{\"metadataRowRenderer\":{\"title\":{"
+                        + "\"simpleText\":\"Category\"},\"contents\":[{"
+                        + "\"simpleText\":\"Music\"}]}},{\"metadataRowRenderer\":{"
+                        + "\"title\":{\"simpleText\":\"Licence\"},\"contents\":[{"
+                        + "\"simpleText\":\"CC BY\"}]}}]}}}")));
         assertEquals(List.of("one", "two"), YoutubeStreamExtractor.parseTags(JsonParser.object()
                 .from("{\"keywords\":[\"one\",\"two\"]}")));
     }
