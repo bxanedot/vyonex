@@ -1,165 +1,127 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.utils;
 
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
-
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import com.vyonex.internal.fallback.exceptions.ParsingException;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
+import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 
+/** Shared JSON value readers used by VyonEx extractors. */
 public final class JsonUtils {
-    private JsonUtils() {
-    }
+    private JsonUtils() { }
 
     @Nonnull
     public static Object getValue(@Nonnull final JsonObject object,
                                   @Nonnull final String path) throws ParsingException {
-
-        final List<String> keys = Arrays.asList(path.split("\\."));
-        final JsonObject parentObject = getObject(object, keys.subList(0, keys.size() - 1));
-        if (parentObject == null) {
-            throw new ParsingException("Unable to get " + path);
+        final String[] keys = path.split("\\.");
+        JsonObject current = object;
+        for (int index = 0; index < keys.length - 1; index++) {
+            current = current.getObject(keys[index], null);
+            if (current == null) {
+                throw missingValue(path);
+            }
         }
 
-        final Object result = parentObject.get(keys.get(keys.size() - 1));
-        if (result == null) {
-            throw new ParsingException("Unable to get " + path);
+        final Object value = current.get(keys[keys.length - 1]);
+        if (value == null) {
+            throw missingValue(path);
         }
-        return result;
+        return value;
     }
 
-    private static <T> T getInstanceOf(@Nonnull final JsonObject object,
+    private static ParsingException missingValue(final String path) {
+        return new ParsingException("Unable to get " + path);
+    }
+
+    private static <T> T getTypedValue(@Nonnull final JsonObject object,
                                        @Nonnull final String path,
-                                       @Nonnull final Class<T> klass) throws ParsingException {
+                                       @Nonnull final Class<T> type) throws ParsingException {
         final Object value = getValue(object, path);
-        if (klass.isInstance(value)) {
-            return klass.cast(value);
-        } else {
+        if (!type.isInstance(value)) {
             throw new ParsingException("Wrong data type at path " + path);
         }
+        return type.cast(value);
     }
 
     @Nonnull
     public static String getString(@Nonnull final JsonObject object, @Nonnull final String path)
             throws ParsingException {
-        return getInstanceOf(object, path, String.class);
+        return getTypedValue(object, path, String.class);
     }
 
     @Nonnull
     public static Boolean getBoolean(@Nonnull final JsonObject object,
                                      @Nonnull final String path) throws ParsingException {
-        return getInstanceOf(object, path, Boolean.class);
+        return getTypedValue(object, path, Boolean.class);
     }
 
     @Nonnull
     public static Number getNumber(@Nonnull final JsonObject object,
-                                   @Nonnull final String path)
-            throws ParsingException {
-        return getInstanceOf(object, path, Number.class);
+                                   @Nonnull final String path) throws ParsingException {
+        return getTypedValue(object, path, Number.class);
     }
 
     @Nonnull
     public static JsonObject getObject(@Nonnull final JsonObject object,
                                        @Nonnull final String path) throws ParsingException {
-        return getInstanceOf(object, path, JsonObject.class);
+        return getTypedValue(object, path, JsonObject.class);
     }
 
     @Nonnull
-    public static JsonArray getArray(@Nonnull final JsonObject object, @Nonnull final String path)
-            throws ParsingException {
-        return getInstanceOf(object, path, JsonArray.class);
+    public static JsonArray getArray(@Nonnull final JsonObject object,
+                                     @Nonnull final String path) throws ParsingException {
+        return getTypedValue(object, path, JsonArray.class);
     }
 
     @Nonnull
-    public static List<Object> getValues(@Nonnull final JsonArray array, @Nonnull final String path)
-            throws ParsingException {
-
-        final List<Object> result = new ArrayList<>();
-        for (int i = 0; i < array.size(); i++) {
-            final JsonObject obj = array.getObject(i);
-            result.add(getValue(obj, path));
+    public static List<Object> getValues(@Nonnull final JsonArray array,
+                                         @Nonnull final String path) throws ParsingException {
+        final List<Object> values = new ArrayList<>(array.size());
+        for (int index = 0; index < array.size(); index++) {
+            values.add(getValue(array.getObject(index), path));
         }
-        return result;
-    }
-
-    @Nullable
-    private static JsonObject getObject(@Nonnull final JsonObject object,
-                                        @Nonnull final List<String> keys) {
-        JsonObject result = object;
-        for (final String key : keys) {
-            result = result.getObject(key);
-            if (result == null) {
-                break;
-            }
-        }
-        return result;
+        return values;
     }
 
     public static JsonArray toJsonArray(final String responseBody) throws ParsingException {
         try {
             return JsonParser.array().from(responseBody);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse JSON", e);
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Could not parse JSON", error);
         }
     }
 
     public static JsonObject toJsonObject(final String responseBody) throws ParsingException {
         try {
             return JsonParser.object().from(responseBody);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Could not parse JSON", e);
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Could not parse JSON", error);
         }
     }
 
-    /**
-     * <p>Get an attribute of a web page as JSON
-     *
-     * <p>Originally a part of bandcampDirect.</p>
-     * <p>Example HTML:</p>
-     * <pre>
-     * {@code
-     * <p data-town="{&quot;name&quot;:&quot;Mycenae&quot;,&quot;country&quot;:&quot;Greece&quot;}">
-     * This is Sparta!</p>
-     * }
-     * </pre>
-     * <p>Calling this function to get the attribute <code>data-town</code> returns the JsonObject
-     * for</p>
-     * <pre>
-     * {@code
-     *   {
-     *     "name": "Mycenae",
-     *     "country": "Greece"
-     *   }
-     * }
-     * </pre>
-     *
-     * @param html     The HTML where the JSON we're looking for is stored inside a
-     *                 variable inside some JavaScript block
-     * @param variable Name of the variable
-     * @return The JsonObject stored in the variable with this name
-     */
-    public static JsonObject getJsonData(final String html, final String variable)
+    public static JsonObject getJsonData(final String html, final String attribute)
             throws JsonParserException, ArrayIndexOutOfBoundsException {
-        final Document document = Jsoup.parse(html);
-        final String json = document.getElementsByAttribute(variable).attr(variable);
-        return JsonParser.object().from(json);
+        final Element element = Jsoup.parse(html).getElementsByAttribute(attribute).first();
+        return JsonParser.object().from(element == null ? "" : element.attr(attribute));
     }
 
+    @Nonnull
     public static List<String> getStringListFromJsonArray(@Nonnull final JsonArray array) {
-        return array.stream()
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
-                .collect(Collectors.toList());
+        final List<String> values = new ArrayList<>();
+        for (final Object value : array) {
+            if (value instanceof String) {
+                values.add((String) value);
+            }
+        }
+        return values;
     }
 }
