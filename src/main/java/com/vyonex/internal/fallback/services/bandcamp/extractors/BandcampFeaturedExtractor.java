@@ -32,7 +32,7 @@ public class BandcampFeaturedExtractor extends KioskExtractor<PlaylistInfoItem> 
     public static final String MORE_FEATURED_API_URL =
             BASE_API_URL + "/mobile/24/feed_older_logged_out";
 
-    private JsonObject response;
+    private InfoItemsPage<PlaylistInfoItem> responsePage;
 
     public BandcampFeaturedExtractor(final StreamingService service,
                                      final ListLinkHandler linkHandler,
@@ -46,8 +46,10 @@ public class BandcampFeaturedExtractor extends KioskExtractor<PlaylistInfoItem> 
         final byte[] body = JsonWriter.string().object().value("platform", "")
                 .value("version", 0).end().done().getBytes(StandardCharsets.UTF_8);
         try {
-            response = JsonParser.object().from(downloader.postWithContentTypeJson(
+            final JsonObject response = JsonParser.object().from(downloader.postWithContentTypeJson(
                     FEATURED_API_URL, Map.of(), body).responseBody());
+            responsePage = extract(response.getObject("feed_content").getObject("stories")
+                    .getArray("featured"));
         } catch (final JsonParserException e) {
             throw new ParsingException("Bandcamp featured response is invalid", e);
         }
@@ -60,19 +62,20 @@ public class BandcampFeaturedExtractor extends KioskExtractor<PlaylistInfoItem> 
     @Nonnull
     @Override
     public InfoItemsPage<PlaylistInfoItem> getInitialPage() {
-        return extract(response.getObject("feed_content").getObject("stories")
-                .getArray("featured"));
+        return responsePage;
     }
 
     @Override
     public InfoItemsPage<PlaylistInfoItem> getPage(final Page page)
             throws IOException, ExtractionException {
         try {
-            response = JsonParser.object().from(getDownloader().get(page.getUrl()).responseBody());
+            final JsonObject response = JsonParser.object().from(
+                    getDownloader().get(page.getUrl()).responseBody());
+            responsePage = extract(response.getObject("stories").getArray("featured"));
         } catch (final JsonParserException e) {
             throw new ParsingException("Bandcamp featured page is invalid", e);
         }
-        return extract(response.getObject("stories").getArray("featured"));
+        return responsePage;
     }
 
     private InfoItemsPage<PlaylistInfoItem> extract(final JsonArray stories) {
