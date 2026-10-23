@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import com.vyonex.internal.fallback.stream.StreamType;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.json.JsonObject;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MediaCCCInfoItemTest {
     @Test
@@ -87,5 +89,16 @@ class MediaCCCInfoItemTest {
                 "{\"streams\":[{\"type\":\"audio\"}]}");
         assertEquals(StreamType.AUDIO_LIVE_STREAM,
                 new MediaCCCLiveStreamKioskExtractor(conference, "Stage", audioRoom).getStreamType());
+    }
+
+    @Test
+    void rejectsEventItemsWithoutTitleOrGuid() throws Exception {
+        final JsonObject noTitle = JsonParser.object().from("{\"guid\":\"talk-1\"}");
+        final JsonObject noGuid = JsonParser.object().from("{\"title\":\"Talk\"}");
+
+        assertThrows(ParsingException.class,
+                () -> new MediaCCCStreamInfoItemExtractor(noTitle).getName());
+        assertThrows(ParsingException.class,
+                () -> new MediaCCCStreamInfoItemExtractor(noGuid).getUrl());
     }
 }
