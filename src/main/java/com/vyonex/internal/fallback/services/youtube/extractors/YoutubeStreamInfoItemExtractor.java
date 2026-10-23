@@ -35,52 +35,38 @@ import javax.annotation.Nullable;
 
 public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     // shortcut: English accessibility labels only, add locales when fixtures require them.
-    private static final Pattern ACCESSIBILITY_VIEW_COUNT = Pattern.compile("([\\d,]+) views$");
+    private static final Pattern ACCESSIBLE_VIEW_COUNT = Pattern.compile("([\\d,]+) views$");
     private static final String NO_VIEWS = "no views";
+    private static final List<String> BYLINE_FIELDS =
+            List.of("longBylineText", "ownerText", "shortBylineText");
 
     private final JsonObject item;
-    private final TimeAgoParser timeAgoParser;
-    private StreamType streamType;
-    private Boolean premiere;
+    private final TimeAgoParser dates;
+    private final StreamType streamType;
 
     public YoutubeStreamInfoItemExtractor(final JsonObject item,
                                           @Nullable final TimeAgoParser timeAgoParser) {
         this.item = item;
-        this.timeAgoParser = timeAgoParser;
+        dates = timeAgoParser;
+        streamType = isLive(item) ? StreamType.LIVE_STREAM : StreamType.VIDEO_STREAM;
     }
 
-    @Override
-    public StreamType getStreamType() {
-        if (streamType != null) return streamType;
-        for (final JsonObject badge : item.getArray("badges").streamAsJsonObjects().toList()) {
-            final JsonObject renderer = badge.getObject("metadataBadgeRenderer");
-            if ("BADGE_STYLE_TYPE_LIVE_NOW".equals(renderer.getString("style"))
-                    || "LIVE NOW".equals(renderer.getString("label"))) {
-                return streamType = StreamType.LIVE_STREAM;
-            }
-        }
-        for (final JsonObject overlay : item.getArray("thumbnailOverlays")
-                .streamAsJsonObjects().toList()) {
-            if ("LIVE".equalsIgnoreCase(overlay.getObject("thumbnailOverlayTimeStatusRenderer")
-                    .getString("style", ""))) {
-                return streamType = StreamType.LIVE_STREAM;
-            }
-        }
-        return streamType = StreamType.VIDEO_STREAM;
-    }
+    @Override public StreamType getStreamType() { return streamType; }
 
     @Override
     public boolean isAd() throws ParsingException {
-        return isPremium() || "[Private video]".equals(getName())
-                || "[Deleted video]".equals(getName());
+        final String name = getName();
+        return isPremium() || "[Private video]".equals(name) || "[Deleted video]".equals(name);
     }
 
     @Override
     public String getUrl() throws ParsingException {
+        final String videoId = item.getString("videoId");
+        if (isNullOrEmpty(videoId)) throw new ParsingException("Could not get video ID");
         try {
-            return YoutubeStreamLinkHandlerFactory.getInstance().getUrl(item.getString("videoId"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get url", e);
+            return YoutubeStreamLinkHandlerFactory.getInstance().getUrl(videoId);
+        } catch (final Exception error) {
+            throw new ParsingException("Could not build video URL", error);
         }
     }
 
@@ -95,40 +81,37 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
 
     @Override
     public long getDuration() throws ParsingException {
-        if (getStreamType() == StreamType.LIVE_STREAM) return -1;
-        String duration = getTextFromObject(item.getObject("lengthText"));
-        if (isNullOrEmpty(duration)) duration = item.getString("lengthSeconds");
-        if (isNullOrEmpty(duration)) {
-            for (final JsonObject overlay : item.getArray("thumbnailOverlays")
-                    .streamAsJsonObjects().toList()) {
-                final JsonObject status = overlay.getObject("thumbnailOverlayTimeStatusRenderer");
-                final String text = getTextFromObject(status.getObject("text"));
-                if (isNullOrEmpty(text)) continue;
-                try {
-                    return YoutubeParsingHelper.parseDurationString(text);
-                } catch (final ParsingException | NumberFormatException ignored) {
-                    // Try another thumbnail duration when the overlay is decorative.
-                }
+        if (streamType == StreamType.LIVE_STREAM) return -1;
+
+        final String duration = firstNonEmpty(
+                getTextFromObject(item.getObject("lengthText")), item.getString("lengthSeconds"));
+        if (!isNullOrEmpty(duration)) return YoutubeParsingHelper.parseDurationString(duration);
+
+        for (final JsonObject overlay : objects(item.getArray("thumbnailOverlays"))) {
+            final String text = getTextFromObject(
+                    overlay.getObject("thumbnailOverlayTimeStatusRenderer").getObject("text"));
+            if (isNullOrEmpty(text)) continue;
+            try {
+                return YoutubeParsingHelper.parseDurationString(text);
+            } catch (final ParsingException | NumberFormatException ignored) {
+                // Decorative overlays can contain text that is not a duration.
             }
-        } else {
-            return YoutubeParsingHelper.parseDurationString(duration);
         }
-        if (isPremiere()) return -1;
+        if (item.has("upcomingEventData")) return -1;
         throw new ParsingException("Could not get duration");
     }
 
     @Override
     public String getUploaderName() throws ParsingException {
-        final String name = firstText("longBylineText", "ownerText", "shortBylineText");
+        final String name = firstText(BYLINE_FIELDS);
         if (isNullOrEmpty(name)) throw new ParsingException("Could not get uploader name");
         return name;
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        for (final String field : List.of("longBylineText", "ownerText", "shortBylineText")) {
-            for (final JsonObject run : item.getObject(field).getArray("runs")
-                    .streamAsJsonObjects().toList()) {
+        for (final String field : BYLINE_FIELDS) {
+            for (final JsonObject run : objects(item.getObject(field).getArray("runs"))) {
                 final String url = getUrlFromNavigationEndpoint(
                         run.getObject("navigationEndpoint"));
                 if (!isNullOrEmpty(url)) return url;
@@ -140,16 +123,13 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() {
-        if (item.has("channelThumbnailSupportedRenderers")) {
-            return getImagesFromThumbnailsArray(item.getObject("channelThumbnailSupportedRenderers")
-                    .getObject("channelThumbnailWithLinkRenderer").getObject("thumbnail")
-                    .getArray("thumbnails"));
+        final JsonObject channelImages = item.getObject("channelThumbnailSupportedRenderers")
+                .getObject("channelThumbnailWithLinkRenderer").getObject("thumbnail");
+        if (!channelImages.isEmpty()) {
+            return getImagesFromThumbnailsArray(channelImages.getArray("thumbnails"));
         }
-        if (item.has("channelThumbnail")) {
-            return getImagesFromThumbnailsArray(item.getObject("channelThumbnail")
-                    .getArray("thumbnails"));
-        }
-        return List.of();
+        return getImagesFromThumbnailsArray(
+                item.getObject("channelThumbnail").getArray("thumbnails"));
     }
 
     @Override
@@ -160,68 +140,68 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     @Nullable
     @Override
     public String getTextualUploadDate() throws ParsingException {
-        if (getStreamType() == StreamType.LIVE_STREAM) return null;
-        if (isPremiere()) {
+        if (streamType == StreamType.LIVE_STREAM) return null;
+        if (item.has("upcomingEventData")) {
             return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                    .withZone(ZoneId.systemDefault()).format(getInstantFromPremiere());
+                    .withZone(ZoneId.systemDefault()).format(premiereStart());
         }
         final String published = getTextFromObject(item.getObject("publishedTimeText"));
         if (!isNullOrEmpty(published)) return published;
-        final JsonArray runs = item.getObject("videoInfo").getArray("runs");
-        return runs.size() > 2 ? runs.getObject(2).getString("text") : null;
+        final JsonArray details = item.getObject("videoInfo").getArray("runs");
+        return details.size() > 2 ? details.getObject(2).getString("text") : null;
     }
 
     @Nullable
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        if (getStreamType() == StreamType.LIVE_STREAM) return null;
-        if (isPremiere()) return new DateWrapper(getInstantFromPremiere());
-        final String textualDate = getTextualUploadDate();
-        if (timeAgoParser == null || isNullOrEmpty(textualDate)) return null;
+        if (streamType == StreamType.LIVE_STREAM) return null;
+        if (item.has("upcomingEventData")) return new DateWrapper(premiereStart());
+        final String text = getTextualUploadDate();
+        if (dates == null || isNullOrEmpty(text)) return null;
         try {
-            return timeAgoParser.parse(textualDate);
-        } catch (final ParsingException e) {
-            throw new ParsingException("Could not get upload date", e);
+            return dates.parse(text);
+        } catch (final ParsingException error) {
+            throw new ParsingException("Could not get upload date", error);
         }
     }
 
     @Override
     public long getViewCount() {
-        if (isPremium() || isPremiere()) return -1;
-        final String fullCount = getTextFromObject(item.getObject("viewCountText"));
-        final Long parsed = parseViewCount(fullCount, false);
-        if (parsed != null) return parsed;
-        if (getStreamType() != StreamType.LIVE_STREAM) {
-            final String accessibility = item.getObject("title").getObject("accessibility")
+        if (isPremium() || item.has("upcomingEventData")) return -1;
+
+        final Long viewCount = parseCount(getTextFromObject(item.getObject("viewCountText")), false);
+        if (viewCount != null) return viewCount;
+
+        if (streamType != StreamType.LIVE_STREAM) {
+            final String label = item.getObject("title").getObject("accessibility")
                     .getObject("accessibilityData").getString("label", "");
-            final Matcher matcher = ACCESSIBILITY_VIEW_COUNT.matcher(accessibility);
-            if (accessibility.toLowerCase(Locale.ROOT).endsWith(NO_VIEWS)) return 0;
-            if (matcher.find()) {
-                final Long accessibleCount = parseViewCount(matcher.group(1), false);
-                if (accessibleCount != null) return accessibleCount;
+            final Matcher accessible = ACCESSIBLE_VIEW_COUNT.matcher(label);
+            if (label.toLowerCase(Locale.ROOT).endsWith(NO_VIEWS)) return 0;
+            if (accessible.find()) {
+                final Long count = parseCount(accessible.group(1), false);
+                if (count != null) return count;
             }
         }
-        final JsonArray playlistInfo = item.getObject("videoInfo").getArray("runs");
-        if (!playlistInfo.isEmpty()) {
-            final Long playlistCount = parseViewCount(
-                    playlistInfo.getObject(0).getString("text"), true);
-            if (playlistCount != null) return playlistCount;
+
+        final JsonArray details = item.getObject("videoInfo").getArray("runs");
+        if (!details.isEmpty()) {
+            final Long count = parseCount(details.getObject(0).getString("text"), true);
+            if (count != null) return count;
         }
-        final Long shortCount = parseViewCount(
-                getTextFromObject(item.getObject("shortViewCountText")), true);
+        final Long shortCount = parseCount(getTextFromObject(item.getObject("shortViewCountText")), true);
         return shortCount == null ? -1 : shortCount;
     }
 
     @Nullable
-    private static Long parseViewCount(@Nullable final String text, final boolean mixedNumber) {
+    private static Long parseCount(@Nullable final String text, final boolean suffixes) {
         if (isNullOrEmpty(text)) return null;
-        final String normalized = text.toLowerCase(Locale.ROOT);
-        if (normalized.contains(NO_VIEWS)) return 0L;
-        if (normalized.contains("recommended")) return -1L;
+        final String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.contains(NO_VIEWS)) return 0L;
+        if (lower.contains("recommended")) return -1L;
         try {
-            return mixedNumber ? Utils.mixedNumberWordToLong(text)
+            return suffixes ? Utils.mixedNumberWordToLong(text)
                     : Long.parseLong(Utils.removeNonDigitCharacters(text));
-        } catch (final Exception ignored) {
+        } catch (final ParsingException | RuntimeException ignored) {
             return null;
         }
     }
@@ -230,30 +210,6 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     @Override
     public List<Image> getThumbnails() throws ParsingException {
         return getThumbnailsFromInfoItem(item);
-    }
-
-    private boolean isPremium() {
-        for (final JsonObject badge : item.getArray("badges").streamAsJsonObjects().toList()) {
-            if ("Premium".equals(badge.getObject("metadataBadgeRenderer").getString("label"))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isPremiere() {
-        if (premiere == null) premiere = item.has("upcomingEventData");
-        return premiere;
-    }
-
-    private Instant getInstantFromPremiere() throws ParsingException {
-        final String startTime = item.getObject("upcomingEventData").getString("startTime");
-        try {
-            return Instant.ofEpochSecond(Long.parseLong(startTime));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not parse date from premiere: \"" + startTime
-                    + "\"", e);
-        }
     }
 
     @Nullable
@@ -271,43 +227,88 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
     public boolean isShortFormContent() throws ParsingException {
         try {
             final JsonObject endpoint = item.getObject("navigationEndpoint");
-            final JsonObject metadata = endpoint.getObject("commandMetadata")
+            final JsonObject page = endpoint.getObject("commandMetadata")
                     .getObject("webCommandMetadata");
-            if ("WEB_PAGE_TYPE_SHORTS".equals(metadata.getString("webPageType"))
+            if ("WEB_PAGE_TYPE_SHORTS".equals(page.getString("webPageType"))
                     || endpoint.has("reelWatchEndpoint")) return true;
-            for (final JsonObject overlay : item.getArray("thumbnailOverlays")
-                    .streamAsJsonObjects().toList()) {
+
+            for (final JsonObject overlay : objects(item.getArray("thumbnailOverlays"))) {
                 final JsonObject status = overlay.getObject("thumbnailOverlayTimeStatusRenderer");
-                if ("SHORTS".equalsIgnoreCase(status.getString("style", ""))
-                        || status.getObject("icon").getString("iconType", "")
-                        .toLowerCase(Locale.ROOT).contains("shorts")) return true;
+                final String style = status.getString("style", "");
+                final String icon = status.getObject("icon").getString("iconType", "");
+                if ("SHORTS".equalsIgnoreCase(style)
+                        || icon.toLowerCase(Locale.ROOT).contains("shorts")) return true;
             }
             return false;
-        } catch (final Exception e) {
-            throw new ParsingException("Could not determine if this is short-form content", e);
+        } catch (final RuntimeException error) {
+            throw new ParsingException("Could not determine if this is short-form content", error);
         }
-    }
-
-    private boolean isMembersOnly() {
-        return item.getArray("badges").streamAsJsonObjects()
-                .map(badge -> badge.getObject("metadataBadgeRenderer").getString("style"))
-                .anyMatch("BADGE_STYLE_TYPE_MEMBERS_ONLY"::equals);
     }
 
     @Nonnull
     @Override
     public ContentAvailability getContentAvailability() {
-        if (isPremiere()) return ContentAvailability.UPCOMING;
-        if (isMembersOnly()) return ContentAvailability.MEMBERSHIP;
+        if (item.has("upcomingEventData")) return ContentAvailability.UPCOMING;
+        if (hasBadgeStyle("BADGE_STYLE_TYPE_MEMBERS_ONLY")) return ContentAvailability.MEMBERSHIP;
         if (isPremium()) return ContentAvailability.PAID;
         return ContentAvailability.AVAILABLE;
     }
 
-    private String firstText(final String... fields) {
+    private boolean isPremium() {
+        for (final JsonObject badge : objects(item.getArray("badges"))) {
+            if ("Premium".equals(badge.getObject("metadataBadgeRenderer").getString("label"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasBadgeStyle(final String style) {
+        for (final JsonObject badge : objects(item.getArray("badges"))) {
+            if (style.equals(badge.getObject("metadataBadgeRenderer").getString("style"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isLive(final JsonObject item) {
+        for (final JsonObject badge : objects(item.getArray("badges"))) {
+            final JsonObject data = badge.getObject("metadataBadgeRenderer");
+            if ("BADGE_STYLE_TYPE_LIVE_NOW".equals(data.getString("style"))
+                    || "LIVE NOW".equals(data.getString("label"))) return true;
+        }
+        for (final JsonObject overlay : objects(item.getArray("thumbnailOverlays"))) {
+            if ("LIVE".equalsIgnoreCase(overlay
+                    .getObject("thumbnailOverlayTimeStatusRenderer").getString("style", ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Instant premiereStart() throws ParsingException {
+        final String value = item.getObject("upcomingEventData").getString("startTime");
+        try {
+            return Instant.ofEpochSecond(Long.parseLong(value));
+        } catch (final RuntimeException error) {
+            throw new ParsingException("Could not parse premiere start time", error);
+        }
+    }
+
+    private String firstText(final List<String> fields) {
         for (final String field : fields) {
             final String text = getTextFromObject(item.getObject(field));
             if (!isNullOrEmpty(text)) return text;
         }
         return null;
+    }
+
+    private static String firstNonEmpty(final String first, final String second) {
+        return isNullOrEmpty(first) ? second : first;
+    }
+
+    private static List<JsonObject> objects(final JsonArray array) {
+        return array.streamAsJsonObjects().toList();
     }
 }
