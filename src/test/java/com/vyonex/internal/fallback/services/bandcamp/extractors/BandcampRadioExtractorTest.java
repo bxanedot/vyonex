@@ -7,14 +7,17 @@ import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BandcampRadioExtractorTest {
     @Test
@@ -50,5 +53,43 @@ class BandcampRadioExtractorTest {
         } finally {
             VyonEx.init(previous);
         }
+    }
+
+    @Test
+    void reportsHttpErrorsAndMissingResultsAsExtractionFailures() {
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(new Downloader() {
+                @Override public Response execute(final Request request) { return null; }
+            });
+            assertThrows(IOException.class, () -> extractor().onFetchPage(VyonEx.getDownloader()));
+
+            VyonEx.init(response(503, "not json"));
+            final BandcampRadioExtractor failed = extractor();
+            assertThrows(IOException.class, () -> failed.onFetchPage(VyonEx.getDownloader()));
+
+            VyonEx.init(response(200, "{\"other\":[]}"));
+            final BandcampRadioExtractor malformed = extractor();
+            assertThrows(ParsingException.class,
+                    () -> malformed.onFetchPage(VyonEx.getDownloader()));
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    private static BandcampRadioExtractor extractor() {
+        final String url = BandcampRadioExtractor.RADIO_API_URL;
+        return new BandcampRadioExtractor(new BandcampService(1),
+                new ListLinkHandler(url, url, "Radio", List.of(), ""),
+                BandcampRadioExtractor.KIOSK_RADIO);
+    }
+
+    private static Downloader response(final int status, final String body) {
+        return new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(status, "response", Map.of(), body, request.url());
+            }
+        };
     }
 }
