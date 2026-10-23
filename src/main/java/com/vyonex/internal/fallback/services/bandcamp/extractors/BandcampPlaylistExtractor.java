@@ -32,10 +32,14 @@ import java.util.List;
 public class BandcampPlaylistExtractor extends PlaylistExtractor {
     // shortcut: per-track covers stop at ten tracks; remove when Bandcamp exposes art IDs in this page.
     private static final int INDIVIDUAL_COVER_LIMIT = 10;
-    private Document document;
-    private JsonObject album;
-    private JsonArray tracks;
+    private String albumUrl;
+    private String artist;
     private String name;
+    private long albumArtId;
+    private int trackCount;
+    private List<Image> uploaderAvatars = List.of();
+    private Description description;
+    private List<TrackData> tracks = List.of();
 
     public BandcampPlaylistExtractor(final StreamingService service,
                                      final ListLinkHandler linkHandler) {
@@ -46,27 +50,50 @@ public class BandcampPlaylistExtractor extends PlaylistExtractor {
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
         final String html = downloader.get(getLinkHandler().getUrl()).responseBody();
-        document = Jsoup.parse(html);
-        album = BandcampStreamExtractor.getAlbumInfoJson(html);
-        tracks = album.getArray("trackinfo");
+        final Document document = Jsoup.parse(html);
+        final JsonObject album = BandcampStreamExtractor.getAlbumInfoJson(html);
+        final JsonArray trackInfo = album.getArray("trackinfo");
+        trackCount = trackInfo.size();
         name = BandcampExtractorHelper.getJsonAttribute(html, "data-embed")
                 .getString("album_title");
         if (name == null || name.isBlank()) {
             throw new ParsingException("Bandcamp album response is missing its title");
         }
-        if (tracks.isEmpty()) throw new PaidContentException("This album requires purchase");
+        if (trackInfo.isEmpty()) throw new PaidContentException("This album requires purchase");
+        albumUrl = album.getString("url");
+        artist = album.getString("artist", "");
+        albumArtId = album.getLong("art_id");
+        final List<TrackData> mappedTracks = new ArrayList<>();
+        for (final Object value : trackInfo) {
+            if (!(value instanceof JsonObject track)) continue;
+            mappedTracks.add(new TrackData(track.getString("title"),
+                    track.getString("title_link"), (long) track.getDouble("duration"),
+                    track.getString("artist", "")));
+        }
+        tracks = List.copyOf(mappedTracks);
+        final Element image = document.selectFirst(".band-photo[src]");
+        uploaderAvatars = BandcampExtractorHelper.getImagesFromImageUrl(
+                image == null ? "" : image.attr("src"));
+        final List<String> sections = new ArrayList<>();
+        for (final String selector : List.of("#trackInfo .tralbum-about",
+                "#trackInfo .tralbum-credits", "#license")) {
+            final Element section = document.selectFirst(selector);
+            if (section != null && !section.html().isBlank()) sections.add(section.html());
+        }
+        description = sections.isEmpty() ? Description.EMPTY_DESCRIPTION
+                : new Description(String.join("", sections), Description.HTML);
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromImageId(album.getLong("art_id"), true);
+        return BandcampExtractorHelper.getImagesFromImageId(albumArtId, true);
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
         try {
-            final URI uri = new URI(album.getString("url"));
+            final URI uri = new URI(albumUrl);
             if (uri.getHost() == null) throw new URISyntaxException(uri.toString(), "Missing host");
             return uri.getScheme() + "://" + uri.getRawAuthority() + "/";
         } catch (final URISyntaxException | NullPointerException e) {
@@ -76,47 +103,42 @@ public class BandcampPlaylistExtractor extends PlaylistExtractor {
 
     @Override
     public String getUploaderName() {
-        return album.getString("artist", "");
+        return artist;
     }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() {
-        final Element image = document.selectFirst(".band-photo[src]");
-        return BandcampExtractorHelper.getImagesFromImageUrl(image == null ? "" : image.attr("src"));
+        return uploaderAvatars;
     }
 
     @Override
     public boolean isUploaderVerified() { return false; }
 
     @Override
-    public long getStreamCount() { return tracks.size(); }
+    public long getStreamCount() { return trackCount; }
 
     @Nonnull
     @Override
     public Description getDescription() {
-        final List<String> sections = new ArrayList<>();
-        for (final String selector : List.of("#trackInfo .tralbum-about",
-                "#trackInfo .tralbum-credits", "#license")) {
-            final Element section = document.selectFirst(selector);
-            if (section != null && !section.html().isBlank()) sections.add(section.html());
-        }
-        return sections.isEmpty() ? Description.EMPTY_DESCRIPTION
-                : new Description(String.join("", sections), Description.HTML);
+        return description;
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<StreamInfoItem> getInitialPage() throws ExtractionException {
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        for (final Object value : tracks) {
-            if (!(value instanceof JsonObject track)) continue;
-            if (tracks.size() < INDIVIDUAL_COVER_LIMIT) {
-                items.commit(new BandcampPlaylistStreamInfoItemExtractor(
-                        track, getUploaderUrl(), getService()));
+        String uploaderUrl = null;
+        for (final TrackData track : tracks) {
+            if (uploaderUrl == null) uploaderUrl = getUploaderUrl();
+            if (trackCount < INDIVIDUAL_COVER_LIMIT) {
+                items.commit(new BandcampPlaylistStreamInfoItemExtractor(track.title(),
+                        track.titleLink(), track.duration(), track.artist(), uploaderUrl,
+                        getService(), List.of()));
             } else {
-                items.commit(new BandcampPlaylistStreamInfoItemExtractor(
-                        track, getUploaderUrl(), getThumbnails()));
+                items.commit(new BandcampPlaylistStreamInfoItemExtractor(track.title(),
+                        track.titleLink(), track.duration(), track.artist(), uploaderUrl,
+                        null, getThumbnails()));
             }
         }
         return new InfoItemsPage<>(items, null);
@@ -128,4 +150,6 @@ public class BandcampPlaylistExtractor extends PlaylistExtractor {
     @Nonnull
     @Override
     public String getName() { return name; }
+
+    private record TrackData(String title, String titleLink, long duration, String artist) { }
 }

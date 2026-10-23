@@ -8,7 +8,6 @@ import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.stream.StreamExtractor;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -25,27 +24,19 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
     private final StreamingService service;
     private final List<Image> substituteCovers;
 
-    public BandcampPlaylistStreamInfoItemExtractor(final JsonObject track,
+    public BandcampPlaylistStreamInfoItemExtractor(final String title,
+                                                   final String titleLink,
+                                                   final long duration,
+                                                   final String artist,
                                                    final String uploaderUrl,
-                                                   final StreamingService service) {
-        super(uploaderUrl);
-        title = track.getString("title");
-        titleLink = track.getString("title_link");
-        duration = (long) track.getDouble("duration");
-        artist = track.getString("artist", "");
-        this.service = service;
-        substituteCovers = List.of();
-    }
-
-    public BandcampPlaylistStreamInfoItemExtractor(final JsonObject track,
-                                                   final String uploaderUrl,
+                                                   @Nullable final StreamingService service,
                                                    final List<Image> substituteCovers) {
         super(uploaderUrl);
-        title = track.getString("title");
-        titleLink = track.getString("title_link");
-        duration = (long) track.getDouble("duration");
-        artist = track.getString("artist", "");
-        service = null;
+        this.title = title;
+        this.titleLink = titleLink;
+        this.duration = duration;
+        this.artist = artist;
+        this.service = service;
         this.substituteCovers = List.copyOf(substituteCovers);
     }
 
