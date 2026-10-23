@@ -1164,7 +1164,7 @@ class InnerTubeExtractor internal constructor(
             }
 
             val cipherStart = Clock.System.now().toEpochMilliseconds()
-            val rawAudioFormats = allFormats.filter { it.width == null }
+            val rawAudioFormats = allFormats.filter(Format::isAudio)
             val preferredRawAudioFormat = selectBestAudioFormat(rawAudioFormats, audioQuality, requireUrl = false)
             val audioFormatsForCipher = preferredRawAudioFormat?.let { listOf(it) } ?: rawAudioFormats
             val rawVideoFormats = if (hints.wantVideo) preferredVideoFormats(streamingData, requireUrl = false) else emptyList()
@@ -1175,18 +1175,16 @@ class InnerTubeExtractor internal constructor(
                     maxHeight = hints.maxVideoHeight ?: 2160,
                 )
             val rawVideoFallback =
-                if (preferredRawVideoFormat?.hasReadyVideoUrl() == true) {
-                    null
-                } else {
-                    selectBestVideoFormat(
-                        rawVideoFormats.filter {
-                            it.itag != preferredRawVideoFormat?.itag &&
-                                it.height == preferredRawVideoFormat?.height &&
-                                it.hasReadyVideoUrl()
-                        },
-                        maxHeight = hints.maxVideoHeight ?: 2160,
-                    )
-                }
+                preferredRawVideoFormat
+                    ?.takeUnless { it.hasReadyVideoUrl() }
+                    ?.let { preferred ->
+                        selectBestVideoFormat(
+                            rawVideoFormats.filter {
+                                it.itag != preferred.itag && it.height == preferred.height && it.hasReadyVideoUrl()
+                            },
+                            maxHeight = hints.maxVideoHeight ?: 2160,
+                        )
+                    }
             val rawVideoCandidates = listOfNotNull(preferredRawVideoFormat, rawVideoFallback)
             val formatsForCipher = audioFormatsForCipher + rawVideoCandidates
             var processedFormats =
@@ -1212,12 +1210,13 @@ class InnerTubeExtractor internal constructor(
                     ),
             )
 
-            var audioFormats = processedFormats.filter(PlayerResponse.StreamingData.Format::isAudio)
-            var usableAudioFormats = audioFormats.filter { !it.url.isNullOrBlank() }
-            var directUrlAudioFormats = usableAudioFormats.filter { it.itag in directAudioItags }
-            var selectionPool =
-                directUrlAudioFormats.ifEmpty { usableAudioFormats }
-            var audioFormat = selectBestAudioFormat(selectionPool, audioQuality)
+            fun selectProcessedAudio(formats: List<Format>): Format? {
+                val usable = formats.filter { it.isAudio && !it.url.isNullOrBlank() }
+                val direct = usable.filter { it.itag in directAudioItags }
+                return selectBestAudioFormat(direct.ifEmpty { usable }, audioQuality)
+            }
+
+            var audioFormat = selectProcessedAudio(processedFormats)
 
             if (audioFormat == null && audioFormatsForCipher.size != rawAudioFormats.size) {
                 val fallbackCipherStart = Clock.System.now().toEpochMilliseconds()
@@ -1236,15 +1235,13 @@ class InnerTubeExtractor internal constructor(
                             "elapsedMs" to (Clock.System.now().toEpochMilliseconds() - fallbackCipherStart).toString(),
                         ),
                 )
-                audioFormats = processedFormats
-                usableAudioFormats = audioFormats.filter { !it.url.isNullOrBlank() }
-                directUrlAudioFormats = usableAudioFormats.filter { it.itag in directAudioItags }
-                selectionPool =
-                    directUrlAudioFormats.ifEmpty { usableAudioFormats }
-                audioFormat = selectBestAudioFormat(selectionPool, audioQuality)
+                audioFormat = selectProcessedAudio(processedFormats)
             }
 
             if (audioFormat == null) {
+                val audioFormats = processedFormats.filter(Format::isAudio)
+                val usableAudioFormats = audioFormats.filter { !it.url.isNullOrBlank() }
+                val directUrlAudioFormats = usableAudioFormats.filter { it.itag in directAudioItags }
                 val totalAudio = audioFormats.size
                 val audioWithUrl = usableAudioFormats.size
                 val directAudioWithUrl = directUrlAudioFormats.size
