@@ -14,8 +14,6 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -31,12 +29,8 @@ public class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        try {
-            data = JsonParser.object().from(downloader.get(
-                    getLinkHandler().getUrl(), getExtractorLocalization()).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse conference list.", error);
-        }
+        data = MediaCCCParsingHelper.fetchJsonObject(downloader,
+                getLinkHandler().getUrl(), getExtractorLocalization());
     }
 
     @Nonnull @Override public InfoItemsPage<ChannelInfoItem> getInitialPage() {

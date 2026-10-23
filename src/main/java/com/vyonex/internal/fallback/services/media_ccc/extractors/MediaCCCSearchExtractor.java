@@ -20,8 +20,6 @@ import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConfe
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -72,13 +70,8 @@ public class MediaCCCSearchExtractor extends SearchExtractor {
         final List<String> filters = getLinkHandler().getContentFilters();
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
             final String url = getUrl();
-            try {
-                eventResults = JsonParser.object().from(
-                        downloader.get(url, getExtractorLocalization()).responseBody());
-            } catch (final JsonParserException error) {
-                throw new ExtractionException("Could not parse event search response from " + url,
-                        error);
-            }
+            eventResults = MediaCCCParsingHelper.fetchJsonObject(downloader, url,
+                    getExtractorLocalization());
         }
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.CONFERENCES)) {
             conferenceResults = new MediaCCCConferenceKiosk(getService(),

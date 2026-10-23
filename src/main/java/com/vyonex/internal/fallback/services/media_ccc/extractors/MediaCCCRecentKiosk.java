@@ -14,8 +14,6 @@ import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -33,12 +31,8 @@ public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        try {
-            data = JsonParser.object().from(downloader.get(
-                    RECENT_EVENTS_URL, getExtractorLocalization()).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse recent events.", error);
-        }
+        data = MediaCCCParsingHelper.fetchJsonObject(downloader, RECENT_EVENTS_URL,
+                getExtractorLocalization());
     }
 
     @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {

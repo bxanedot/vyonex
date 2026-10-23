@@ -84,6 +84,25 @@ class MediaCCCParsingHelperTest {
     }
 
     @Test
+    void fetchesOnlySuccessfulJsonObjects() throws Exception {
+        final String url = "https://api.media.ccc.de/public/events/example";
+        final Downloader successful = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(200, "OK", Map.of(), "{\"title\":\"Talk\"}", request.url());
+            }
+        };
+        final Downloader noResponse = new Downloader() {
+            @Override public Response execute(final Request request) { return null; }
+        };
+
+        assertEquals("Talk", MediaCCCParsingHelper.fetchJsonObject(
+                successful, url, Localization.DEFAULT).getString("title"));
+        assertThrows(ExtractionException.class, () -> MediaCCCParsingHelper.fetchJsonObject(
+                noResponse, url, Localization.DEFAULT));
+    }
+
+    @Test
     void rejectsFailedLiveStreamResponses() {
         final Downloader failed = new Downloader() {
             @Override

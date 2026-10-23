@@ -13,6 +13,7 @@ import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +44,23 @@ public final class MediaCCCParsingHelper {
             throw new ExtractionException("Could not fetch live stream data.", error);
         } catch (final JsonParserException error) {
             throw new ExtractionException("Could not parse live stream data.", error);
+        }
+    }
+
+    public static JsonObject fetchJsonObject(final Downloader downloader, final String url,
+                                             @Nullable final Localization localization)
+            throws IOException, ExtractionException {
+        final Response response = localization == null ? downloader.get(url)
+                : downloader.get(url, localization);
+        if (response == null) throw new ExtractionException("No API response received from " + url);
+        if (response.responseCode() < 200 || response.responseCode() >= 300) {
+            throw new ExtractionException("API request failed with HTTP "
+                    + response.responseCode() + " for " + url);
+        }
+        try {
+            return JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse API response from " + url, error);
         }
     }
 

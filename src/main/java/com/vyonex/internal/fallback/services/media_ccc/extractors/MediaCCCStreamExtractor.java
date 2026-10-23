@@ -7,7 +7,6 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
-import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
@@ -22,8 +21,6 @@ import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
 import com.vyonex.internal.fallback.utils.LocaleCompat;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -121,7 +118,7 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
 
     private static Event readEvent(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
-        final JsonObject object = readObject(downloader, url, "event");
+        final JsonObject object = MediaCCCParsingHelper.fetchJsonObject(downloader, url, null);
         final String conferenceUrl = object.getString("conference_url");
         if (conferenceUrl == null || conferenceUrl.isBlank()) {
             throw new ExtractionException("The event response has no conference URL.");
@@ -145,24 +142,7 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
 
     private static String readConferenceLogo(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
-        return readObject(downloader, url, "conference").getString("logo_url");
-    }
-
-    private static JsonObject readObject(final Downloader downloader, final String url,
-                                         final String kind)
-            throws IOException, ExtractionException {
-        final Response response = downloader.get(url);
-        if (response == null) throw new ExtractionException("No " + kind + " response received.");
-        if (response.responseCode() < 200 || response.responseCode() >= 300) {
-            throw new ExtractionException(kind + " request failed with HTTP "
-                    + response.responseCode() + ".");
-        }
-        try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse " + kind + " response from " + url,
-                    error);
-        }
+        return MediaCCCParsingHelper.fetchJsonObject(downloader, url, null).getString("logo_url");
     }
 
     @Nonnull @Override public String getName() throws ParsingException { return event.title(); }

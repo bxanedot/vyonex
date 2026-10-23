@@ -160,7 +160,7 @@ class MediaCCCExtractorTest {
         final ExtractionException error = assertThrows(ExtractionException.class,
                 () -> recording.onFetchPage(downloader));
 
-        assertEquals("event request failed with HTTP 503.", error.getMessage());
+        assertEquals("API request failed with HTTP 503 for " + eventUrl, error.getMessage());
     }
 
     @Test
