@@ -1,44 +1,46 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
-import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
+import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Objects;
 
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
+
+/** Maps compact YouTube playlist and mix cards into VyonEx playlist items. */
 public class YoutubeMixOrPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private final JsonObject mixInfoItem;
+    private final JsonObject item;
 
-    public YoutubeMixOrPlaylistInfoItemExtractor(final JsonObject mixInfoItem) {
-        this.mixInfoItem = mixInfoItem;
+    public YoutubeMixOrPlaylistInfoItemExtractor(final JsonObject item) {
+        this.item = Objects.requireNonNull(item, "playlist card is required");
     }
 
     @Override
     public String getName() throws ParsingException {
-        final String name = getTextFromObject(mixInfoItem.getObject("title"));
-        if (isNullOrEmpty(name)) {
-            throw new ParsingException("Could not get name");
+        final String name = getTextFromObject(item.getObject("title"));
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Playlist card title is missing");
         }
         return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        final String url = mixInfoItem.getString("shareUrl");
-        if (isNullOrEmpty(url)) {
-            throw new ParsingException("Could not get url");
+        final String url = item.getString("shareUrl");
+        if (url == null || url.isBlank()) {
+            throw new ParsingException("Playlist card URL is missing");
         }
         return url;
     }
@@ -46,41 +48,37 @@ public class YoutubeMixOrPlaylistInfoItemExtractor implements PlaylistInfoItemEx
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromInfoItem(mixInfoItem);
+        return getThumbnailsFromInfoItem(item);
     }
 
     @Override
-    public String getUploaderName() throws ParsingException {
-        // this will be a list of uploaders for mixes
-        return YoutubeParsingHelper.getTextFromObject(mixInfoItem.getObject("longBylineText"));
+    public String getUploaderName() {
+        return getTextFromObject(item.getObject("longBylineText"));
     }
 
     @Override
-    public String getUploaderUrl() throws ParsingException {
-        // They're auto-generated, so there's no uploader
+    public String getUploaderUrl() {
         return null;
     }
 
     @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        // They're auto-generated, so there's no uploader
+    public boolean isUploaderVerified() {
         return false;
     }
 
     @Override
     public long getStreamCount() throws ParsingException {
-        final String countString = YoutubeParsingHelper.getTextFromObject(
-                mixInfoItem.getObject("videoCountShortText"));
-        if (countString == null) {
-            throw new ParsingException("Could not extract item count for playlist/mix info item");
+        final String count = getTextFromObject(item.getObject("videoCountShortText"));
+        if (count == null || count.isBlank()) {
+            throw new ParsingException("Playlist card item count is missing");
         }
-
-        try {
-            return Integer.parseInt(countString);
-        } catch (final NumberFormatException ignored) {
-            // un-parsable integer: this is a mix with infinite items and "50+" as count string
-            // (though YouTube Music mixes do not necessarily have an infinite count of songs)
+        if (count.strip().endsWith("+")) {
             return ListExtractor.ITEM_COUNT_INFINITE;
+        }
+        try {
+            return Utils.mixedNumberWordToLong(count);
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse playlist card item count", error);
         }
     }
 
