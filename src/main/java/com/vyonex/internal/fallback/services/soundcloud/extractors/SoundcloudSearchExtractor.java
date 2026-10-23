@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class SoundcloudSearchExtractor extends SearchExtractor {
-    private JsonObject results;
+    private InfoItemsPage<InfoItem> initialPage;
 
     public SoundcloudSearchExtractor(final StreamingService service, final SearchQueryHandler handler) {
         super(service, handler);
@@ -36,14 +36,15 @@ public final class SoundcloudSearchExtractor extends SearchExtractor {
 
     @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        results = fetch(downloader, getUrl());
+        final JsonObject results = fetch(downloader, getUrl());
         if (results.getArray("collection").isEmpty()) {
             throw new SearchExtractor.NothingFoundException("No SoundCloud results");
         }
+        initialPage = page(results);
     }
 
     @Override public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        return page(results);
+        return initialPage;
     }
 
     @Override public InfoItemsPage<InfoItem> getPage(final Page page)
