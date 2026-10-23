@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -84,6 +85,45 @@ class BandcampPlaylistExtractorTest {
             final BandcampPlaylistExtractor extractor = new BandcampPlaylistExtractor(
                     new BandcampService(1), new ListLinkHandler(url, url, url, List.of(), ""));
             assertThrows(PaidContentException.class, () -> extractor.onFetchPage(offline));
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void usesAlbumArtForLargeTrackListsWithoutFetchingEachTrack() throws Exception {
+        final StringBuilder tracks = new StringBuilder();
+        for (int index = 1; index <= 10; index++) {
+            if (index > 1) tracks.append(',');
+            tracks.append("{\"title\":\"Song ").append(index)
+                    .append("\",\"title_link\":\"/track/song").append(index)
+                    .append("\",\"duration\":123}");
+        }
+        final String album = "<div data-tralbum='{" +
+                "\"url\":\"https://artist.bandcamp.com/album/record\"," +
+                "\"artist\":\"Artist\",\"art_id\":50,\"trackinfo\":[" + tracks + "]}'></div>" +
+                "<div data-embed='{" + "\"album_title\":\"Record\"}'></div>";
+        final List<String> requests = new ArrayList<>();
+        final Downloader previous = VyonEx.getDownloader();
+        final Downloader offline = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                requests.add(request.url());
+                return new Response(200, "OK", Map.of(), album, request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            final String url = "https://artist.bandcamp.com/album/record";
+            final BandcampPlaylistExtractor extractor = new BandcampPlaylistExtractor(
+                    new BandcampService(1), new ListLinkHandler(url, url, url, List.of(), ""));
+            extractor.onFetchPage(offline);
+
+            final var items = extractor.getInitialPage().getItems();
+            assertEquals(10, items.size());
+            assertEquals("https://f4.bcbits.com/img/a50_10.jpg",
+                    items.get(0).getThumbnails().get(0).getUrl());
+            assertEquals(1, requests.size());
         } finally {
             VyonEx.init(previous);
         }
