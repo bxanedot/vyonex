@@ -12,6 +12,7 @@ import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +68,44 @@ class BandcampChannelExtractorTest {
             final var albumTab = service.getChannelTabExtractor(tabs.get(1));
             albumTab.onFetchPage(offline);
             assertEquals("Record", albumTab.getInitialPage().getItems().get(0).getName());
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void artistAndTabDetailsUseTheSuppliedDownloader() throws Exception {
+        final String details = "{\"name\":\"Artist\",\"discography\":[{"
+                + "\"item_type\":\"track\",\"title\":\"Song\",\"band_name\":\"Artist\","
+                + "\"band_id\":10,\"item_id\":20,\"art_id\":30}]}";
+        final Downloader previous = VyonEx.getDownloader();
+        final Downloader offline = new Downloader() {
+            @Override public Response execute(final Request request) {
+                assertEquals(BandcampExtractorHelper.BASE_API_URL + "/mobile/22/band_details",
+                        request.url());
+                return new Response(200, "OK", Map.of(), details, request.url());
+            }
+        };
+        final Downloader unexpectedGlobal = new Downloader() {
+            @Override public Response execute(final Request request) throws IOException {
+                throw new IOException("Unexpected global downloader use");
+            }
+        };
+        try {
+            VyonEx.init(unexpectedGlobal);
+            final BandcampService service = new BandcampService(1);
+            final String url = "https://artist.bandcamp.com";
+            final BandcampChannelExtractor channel = new BandcampChannelExtractor(service,
+                    new ListLinkHandler(url, url, "artist", List.of(), ""));
+            channel.onFetchPage(offline);
+            assertEquals("Artist", channel.getName());
+            assertEquals("track", BandcampExtractorHelper.getArtistDetails(offline, "artist")
+                    .getArray("discography").getObject(0).getString("item_type"));
+
+            final BandcampChannelTabExtractor tab = new BandcampChannelTabExtractor(service,
+                    new ListLinkHandler(url + "/track", url + "/track", "artist",
+                            List.of(ChannelTabs.TRACKS), ""));
+            tab.onFetchPage(offline);
         } finally {
             VyonEx.init(previous);
         }

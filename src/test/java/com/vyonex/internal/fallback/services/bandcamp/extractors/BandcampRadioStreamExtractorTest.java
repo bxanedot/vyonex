@@ -11,6 +11,7 @@ import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,8 +36,14 @@ class BandcampRadioStreamExtractorTest {
                 return new Response(200, "OK", Map.of(), body, request.url());
             }
         };
+        final Downloader unexpectedGlobal = new Downloader() {
+            @Override
+            public Response execute(final Request request) throws IOException {
+                throw new IOException("Unexpected global downloader use");
+            }
+        };
         try {
-            VyonEx.init(offline);
+            VyonEx.init(unexpectedGlobal);
             final BandcampRadioStreamExtractor extractor = new BandcampRadioStreamExtractor(
                     new BandcampService(1), new LinkHandler("https://bandcamp.com/?show=123",
                     "https://bandcamp.com/?show=123", "123"));

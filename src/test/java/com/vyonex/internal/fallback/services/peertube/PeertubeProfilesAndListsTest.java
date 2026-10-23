@@ -5,6 +5,7 @@ package com.vyonex.internal.fallback.services.peertube;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
@@ -13,6 +14,7 @@ import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.playlist.PlaylistInfo;
@@ -134,6 +136,23 @@ class PeertubeProfilesAndListsTest {
         final ChannelTabInfo tabInfo = ChannelTabInfo.getInfo(tab);
         assertEquals(ChannelTabs.VIDEOS, tabInfo.getName());
         assertEquals(1, tabInfo.getRelatedItems().size());
+    }
+
+    @Test
+    void rejectsPlaylistMetadataReturnedWithAnHttpFailure() throws Exception {
+        final String playlistUrl = BASE + "/api/v1/video-playlists/list-1";
+        VyonEx.init(new Downloader() {
+            @Override public Response execute(final Request request) {
+                assertEquals(playlistUrl, request.url());
+                return new Response(503, "Unavailable", Map.of(),
+                        "{\"displayName\":\"Mix\"}", request.url());
+            }
+        });
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final var playlist = service.getPlaylistExtractor(PeertubePlaylistLinkHandlerFactory
+                .getInstance().fromId("list-1", BASE));
+
+        assertThrows(ExtractionException.class, playlist::fetchPage);
     }
 
     private static final class StubDownloader extends Downloader {

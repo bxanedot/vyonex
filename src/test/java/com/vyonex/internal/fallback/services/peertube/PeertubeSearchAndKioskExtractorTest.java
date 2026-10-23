@@ -5,11 +5,14 @@ package com.vyonex.internal.fallback.services.peertube;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
@@ -23,6 +26,33 @@ import java.util.List;
 import java.util.Map;
 
 class PeertubeSearchAndKioskExtractorTest {
+    @Test
+    void rejectsSearchBodiesReturnedWithAnHttpFailure() throws Exception {
+        final Downloader previous = VyonEx.getDownloader();
+        final String url = "https://tube.example/api/v1/search/videos?search=hello&start=0&count=12";
+        final Downloader offline = new Downloader() {
+            @Override public Response execute(final Request request) {
+                return new Response(503, "Unavailable", Map.of(),
+                        "{\"total\":0,\"data\":[]}", request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            final PeertubeService service = new PeertubeService(3,
+                    new PeertubeInstance("https://tube.example", "Offline"));
+            final String queryUrl = PeertubeSearchQueryHandlerFactory.getInstance().getUrl(
+                    "hello", List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), "",
+                    "https://tube.example");
+            final SearchExtractor search = service.getSearchExtractor(new SearchQueryHandler(
+                    queryUrl, queryUrl, "hello",
+                    List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), ""));
+
+            assertThrows(ExtractionException.class, () -> search.getPage(new Page(url)));
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
     @Test
     void searchReturnsVideoResultsAndNextPage() throws Exception {
         final String url = "https://tube.example/api/v1/search/videos?search=hello&start=0&count=12";

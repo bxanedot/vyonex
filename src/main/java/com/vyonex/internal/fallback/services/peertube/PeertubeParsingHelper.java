@@ -6,7 +6,9 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Image.ResolutionLevel;
 import com.vyonex.internal.fallback.InfoItemsCollector;
 import com.vyonex.internal.fallback.Page;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubePlaylistInfoItemExtractor;
@@ -14,19 +16,20 @@ import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeSepiaSt
 import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeStreamInfoItemExtractor;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonParser;
+import com.vyonex.internal.json.JsonParserException;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class PeertubeParsingHelper {
     public static final String START_KEY = "start";
     public static final String COUNT_KEY = "count";
     public static final int ITEMS_PER_PAGE = 12;
-    private static final Pattern START_PARAM = Pattern.compile("([?&]start=)(\\d+)(?=&|#|$)");
 
     private PeertubeParsingHelper() { }
 
@@ -35,17 +38,52 @@ public final class PeertubeParsingHelper {
         if (message != null && !message.isBlank()) throw new ContentNotAvailableException(message);
     }
 
-    public static Page getNextPage(final String previousUrl, final long total) {
-        final Matcher start = START_PARAM.matcher(previousUrl);
-        if (!start.find()) return null;
-        try {
-            final long nextStart = Math.addExact(Long.parseLong(start.group(2)), ITEMS_PER_PAGE);
-            if (nextStart >= total) return null;
-            final String replacement = start.group(1) + nextStart;
-            return new Page(start.replaceFirst(Matcher.quoteReplacement(replacement)));
-        } catch (final ArithmeticException | NumberFormatException ignored) {
-            return null;
+    public static JsonObject readApiObject(final Response response, final String resource)
+            throws ExtractionException {
+        if (response == null) throw new ExtractionException("PeerTube returned no " + resource);
+        if (response.responseCode() < 200 || response.responseCode() >= 300) {
+            throw new ExtractionException("PeerTube " + resource + " request failed with HTTP "
+                    + response.responseCode());
         }
+        if (response.responseBody().isBlank()) {
+            throw new ExtractionException("PeerTube returned no " + resource);
+        }
+        try {
+            return JsonParser.object().from(response.responseBody());
+        } catch (final JsonParserException error) {
+            throw new ParsingException("Invalid PeerTube " + resource + " response", error);
+        }
+    }
+
+    public static Page getNextPage(final String previousUrl, final long total) {
+        final int queryStart = previousUrl.indexOf('?');
+        if (queryStart < 0) return null;
+        final int fragmentStart = previousUrl.indexOf('#', queryStart);
+        final int queryEnd = fragmentStart < 0 ? previousUrl.length() : fragmentStart;
+        int parameterStart = queryStart + 1;
+        while (parameterStart < queryEnd) {
+            final int ampersand = previousUrl.indexOf('&', parameterStart);
+            final int parameterEnd = ampersand < 0 || ampersand > queryEnd
+                    ? queryEnd : ampersand;
+            final int equals = previousUrl.indexOf('=', parameterStart);
+            final int nameEnd = equals < 0 || equals >= parameterEnd ? parameterEnd : equals;
+            if (START_KEY.equals(previousUrl.substring(parameterStart, nameEnd))) {
+                if (nameEnd == parameterEnd) return null;
+                try {
+                    final String encodedStart = previousUrl.substring(nameEnd + 1, parameterEnd);
+                    final long currentStart = Long.parseLong(
+                            URLDecoder.decode(encodedStart, StandardCharsets.UTF_8));
+                    if (currentStart < 0) return null;
+                    final long nextStart = Math.addExact(currentStart, ITEMS_PER_PAGE);
+                    return nextStart >= total ? null : new Page(previousUrl.substring(0, nameEnd + 1)
+                            + nextStart + previousUrl.substring(parameterEnd));
+                } catch (final IllegalArgumentException | ArithmeticException ignored) {
+                    return null;
+                }
+            }
+            parameterStart = parameterEnd + 1;
+        }
+        return null;
     }
 
     @SuppressWarnings("rawtypes")

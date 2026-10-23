@@ -15,14 +15,13 @@ import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject;
+import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public final class PeertubeAccountExtractor extends ChannelExtractor {
@@ -55,13 +54,12 @@ public final class PeertubeAccountExtractor extends ChannelExtractor {
         final String channelListUrl = baseUrl + API + getId() + "/video-channels";
         try {
             final Response response = getDownloader().get(channelListUrl);
-            if (response != null && !response.responseBody().isBlank()) {
-                final JsonObject result = JsonParser.object().from(response.responseBody());
-                final JsonArray channels = result.getArray("data");
-                for (final Object value : channels) {
-                    if (value instanceof JsonObject) {
-                        followers += ((JsonObject) value).getLong("followersCount");
-                    }
+            final JsonObject result = PeertubeParsingHelper.readApiObject(response,
+                    "account channel data");
+            final JsonArray channels = result.getArray("data");
+            for (final Object value : channels) {
+                if (value instanceof JsonObject) {
+                    followers += ((JsonObject) value).getLong("followersCount");
                 }
             }
         } catch (final Exception ignored) {
@@ -80,15 +78,7 @@ public final class PeertubeAccountExtractor extends ChannelExtractor {
 
     @Override
     public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
-        final Response response = downloader.get(baseUrl + API + getId());
-        if (response == null || response.responseBody().isBlank()) {
-            throw new ExtractionException("PeerTube account response is empty");
-        }
-        try {
-            account = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("PeerTube account response is invalid", error);
-        }
+        account = readApiObject(downloader.get(baseUrl + API + getId()), "account");
         PeertubeParsingHelper.validate(account);
     }
 

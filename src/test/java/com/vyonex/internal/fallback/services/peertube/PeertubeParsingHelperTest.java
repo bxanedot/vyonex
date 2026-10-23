@@ -12,11 +12,15 @@ import com.vyonex.internal.fallback.InfoItem;
 import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.channel.ChannelInfoItem;
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 class PeertubeParsingHelperTest {
     @Test
@@ -31,10 +35,30 @@ class PeertubeParsingHelperTest {
     }
 
     @Test
+    void advancesPercentEncodedStartAndKeepsUrlSuffixes() {
+        assertEquals("https://tube.example/api/videos?filter=a%26b&start=24&count=12#page",
+                PeertubeParsingHelper.getNextPage(
+                        "https://tube.example/api/videos?filter=a%26b&start=%31%32&count=12#page",
+                        30).getUrl());
+    }
+
+    @Test
     void reportsUnavailableResponseErrors() throws Exception {
         assertThrows(ContentNotAvailableException.class, () -> PeertubeParsingHelper.validate(
                 JsonParser.object().from("{\"error\":\"Video unavailable\"}")));
         PeertubeParsingHelper.validate(JsonParser.object().from("{\"data\":[]}"));
+    }
+
+    @Test
+    void parsesOnlySuccessfulNonemptyJsonResponses() throws Exception {
+        assertEquals("ok", PeertubeParsingHelper.readApiObject(
+                new Response(200, "OK", Map.of(), "{\"status\":\"ok\"}", null),
+                "search response").getString("status"));
+        assertThrows(ExtractionException.class, () -> PeertubeParsingHelper.readApiObject(
+                new Response(503, "Unavailable", Map.of(), "{\"status\":\"ok\"}", null),
+                "search response"));
+        assertThrows(ExtractionException.class, () -> PeertubeParsingHelper.readApiObject(
+                new Response(200, "OK", Map.of(), "", null), "search response"));
     }
 
     @Test

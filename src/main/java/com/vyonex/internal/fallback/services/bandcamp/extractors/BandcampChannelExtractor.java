@@ -105,7 +105,7 @@ public class BandcampChannelExtractor extends ChannelExtractor {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        artist = BandcampExtractorHelper.getArtistDetails(getId());
+        artist = BandcampExtractorHelper.getArtistDetails(downloader, getId());
     }
 
     @Nonnull

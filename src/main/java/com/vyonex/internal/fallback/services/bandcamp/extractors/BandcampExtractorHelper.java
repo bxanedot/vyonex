@@ -53,10 +53,15 @@ public final class BandcampExtractorHelper {
     }
 
     public static JsonObject getArtistDetails(final String id) throws ParsingException {
+        return getArtistDetails(downloader(), id);
+    }
+
+    public static JsonObject getArtistDetails(final Downloader downloader, final String id)
+            throws ParsingException {
         final byte[] body = JsonWriter.string().object().value("band_id", id).end().done()
                 .getBytes(StandardCharsets.UTF_8);
         try {
-            return JsonParser.object().from(downloader().postWithContentTypeJson(
+            return JsonParser.object().from(downloader.postWithContentTypeJson(
                     BASE_API_URL + "/mobile/22/band_details", java.util.Map.of(), body)
                     .responseBody());
         } catch (final IOException | ReCaptchaException | JsonParserException e) {

@@ -4,12 +4,19 @@
 package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Request;
+import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.localization.Localization;
+import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,5 +68,29 @@ class MediaCCCParsingHelperTest {
         assertTrue(MediaCCCParsingHelper.getThumbnailsFromStreamItem(item).isEmpty());
         assertTrue(MediaCCCParsingHelper.getImageListFromLogoImageUrl(null).isEmpty());
         assertTrue(MediaCCCParsingHelper.getImageListFromLogoImageUrl("").isEmpty());
+    }
+
+    @Test
+    void fetchesLiveStreamsFromEachCallDownloader() throws Exception {
+        final JsonArray first = MediaCCCParsingHelper.getLiveStreams(
+                liveStreamsDownloader("first"), Localization.DEFAULT);
+        final JsonArray second = MediaCCCParsingHelper.getLiveStreams(
+                liveStreamsDownloader("second"), Localization.DEFAULT);
+
+        assertEquals("first", first.getObject(0).getString("slug"));
+        assertEquals("second", second.getObject(0).getString("slug"));
+    }
+
+    private static Downloader liveStreamsDownloader(final String slug) {
+        return new Downloader() {
+            @Override
+            public Response execute(final Request request) throws IOException {
+                if (!"https://streaming.media.ccc.de/streams/v2.json".equals(request.url())) {
+                    throw new IOException("Unexpected URL " + request.url());
+                }
+                return new Response(200, "OK", Map.of(), "[{\"slug\":\"" + slug + "\"}]",
+                        request.url());
+            }
+        };
     }
 }

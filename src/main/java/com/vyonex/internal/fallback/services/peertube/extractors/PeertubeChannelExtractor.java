@@ -7,21 +7,19 @@ import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.channel.ChannelExtractor;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
-import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject;
+import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public final class PeertubeChannelExtractor extends ChannelExtractor {
@@ -66,15 +64,7 @@ public final class PeertubeChannelExtractor extends ChannelExtractor {
 
     @Override
     public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
-        final Response response = downloader.get(baseUrl + API + getId());
-        if (response == null || response.responseBody().isBlank()) {
-            throw new ExtractionException("PeerTube channel response is empty");
-        }
-        try {
-            channel = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("PeerTube channel response is invalid", error);
-        }
+        channel = readApiObject(downloader.get(baseUrl + API + getId()), "channel");
         PeertubeParsingHelper.validate(channel);
     }
 

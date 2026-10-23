@@ -33,11 +33,19 @@ public class MediaCCCStreamInfoItemExtractor implements StreamInfoItemExtractor 
     @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
         return DateWrapper.fromOffsetDateTime(getTextualUploadDate());
     }
-    @Override public String getName() throws ParsingException { return event.getString("title"); }
+    @Override public String getName() throws ParsingException { return required("title"); }
     @Override public String getUrl() throws ParsingException {
-        return "https://media.ccc.de/public/events/" + event.getString("guid");
+        return "https://media.ccc.de/public/events/" + required("guid");
     }
     @Nonnull @Override public List<Image> getThumbnails() {
         return getThumbnailsFromStreamItem(event);
+    }
+
+    private String required(final String key) throws ParsingException {
+        final String value = event.getString(key);
+        if (value == null || value.isBlank()) {
+            throw new ParsingException("MediaCCC event is missing " + key);
+        }
+        return value;
     }
 }

@@ -5,11 +5,10 @@ package com.vyonex.internal.fallback.services.peertube;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 
@@ -42,18 +41,15 @@ public class PeertubeInstance {
         } catch (final ReCaptchaException | IOException error) {
             throw new Exception("Unable to load PeerTube instance metadata from " + url, error);
         }
-        if (response == null || response.responseBody().isBlank()) {
-            throw new Exception("PeerTube instance returned an empty configuration");
-        }
-
         try {
-            final JsonObject config = JsonParser.object().from(response.responseBody());
+            final JsonObject config = PeertubeParsingHelper.readApiObject(response,
+                    "instance configuration");
             final String discoveredName = config.getObject("instance").getString("name");
             if (discoveredName == null || discoveredName.isBlank()) {
                 throw new ParsingException("PeerTube configuration has no instance name");
             }
             name = discoveredName;
-        } catch (final JsonParserException | ParsingException error) {
+        } catch (final ExtractionException error) {
             throw new Exception("Unable to parse PeerTube instance metadata", error);
         }
     }
