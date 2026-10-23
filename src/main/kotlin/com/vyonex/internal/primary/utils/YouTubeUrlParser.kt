@@ -36,7 +36,7 @@ object YouTubeUrlParser {
     fun parse(url: String): ParsedUrl? {
         val parsed = parseUrl(url) ?: return null
         val path = parsed.encodedPath
-        val host = parsed.host
+        val host = parsed.host.lowercase()
 
         if (host == "youtu.be") {
             val id = path.removePrefix("/").takeIf { it.matches(videoId) }
@@ -87,10 +87,11 @@ object YouTubeUrlParser {
     private fun parseUrl(value: String): Url? {
         val input = value.trim()
         if (input.isEmpty() || input.any(Char::isWhitespace)) return null
-        val candidate = if (input.startsWith("https://") || input.startsWith("http://")) input else "https://$input"
+        val hasScheme = input.startsWith("https://", ignoreCase = true) || input.startsWith("http://", ignoreCase = true)
+        val candidate = if (hasScheme) input else "https://$input"
         return runCatching { Url(candidate) }
             .getOrNull()
-            ?.takeIf { it.protocol.name in setOf("http", "https") && !it.hasUserInfo() }
+            ?.takeIf { it.protocol.name.lowercase() in setOf("http", "https") && !it.hasUserInfo() }
     }
 
     private fun Url.hasUserInfo(): Boolean = user != null || password != null
