@@ -289,20 +289,6 @@ data class YouTubeClient(
                 useMusicPlayerEndpoint = true,
             )
 
-        val TVHTML5_SIMPLY_EMBEDDED_PLAYER =
-            YouTubeClient(
-                clientName = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-                clientVersion = "2.0",
-                clientId = "85",
-                userAgent = TVHTML5.userAgent,
-                useSignatureTimestamp = true,
-                isEmbedded = true,
-                useWebPoTokens = true,
-                requirePoToken = true,
-                poTokenBinding = PoTokenBinding.VISITOR_DATA,
-                friendlyName = "TVHTML5 Simply Embedded",
-            )
-
         // -------------------------------------------------------------------------
         // Other (non-playback / API-only)
         // -------------------------------------------------------------------------
@@ -396,44 +382,6 @@ data class YouTubeClient(
                 userAgent = USER_AGENT_WEB,
                 friendlyName = "Web Kids",
                 useSignatureTimestamp = true,
-            )
-
-        /** Native YouTube Music identity. Current playback generally needs platform attestation. */
-        val ANDROID_MUSIC =
-            YouTubeClient(
-                clientName = "ANDROID_MUSIC",
-                clientVersion = "5.34.51",
-                clientId = "21",
-                userAgent = "com.google.android.apps.youtube.music/5.34.51 (Linux; U; Android 11) gzip",
-                osName = "Android",
-                osVersion = "11",
-                androidSdkVersion = "30",
-                friendlyName = "Android Music",
-                includeUserAgentInContext = true,
-            )
-
-        /** Native Studio identity retained as an experimental inventory/probe profile. */
-        val ANDROID_CREATOR =
-            YouTubeClient(
-                clientName = "ANDROID_CREATOR",
-                clientVersion = "25.03.101",
-                clientId = "14",
-                userAgent =
-                    "com.google.android.apps.youtube.creator/25.03.101 (Linux; U; Android 15; en_US; " +
-                        "Pixel 9 Pro Fold; Build/AP3A.241005.015.A2; Cronet/132.0.6779.0)",
-                osName = "Android",
-                osVersion = "15",
-                deviceMake = "Google",
-                deviceModel = "Pixel 9 Pro Fold",
-                androidSdkVersion = "35",
-                buildId = "AP3A.241005.015.A2",
-                cronetVersion = "132.0.6779.0",
-                packageName = "com.google.android.apps.youtube.creator",
-                friendlyName = "Android Studio",
-                loginSupported = true,
-                loginRequired = true,
-                useSignatureTimestamp = true,
-                includeUserAgentInContext = true,
             )
 
         /** Current native Android identity. Platform attestation is described by the playback manifest. */
@@ -530,55 +478,5 @@ data class YouTubeClient(
                 includeUserAgentInContext = true,
             )
 
-        /** Historical probe identity: iOS Music client ID 26, current source evidence only. */
-        val IOS_MUSIC =
-            YouTubeClient(
-                clientName = "IOS_MUSIC",
-                clientVersion = "7.27.0",
-                clientId = "26",
-                userAgent = "com.google.ios.youtubemusic/7.27.0 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)",
-                osName = "iPhone",
-                osVersion = "18.1.0.22B83",
-                deviceMake = "Apple",
-                deviceModel = "iPhone16,2",
-                platform = "MOBILE",
-                friendlyName = "iOS Music probe",
-            )
-
-        /** Historical probe identity: Android Kids client ID 18, current source evidence only. */
-        val ANDROID_KIDS =
-            YouTubeClient(
-                clientName = "ANDROID_KIDS",
-                clientVersion = "7.36.1",
-                clientId = "18",
-                userAgent = "com.google.android.apps.youtube.kids/7.36.1 (Linux; U; Android 11) gzip",
-                osName = "Android",
-                osVersion = "11",
-                androidSdkVersion = "30",
-                friendlyName = "Android Kids probe",
-            )
-
-        /** Historical probe identity: Android Producer client ID 91, current source evidence only. */
-        val ANDROID_PRODUCER =
-            YouTubeClient(
-                clientName = "ANDROID_PRODUCER",
-                clientVersion = "0.111.1",
-                clientId = "91",
-                userAgent = "com.google.android.apps.youtube.producer/0.111.1 (Linux; U; Android 11) gzip",
-                osName = "Android",
-                osVersion = "11",
-                androidSdkVersion = "30",
-                friendlyName = "Android Producer probe",
-            )
-
-        /** Historical probe identity: Media Connect Frontend client ID 95, current source evidence only. */
-        val MEDIA_CONNECT_FRONTEND =
-            YouTubeClient(
-                clientName = "MEDIA_CONNECT_FRONTEND",
-                clientVersion = "0.1",
-                clientId = "95",
-                userAgent = "Mozilla/5.0",
-                friendlyName = "Media Connect probe",
-            )
     }
 }

@@ -9,6 +9,17 @@ import org.junit.jupiter.api.Test
 
 class PlaybackClientCatalogContractTest {
     @Test
+    fun everyCatalogProfileUsesVyonExEvidence() {
+        assertTrue(PlaybackClientCatalog.manifests.isNotEmpty())
+        PlaybackClientCatalog.manifests.forEach { manifest ->
+            assertTrue(
+                manifest.evidence.isNotEmpty() && manifest.evidence.all { it.startsWith("VyonEx ") },
+                "${manifest.id} must use VyonEx-owned evidence",
+            )
+        }
+    }
+
+    @Test
     fun everyAutomaticProfileHasVyonExEvidence() {
         assertTrue(PlaybackClientCatalog.automaticManifests.isNotEmpty())
         PlaybackClientCatalog.automaticManifests.forEach { manifest ->

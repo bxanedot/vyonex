@@ -31,11 +31,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
     private const val SOURCE_ANDROID_BENCHMARK = "VyonEx Android playback benchmark (2026-08-13)"
     private const val SOURCE_ANDROID_SABR_BENCHMARK = "VyonEx Android SABR benchmark (2026-08-20)"
     private const val SOURCE_WEB_PAGE_CAPTURE = "VyonEx capture of official YouTube watch and embed pages (2026-10-23)"
-    private const val SOURCE_YTDLP = "yt-dlp client inventory"
-    private const val SOURCE_YOUTUBE_JS = "YouTube.js client constants"
-    private const val SOURCE_HISTORICAL_CLIENTS = "YouTube-Internal-Clients survey (2022)"
-    private const val SOURCE_PYTUBEFIX = "pytubefix innertube.py (b6521f09)"
-
     private val webProviders =
         setOf(PoTokenProviderKind.WEB_BOTGUARD, PoTokenProviderKind.WEBPAGE_ATTESTATION, PoTokenProviderKind.EXTERNAL)
     private val webSabrProviders = setOf(PoTokenProviderKind.WEBPAGE_ATTESTATION, PoTokenProviderKind.EXTERNAL)
@@ -587,19 +582,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         "token provider is available, so this remains probe-only.",
             ),
             manifest(
-                id = "IOS",
-                client = YouTubeClient.IOS,
-                displayName = "iOS 21.26.4",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = iosPlayerOptional, gvs = iosGvsRequired),
-                content = nativeDirectUnusableContent(),
-                evidence = setOf(SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
-                notes = "Previous responses exposed SABR-only media and require unavailable iOS attestation.",
-            ),
-            manifest(
                 id = "IOS_SABR",
                 client = YouTubeClient.IOS_SABR,
                 displayName = "iOS 21.26.4 (SABR)",
@@ -624,94 +606,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 content = nativeDirectUnusableContent(),
                 evidence = setOf(SOURCE_VYONEX),
                 notes = "Previous responses exposed SABR-only media and require unavailable iOS attestation.",
-            ),
-            manifest(
-                id = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-                client = YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-                displayName = "TV HTML5 Simply Embedded",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                poTokens = ClientPoTokenCapabilities(player = webSessionPlayerRequired, gvs = webGvsRequired),
-                request = webRequest.copy(webView = WebViewRequirement.REQUIRED_TOKEN_MINTING, cookies = false, embedded = true),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_YOUTUBE_JS),
-                notes = "YouTube previously reported this application and device as unsupported.",
-            ),
-            manifest(
-                id = "ANDROID_MUSIC",
-                client = YouTubeClient.ANDROID_MUSIC,
-                displayName = "Android Music 5.34.51",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                poTokens = ClientPoTokenCapabilities(player = androidPlayerRequired, gvs = androidGvsRequired),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_YOUTUBE_JS),
-                notes = "Previous player requests returned HTTP 400 FAILED_PRECONDITION.",
-            ),
-            manifest(
-                id = "ANDROID_CREATOR",
-                client = YouTubeClient.ANDROID_CREATOR,
-                displayName = "Android Studio 25.03.101",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                authentication = AuthenticationPolicy.REQUIRED,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_YOUTUBE_JS),
-                notes = "Previous player requests returned HTTP 400 INVALID_ARGUMENT.",
-            ),
-            manifest(
-                id = "IOS_MUSIC",
-                client = YouTubeClient.IOS_MUSIC,
-                displayName = "iOS Music probe",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = unverifiedProbeContent(),
-                evidence = setOf(SOURCE_PYTUBEFIX, SOURCE_HISTORICAL_CLIENTS),
-                notes = "Historical iOS Music identity and app fields; playback and transport support are unverified.",
-            ),
-            manifest(
-                id = "ANDROID_KIDS",
-                client = YouTubeClient.ANDROID_KIDS,
-                displayName = "Android Kids probe",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = unverifiedProbeContent(),
-                evidence = setOf(SOURCE_PYTUBEFIX, SOURCE_HISTORICAL_CLIENTS),
-                notes = "Historical Android Kids identity and app fields; playback and transport support are unverified.",
-            ),
-            manifest(
-                id = "ANDROID_PRODUCER",
-                client = YouTubeClient.ANDROID_PRODUCER,
-                displayName = "Android Producer probe",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = unverifiedProbeContent(),
-                evidence = setOf(SOURCE_PYTUBEFIX),
-                notes = "Android Producer identity and app fields from the pinned source; playback is unverified.",
-            ),
-            manifest(
-                id = "MEDIA_CONNECT_FRONTEND",
-                client = YouTubeClient.MEDIA_CONNECT_FRONTEND,
-                displayName = "Media Connect Frontend probe",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = unverifiedProbeContent(),
-                evidence = setOf(SOURCE_PYTUBEFIX, SOURCE_HISTORICAL_CLIENTS),
-                notes = "Historical Media Connect identity and app fields; playback and transport support are unverified.",
             ),
             manifest(
                 id = "WEB",
@@ -854,16 +748,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
             normal = CapabilitySupport.UNSUPPORTED,
             kids = CapabilitySupport.UNSUPPORTED,
             ageRestricted = CapabilitySupport.UNSUPPORTED,
-        )
-
-    private fun unverifiedProbeContent() =
-        ClientContentCapabilities(
-            normal = CapabilitySupport.UNKNOWN,
-            explicit = CapabilitySupport.UNKNOWN,
-            kids = CapabilitySupport.UNKNOWN,
-            ageRestricted = CapabilitySupport.UNKNOWN,
-            live = CapabilitySupport.UNKNOWN,
-            uploads = CapabilitySupport.UNKNOWN,
         )
 
     private fun globallyUnusableContent() =
