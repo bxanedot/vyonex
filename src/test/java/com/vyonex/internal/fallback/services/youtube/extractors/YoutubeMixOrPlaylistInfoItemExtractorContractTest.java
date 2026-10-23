@@ -54,4 +54,13 @@ class YoutubeMixOrPlaylistInfoItemExtractorContractTest {
         assertThrows(ParsingException.class, missing::getUrl);
         assertThrows(ParsingException.class, missing::getStreamCount);
     }
+
+    @Test
+    void rejectsPlaylistCardUrlsOutsideYoutube() throws Exception {
+        final var extractor = new YoutubeMixOrPlaylistInfoItemExtractor(JsonParser.object().from("""
+                {"shareUrl":"https://attacker.example/watch?v=abcdefghijk&list=RDMMabcdefghijk"}
+                """));
+
+        assertThrows(ParsingException.class, extractor::getUrl);
+    }
 }
