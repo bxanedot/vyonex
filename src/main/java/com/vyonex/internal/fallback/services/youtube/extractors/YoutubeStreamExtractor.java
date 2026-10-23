@@ -797,8 +797,14 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         setStreamType();
 
         if (fetchIosClient) {
-            final PoTokenResult iosPoTokenResult = noPoTokenProviderSet ? null
-                    : poTokenProviderInstance.getIosClientPoToken(videoId);
+            PoTokenResult iosPoTokenResult = null;
+            if (!noPoTokenProviderSet) {
+                try {
+                    iosPoTokenResult = poTokenProviderInstance.getIosClientPoToken(videoId);
+                } catch (final RuntimeException ignored) {
+                    // iOS is optional; try its player request without a token.
+                }
+            }
             fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
         }
 
