@@ -15,9 +15,13 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
+import com.vyonex.internal.fallback.localization.ContentCountry;
+import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.stream.DeliveryMethod;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeStreamLinkHandlerFactory;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,6 +30,22 @@ import java.util.List;
 import java.util.Map;
 
 class PeertubeStreamExtractorTest {
+    private Downloader previousDownloader;
+    private Localization previousLocalization;
+    private ContentCountry previousContentCountry;
+
+    @BeforeEach
+    void rememberVyonExState() {
+        previousDownloader = VyonEx.getDownloader();
+        previousLocalization = VyonEx.getPreferredLocalization();
+        previousContentCountry = VyonEx.getPreferredContentCountry();
+    }
+
+    @AfterEach
+    void restoreVyonExState() {
+        VyonEx.init(previousDownloader, previousLocalization, previousContentCountry);
+    }
+
     @Test
     void treatsMissingOptionalSubresourcesDifferentlyFromServerFailures() throws Exception {
         final String base = "https://tube.example";

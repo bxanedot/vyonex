@@ -16,8 +16,12 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
+import com.vyonex.internal.fallback.localization.ContentCountry;
+import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeSearchQueryHandlerFactory;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,6 +30,22 @@ import java.util.List;
 import java.util.Map;
 
 class PeertubeSearchAndKioskExtractorTest {
+    private Downloader previousDownloader;
+    private Localization previousLocalization;
+    private ContentCountry previousContentCountry;
+
+    @BeforeEach
+    void rememberVyonExState() {
+        previousDownloader = VyonEx.getDownloader();
+        previousLocalization = VyonEx.getPreferredLocalization();
+        previousContentCountry = VyonEx.getPreferredContentCountry();
+    }
+
+    @AfterEach
+    void restoreVyonExState() {
+        VyonEx.init(previousDownloader, previousLocalization, previousContentCountry);
+    }
+
     @Test
     void rejectsSearchBodiesReturnedWithAnHttpFailure() throws Exception {
         final Downloader previous = VyonEx.getDownloader();
