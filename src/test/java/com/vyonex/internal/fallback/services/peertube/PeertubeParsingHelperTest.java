@@ -103,7 +103,8 @@ class PeertubeParsingHelperTest {
                   {"displayName":"Channel","url":"https://tube.example/video-channels/c1",
                    "followersCount":7},
                   {"displayName":"Playlist","url":"https://tube.example/videos/watch/playlist",
-                   "videosLength":2,"uploader":{"displayName":"Alice","url":"https://tube.example/a/alice"}}
+                   "videosLength":2,"thumbnailPath":"/playlist.jpg",
+                   "uploader":{"displayName":"Alice","url":"https://tube.example/a/alice"}}
                 ]}
                 """;
         final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(3);
@@ -126,7 +127,11 @@ class PeertubeParsingHelperTest {
         assertEquals(InfoItem.InfoType.PLAYLIST, collector.getItems().get(2).getInfoType());
         final PlaylistInfoItem playlist = (PlaylistInfoItem) collector.getItems().get(2);
         assertEquals("Playlist", playlist.getName());
+        assertEquals("https://tube.example/videos/watch/playlist", playlist.getUrl());
+        assertEquals("Alice", playlist.getUploaderName());
+        assertEquals("https://tube.example/a/alice", playlist.getUploaderUrl());
         assertEquals(2, playlist.getStreamCount());
+        assertEquals("https://tube.example/playlist.jpg", playlist.getThumbnails().get(0).getUrl());
         assertEquals(0, collector.getErrors().size());
 
         final MultiInfoItemsCollector sepia = new MultiInfoItemsCollector(3);

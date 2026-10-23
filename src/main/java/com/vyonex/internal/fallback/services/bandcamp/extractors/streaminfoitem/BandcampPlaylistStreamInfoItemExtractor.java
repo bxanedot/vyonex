@@ -11,13 +11,17 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 
 public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoItemExtractor {
-    private final JsonObject track;
+    @Nullable private final String title;
+    @Nullable private final String titleLink;
+    private final long duration;
+    private final String artist;
     private final StreamingService service;
     private final List<Image> substituteCovers;
 
@@ -25,7 +29,10 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
                                                    final String uploaderUrl,
                                                    final StreamingService service) {
         super(uploaderUrl);
-        this.track = track;
+        title = track.getString("title");
+        titleLink = track.getString("title_link");
+        duration = (long) track.getDouble("duration");
+        artist = track.getString("artist", "");
         this.service = service;
         substituteCovers = List.of();
     }
@@ -34,24 +41,25 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
                                                    final String uploaderUrl,
                                                    final List<Image> substituteCovers) {
         super(uploaderUrl);
-        this.track = track;
+        title = track.getString("title");
+        titleLink = track.getString("title_link");
+        duration = (long) track.getDouble("duration");
+        artist = track.getString("artist", "");
         service = null;
         this.substituteCovers = List.copyOf(substituteCovers);
     }
 
     @Override
     public String getName() throws ParsingException {
-        final String title = track.getString("title");
         if (title == null) throw new ParsingException("Bandcamp track has no title");
         return title;
     }
 
     @Override
     public String getUrl() throws ParsingException {
-        final String path = track.getString("title_link");
-        if (path == null || path.isBlank()) return null;
+        if (titleLink == null || titleLink.isBlank()) return null;
         try {
-            return new URI(getUploaderUrl()).resolve(path).toString()
+            return new URI(getUploaderUrl()).resolve(titleLink).toString()
                     .replaceFirst("^http://", "https://");
         } catch (final URISyntaxException | NullPointerException e) {
             throw new ParsingException("Bandcamp track has an invalid URL", e);
@@ -59,14 +67,10 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
     }
 
     @Override
-    public long getDuration() {
-        return (long) track.getDouble("duration");
-    }
+    public long getDuration() { return duration; }
 
     @Override
-    public String getUploaderName() {
-        return track.getString("artist", "");
-    }
+    public String getUploaderName() { return artist; }
 
     @Nonnull
     @Override
@@ -82,4 +86,5 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
             throw new ParsingException("Could not load the track cover", e);
         }
     }
+
 }

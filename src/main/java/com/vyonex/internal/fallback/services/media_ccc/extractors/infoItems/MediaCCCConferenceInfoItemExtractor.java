@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
+// bxane
 package com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems;
 
 import com.vyonex.internal.fallback.Image;
@@ -9,24 +10,27 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
 
 public class MediaCCCConferenceInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final JsonObject conference;
+    @Nullable private final String title;
+    @Nullable private final String url;
+    private final List<Image> thumbnails;
 
     public MediaCCCConferenceInfoItemExtractor(final JsonObject conference) {
-        this.conference = conference;
+        title = conference.getString("title");
+        url = conference.getString("url");
+        thumbnails = getImageListFromLogoImageUrl(conference.getString("logo_url"));
     }
 
     @Override public String getDescription() { return ""; }
     @Override public long getSubscriberCount() { return -1; }
     @Override public long getStreamCount() { return ListExtractor.ITEM_COUNT_UNKNOWN; }
     @Override public boolean isVerified() { return false; }
-    @Override public String getName() throws ParsingException { return conference.getString("title"); }
-    @Override public String getUrl() throws ParsingException { return conference.getString("url"); }
-    @Nonnull @Override public List<Image> getThumbnails() {
-        return getImageListFromLogoImageUrl(conference.getString("logo_url"));
-    }
+    @Override public String getName() throws ParsingException { return title; }
+    @Override public String getUrl() throws ParsingException { return url; }
+    @Nonnull @Override public List<Image> getThumbnails() { return thumbnails; }
 }

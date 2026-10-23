@@ -7,6 +7,7 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MediaCCCParsingHelperTest {
@@ -79,6 +81,43 @@ class MediaCCCParsingHelperTest {
 
         assertEquals("first", first.getObject(0).getString("slug"));
         assertEquals("second", second.getObject(0).getString("slug"));
+    }
+
+    @Test
+    void fetchesOnlySuccessfulJsonObjects() throws Exception {
+        final String url = "https://api.media.ccc.de/public/events/example";
+        final Downloader successful = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(200, "OK", Map.of(), "{\"title\":\"Talk\"}", request.url());
+            }
+        };
+        final Downloader noResponse = new Downloader() {
+            @Override public Response execute(final Request request) { return null; }
+        };
+
+        assertEquals("Talk", MediaCCCParsingHelper.fetchJsonObject(
+                successful, url, Localization.DEFAULT).getString("title"));
+        assertThrows(ExtractionException.class, () -> MediaCCCParsingHelper.fetchJsonObject(
+                noResponse, url, Localization.DEFAULT));
+    }
+
+    @Test
+    void rejectsFailedLiveStreamResponses() {
+        final Downloader failed = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(503, "Unavailable", Map.of(), "[]", request.url());
+            }
+        };
+        final Downloader noResponse = new Downloader() {
+            @Override public Response execute(final Request request) { return null; }
+        };
+
+        assertThrows(ExtractionException.class, () -> MediaCCCParsingHelper.getLiveStreams(
+                failed, Localization.DEFAULT));
+        assertThrows(ExtractionException.class, () -> MediaCCCParsingHelper.getLiveStreams(
+                noResponse, Localization.DEFAULT));
     }
 
     private static Downloader liveStreamsDownloader(final String slug) {

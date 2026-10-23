@@ -12,17 +12,16 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
-import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.List;
 
 public class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
     public static final String KIOSK_ID = "conferences";
-    private JsonObject data;
+    private String title;
+    private List<MediaCCCConferenceInfoItemExtractor> conferences;
 
     public MediaCCCConferenceKiosk(final StreamingService service,
                                    final ListLinkHandler link, final String kioskId) {
@@ -31,25 +30,22 @@ public class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        try {
-            data = JsonParser.object().from(downloader.get(
-                    getLinkHandler().getUrl(), getExtractorLocalization()).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse conference list.", error);
-        }
+        final JsonObject data = MediaCCCParsingHelper.fetchJsonObject(downloader,
+                getLinkHandler().getUrl(), getExtractorLocalization());
+        title = data.getString("Conferences");
+        conferences = data.getArray("conferences").streamAsJsonObjects()
+                .map(MediaCCCConferenceInfoItemExtractor::new).toList();
     }
 
     @Nonnull @Override public InfoItemsPage<ChannelInfoItem> getInitialPage() {
-        final JsonArray conferences = data.getArray("conferences");
         final ChannelInfoItemsCollector items = new ChannelInfoItemsCollector(getServiceId());
-        conferences.streamAsJsonObjects().map(MediaCCCConferenceInfoItemExtractor::new)
-                .forEach(items::commit);
+        conferences.forEach(items::commit);
         return new InfoItemsPage<>(items, null);
     }
     @Override public InfoItemsPage<ChannelInfoItem> getPage(final Page page) {
         return InfoItemsPage.emptyPage();
     }
     @Nonnull @Override public String getName() throws ParsingException {
-        return data.getString("Conferences");
+        return title;
     }
 }

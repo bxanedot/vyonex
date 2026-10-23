@@ -18,10 +18,6 @@ import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferencesListLinkHandlerFactory;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -29,7 +25,7 @@ import java.util.List;
 import java.util.Locale;
 
 public class MediaCCCSearchExtractor extends SearchExtractor {
-    private JsonObject eventResults;
+    private List<MediaCCCStreamInfoItemExtractor> eventResults;
     private MediaCCCConferenceKiosk conferenceResults;
 
     public MediaCCCSearchExtractor(final StreamingService service,
@@ -52,11 +48,7 @@ public class MediaCCCSearchExtractor extends SearchExtractor {
         }
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
             if (eventResults == null) throw new IllegalStateException("Event search was not fetched");
-            final JsonArray events = eventResults.getArray("events");
-            events.streamAsJsonObjects()
-                    .filter(event -> event.getString("release_date") != null)
-                    .map(MediaCCCStreamInfoItemExtractor::new)
-                    .forEach(items::commit);
+            eventResults.forEach(items::commit);
         }
         return new InfoItemsPage<>(items, null);
     }
@@ -72,13 +64,10 @@ public class MediaCCCSearchExtractor extends SearchExtractor {
         final List<String> filters = getLinkHandler().getContentFilters();
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
             final String url = getUrl();
-            try {
-                eventResults = JsonParser.object().from(
-                        downloader.get(url, getExtractorLocalization()).responseBody());
-            } catch (final JsonParserException error) {
-                throw new ExtractionException("Could not parse event search response from " + url,
-                        error);
-            }
+            eventResults = MediaCCCParsingHelper.fetchJsonObject(downloader, url,
+                    getExtractorLocalization()).getArray("events").streamAsJsonObjects()
+                    .filter(event -> event.getString("release_date") != null)
+                    .map(MediaCCCStreamInfoItemExtractor::new).toList();
         }
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.CONFERENCES)) {
             conferenceResults = new MediaCCCConferenceKiosk(getService(),

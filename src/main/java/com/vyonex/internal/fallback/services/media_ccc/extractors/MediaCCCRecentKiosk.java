@@ -12,19 +12,17 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.Comparator;
+import java.util.List;
 
 public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "recent";
     private static final String RECENT_EVENTS_URL = "https://api.media.ccc.de/public/events/recent";
-    private JsonObject data;
+    private List<MediaCCCRecentKioskExtractor> events;
 
     public MediaCCCRecentKiosk(final StreamingService service, final ListLinkHandler link,
                                final String kioskId) {
@@ -33,12 +31,10 @@ public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        try {
-            data = JsonParser.object().from(downloader.get(
-                    RECENT_EVENTS_URL, getExtractorLocalization()).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse recent events.", error);
-        }
+        events = MediaCCCParsingHelper.fetchJsonObject(downloader, RECENT_EVENTS_URL,
+                getExtractorLocalization()).getArray("events").streamAsJsonObjects()
+                .map(MediaCCCRecentKioskExtractor::new)
+                .filter(event -> event.getDuration() > 0).toList();
     }
 
     @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {
@@ -46,9 +42,7 @@ public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
                 StreamInfoItem::getUploadDate,
                 Comparator.nullsLast(Comparator.comparing(DateWrapper::getInstant).reversed()));
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId(), newestFirst);
-        final JsonArray events = data.getArray("events");
-        events.streamAsJsonObjects().map(MediaCCCRecentKioskExtractor::new)
-                .filter(event -> event.getDuration() > 0).forEach(items::commit);
+        events.forEach(items::commit);
         return new InfoItemsPage<>(items, null);
     }
     @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page) {

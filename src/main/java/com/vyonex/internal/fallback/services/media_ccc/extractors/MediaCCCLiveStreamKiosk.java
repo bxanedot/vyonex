@@ -10,15 +10,18 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
+import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MediaCCCLiveStreamKiosk extends KioskExtractor<StreamInfoItem> {
     public static final String KIOSK_ID = "live";
-    private JsonArray conferences;
+    private List<StreamInfoItemExtractor> rooms;
 
     public MediaCCCLiveStreamKiosk(final StreamingService service, final ListLinkHandler link,
                                    final String kioskId) {
@@ -26,18 +29,22 @@ public class MediaCCCLiveStreamKiosk extends KioskExtractor<StreamInfoItem> {
     }
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader) throws ExtractionException {
-        conferences = MediaCCCParsingHelper.getLiveStreams(downloader, getExtractorLocalization());
+        final List<StreamInfoItemExtractor> found = new ArrayList<>();
+        for (final JsonObject conference : MediaCCCParsingHelper.getLiveStreams(
+                downloader, getExtractorLocalization()).streamAsJsonObjects().toList()) {
+            if (!conference.getBoolean("isCurrentlyStreaming")) continue;
+            appendRooms(found, conference);
+        }
+        rooms = List.copyOf(found);
     }
 
     @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        conferences.streamAsJsonObjects()
-                .filter(conference -> conference.getBoolean("isCurrentlyStreaming"))
-                .forEach(conference -> appendRooms(items, conference));
+        rooms.forEach(items::commit);
         return new InfoItemsPage<>(items, null);
     }
 
-    private static void appendRooms(final StreamInfoItemsCollector items,
+    private static void appendRooms(final List<StreamInfoItemExtractor> items,
                                     final JsonObject conference) {
         for (final Object groupValue : conference.getArray("groups")) {
             if (!(groupValue instanceof JsonObject)) continue;
@@ -45,7 +52,7 @@ public class MediaCCCLiveStreamKiosk extends KioskExtractor<StreamInfoItem> {
             final String label = group.getString("group");
             for (final Object roomValue : group.getArray("rooms")) {
                 if (roomValue instanceof JsonObject) {
-                    items.commit(new MediaCCCLiveStreamKioskExtractor(
+                    items.add(new MediaCCCLiveStreamKioskExtractor(
                             conference, label, (JsonObject) roomValue));
                 }
             }

@@ -11,6 +11,7 @@ import com.vyonex.internal.fallback.channel.tabs.ChannelTabExtractor;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCService;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MediaCCCExtractorTest {
     static final String LIVE_STREAMS_BODY = """
@@ -146,6 +148,22 @@ class MediaCCCExtractorTest {
     }
 
     @Test
+    void recordingRejectsFailedEventResponses() throws Exception {
+        final String eventUrl = "https://api.media.ccc.de/public/events/talk-1";
+        final StubDownloader downloader = new StubDownloader(Map.of(eventUrl, "{}"), 503);
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final StreamExtractor recording = service.getStreamExtractor(
+                MediaCCCStreamLinkHandlerFactory.getInstance()
+                        .fromUrl("https://media.ccc.de/v/talk-1"));
+
+        final ExtractionException error = assertThrows(ExtractionException.class,
+                () -> recording.onFetchPage(downloader));
+
+        assertEquals("API request failed with HTTP 503 for " + eventUrl, error.getMessage());
+    }
+
+    @Test
     void liveRoomMapsManifestsAndDirectStreams() throws Exception {
         final String liveUrl = "https://streaming.media.ccc.de/streams/v2.json";
         final StubDownloader downloader = new StubDownloader(Map.of(liveUrl, LIVE_STREAMS_BODY));
@@ -210,16 +228,22 @@ class MediaCCCExtractorTest {
 
     private static final class StubDownloader extends Downloader {
         private final Map<String, String> bodies;
+        private final int responseCode;
         private final List<String> requestedUrls = new ArrayList<>();
 
-        private StubDownloader(final Map<String, String> bodies) { this.bodies = bodies; }
+        private StubDownloader(final Map<String, String> bodies) { this(bodies, 200); }
+
+        private StubDownloader(final Map<String, String> bodies, final int responseCode) {
+            this.bodies = bodies;
+            this.responseCode = responseCode;
+        }
 
         @Override
         public Response execute(final Request request) throws IOException, ReCaptchaException {
             requestedUrls.add(request.url());
             final String body = bodies.get(request.url());
             if (body == null) throw new IOException("No offline response for " + request.url());
-            return new Response(200, "OK", Map.of(), body, request.url());
+            return new Response(responseCode, "OK", Map.of(), body, request.url());
         }
     }
 }

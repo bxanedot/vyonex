@@ -14,8 +14,6 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.linkhandler.ReadyChannelTabListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory;
 import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -36,11 +34,7 @@ public class MediaCCCConferenceExtractor extends ChannelExtractor {
             throws IOException, ExtractionException {
         final String url = MediaCCCConferenceLinkHandlerFactory.CONFERENCE_API_ENDPOINT
                 + conferenceId;
-        try {
-            return JsonParser.object().from(downloader.get(url).responseBody());
-        } catch (final JsonParserException error) {
-            throw new ExtractionException("Could not parse conference response from " + url, error);
-        }
+        return MediaCCCParsingHelper.fetchJsonObject(downloader, url, null);
     }
 
     @Nonnull @Override public List<Image> getAvatars() {
