@@ -9,24 +9,23 @@ import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class BandcampPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
-    private static final Pattern TRACK_COUNT = Pattern.compile("^\\s*(\\d+)");
-    private final Element searchResult;
-    private final Element resultInfo;
+public final class BandcampPlaylistInfoItemExtractor implements PlaylistInfoItemExtractor {
+    private static final Pattern LEADING_COUNT = Pattern.compile("^\\s*(\\d+)");
+    private final Element result;
 
-    public BandcampPlaylistInfoItemExtractor(@Nonnull final Element searchResult) {
-        this.searchResult = searchResult;
-        resultInfo = searchResult.selectFirst(".result-info");
+    public BandcampPlaylistInfoItemExtractor(@Nonnull final Element result) {
+        this.result = result;
     }
 
     @Override
     public String getUploaderName() {
         final String subtitle = text(".subhead");
-        final int by = subtitle.toLowerCase(java.util.Locale.ROOT).lastIndexOf(" by ");
-        return by < 0 ? subtitle : subtitle.substring(by + 4).trim();
+        final int separator = subtitle.toLowerCase(Locale.ROOT).lastIndexOf(" by ");
+        return separator < 0 ? subtitle : subtitle.substring(separator + 4).trim();
     }
 
     @Override
@@ -37,7 +36,7 @@ public class BandcampPlaylistInfoItemExtractor implements PlaylistInfoItemExtrac
 
     @Override
     public long getStreamCount() {
-        final Matcher count = TRACK_COUNT.matcher(text(".length"));
+        final Matcher count = LEADING_COUNT.matcher(text(".length"));
         if (!count.find()) return -1;
         try {
             return Long.parseLong(count.group(1));
@@ -55,11 +54,11 @@ public class BandcampPlaylistInfoItemExtractor implements PlaylistInfoItemExtrac
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromSearchResult(searchResult);
+        return BandcampExtractorHelper.getImagesFromSearchResult(result);
     }
 
     private String text(final String selector) {
-        final Element element = resultInfo == null ? null : resultInfo.selectFirst(selector);
-        return element == null ? "" : element.text();
+        final Element value = result.selectFirst(".result-info " + selector);
+        return value == null ? "" : value.text();
     }
 }

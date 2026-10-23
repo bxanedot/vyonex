@@ -11,29 +11,27 @@ import org.jsoup.nodes.Element;
 import javax.annotation.Nonnull;
 import java.util.List;
 
-public class BandcampChannelInfoItemExtractor implements ChannelInfoItemExtractor {
-    private final Element searchResult;
-    private final Element resultInfo;
+public final class BandcampChannelInfoItemExtractor implements ChannelInfoItemExtractor {
+    private final Element result;
 
-    public BandcampChannelInfoItemExtractor(final Element searchResult) {
-        this.searchResult = searchResult;
-        resultInfo = searchResult.selectFirst(".result-info");
+    public BandcampChannelInfoItemExtractor(final Element result) {
+        this.result = result;
     }
 
     @Override
-    public String getName() throws ParsingException { return text(".heading"); }
+    public String getName() { return text(".heading"); }
 
     @Override
     public String getUrl() throws ParsingException {
-        final Element link = resultInfo == null ? null : resultInfo.selectFirst(".itemurl");
-        if (link == null) throw new ParsingException("Bandcamp search result has no artist URL");
-        return link.text();
+        final String url = text(".itemurl");
+        if (url.isBlank()) throw new ParsingException("Bandcamp artist result has no URL");
+        return url;
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromSearchResult(searchResult);
+        return BandcampExtractorHelper.getImagesFromSearchResult(result);
     }
 
     @Override
@@ -49,7 +47,7 @@ public class BandcampChannelInfoItemExtractor implements ChannelInfoItemExtracto
     public boolean isVerified() { return false; }
 
     private String text(final String selector) {
-        final Element element = resultInfo == null ? null : resultInfo.selectFirst(selector);
-        return element == null ? "" : element.text();
+        final Element value = result.selectFirst(".result-info " + selector);
+        return value == null ? "" : value.text();
     }
 }

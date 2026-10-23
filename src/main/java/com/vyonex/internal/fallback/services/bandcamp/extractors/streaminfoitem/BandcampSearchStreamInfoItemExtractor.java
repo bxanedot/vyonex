@@ -10,47 +10,46 @@ import org.jsoup.nodes.Element;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Locale;
 
-public class BandcampSearchStreamInfoItemExtractor extends BandcampStreamInfoItemExtractor {
-    private final Element searchResult;
-    private final Element resultInfo;
+public final class BandcampSearchStreamInfoItemExtractor extends BandcampStreamInfoItemExtractor {
+    private final Element result;
 
-    public BandcampSearchStreamInfoItemExtractor(final Element searchResult,
-                                                 final String uploaderUrl) {
+    public BandcampSearchStreamInfoItemExtractor(final Element result, final String uploaderUrl) {
         super(uploaderUrl);
-        this.searchResult = searchResult;
-        resultInfo = searchResult.selectFirst(".result-info");
+        this.result = result;
     }
 
     @Override
     public String getUploaderName() {
-        final Element subtitle = resultInfo == null ? null : resultInfo.selectFirst(".subhead");
-        if (subtitle == null) return "";
-        final String text = subtitle.text();
-        final int by = text.toLowerCase(java.util.Locale.ROOT).lastIndexOf(" by ");
-        return by < 0 ? text : text.substring(by + 4).trim();
+        final String subtitle = text(".subhead");
+        final int separator = subtitle.toLowerCase(Locale.ROOT).lastIndexOf(" by ");
+        return separator < 0 ? subtitle : subtitle.substring(separator + 4).trim();
     }
 
     @Override
-    public String getName() throws ParsingException { return text(".heading"); }
+    public String getName() throws ParsingException { return requiredText(".heading"); }
 
     @Override
-    public String getUrl() throws ParsingException { return text(".itemurl"); }
+    public String getUrl() throws ParsingException { return requiredText(".itemurl"); }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromSearchResult(searchResult);
+        return BandcampExtractorHelper.getImagesFromSearchResult(result);
     }
 
     @Override
     public long getDuration() { return -1; }
 
-    private String text(final String selector) throws ParsingException {
-        final Element element = resultInfo == null ? null : resultInfo.selectFirst(selector);
-        if (element == null || element.text().isBlank()) {
-            throw new ParsingException("Bandcamp search result is missing " + selector);
-        }
-        return element.text();
+    private String requiredText(final String selector) throws ParsingException {
+        final String value = text(selector);
+        if (value.isBlank()) throw new ParsingException("Bandcamp search result is missing " + selector);
+        return value;
+    }
+
+    private String text(final String selector) {
+        final Element value = result.selectFirst(".result-info " + selector);
+        return value == null ? "" : value.text();
     }
 }
