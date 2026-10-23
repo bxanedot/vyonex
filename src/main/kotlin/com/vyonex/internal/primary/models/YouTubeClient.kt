@@ -177,7 +177,7 @@ data class YouTubeClient(
             )
 
         /**
-         * Mirrors yt-dlp android_vr profile. Versions above 1.65 may return SABR-only streams.
+         * Versions above 1.65 may return SABR-only streams.
          * Keep older Android VR profiles around because they have different format/stability behavior.
          * Normal content only; explicit and kids fail.
          */
@@ -247,7 +247,7 @@ data class YouTubeClient(
         /**
          * Uses non-adaptive bitrate, which fixes audio stuttering with YT Music.
          * Does not use AV1.
-         * Keep as a fallback candidate even though yt-dlp currently defaults to 1.65.10.
+         * Retain as a fallback candidate for its distinct codec and bitrate behavior.
          */
         val ANDROID_VR_1_43_32 =
             YouTubeClient(
@@ -517,7 +517,7 @@ data class YouTubeClient(
                 useSabr = true,
             )
 
-        /** Cookie-oriented fallback used by current yt-dlp defaults. */
+        /** Cookie-oriented fallback for authenticated playback sessions. */
         val TVHTML5_DOWNGRADED =
             YouTubeClient(
                 clientName = "TVHTML5",

@@ -26,10 +26,11 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
     const val AUTOMATIC_ID = "AUTO"
     const val SABR_FIRST_ID = "SABR_FIRST"
 
-    private const val SOURCE_PLAYBACK_MATRIX = "Playback live matrix"
+    private const val SOURCE_PLAYBACK_MATRIX = "VyonEx playback live matrix"
     private const val SOURCE_VYONEX = SOURCE_PLAYBACK_MATRIX
-    private const val SOURCE_ANDROID_BENCHMARK = "Android playback benchmark (2026-08-13)"
-    private const val SOURCE_ANDROID_SABR_BENCHMARK = "Android SABR benchmark (2026-08-20)"
+    private const val SOURCE_ANDROID_BENCHMARK = "VyonEx Android playback benchmark (2026-08-13)"
+    private const val SOURCE_ANDROID_SABR_BENCHMARK = "VyonEx Android SABR benchmark (2026-08-20)"
+    private const val SOURCE_WEB_PAGE_CAPTURE = "VyonEx capture of official YouTube watch and embed pages (2026-10-23)"
     private const val SOURCE_YTDLP = "yt-dlp client inventory"
     private const val SOURCE_YOUTUBE_JS = "YouTube.js client constants"
     private const val SOURCE_HISTORICAL_CLIENTS = "YouTube-Internal-Clients survey (2022)"
@@ -120,7 +121,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         live = CapabilitySupport.UNKNOWN,
                         uploads = CapabilitySupport.UNSUPPORTED,
                     ),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_PLAYBACK_MATRIX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_PLAYBACK_MATRIX),
                 notes =
                     "Passed normal playback with backward and forward seeks on an authenticated device, but clean " +
                         "Android sessions can stall before receiving media. Internal/unreleased; made-for-kids and " +
@@ -155,7 +156,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 transports = setOf(PlaybackTransport.DIRECT),
                 content = vrContent(),
                 benchmarkContent = globallyUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "A live anonymous visitor request resolved, but every audio itag reached a CDN 403 after " +
                         "1 MiB. Kept for explicit benchmark probing only.",
@@ -205,25 +206,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                     "Player requests resolve, but sustained media reaches a later-range authorization boundary. " +
                         "Retained for benchmark comparison only.",
             ),
-            /*
-             * Disabled after the 2026-08-13 Android playback benchmark passed 0/3 cases.
-             *
-            manifest(
-                id = "TVHTML5",
-                client = YouTubeClient.TVHTML5,
-                displayName = "TV HTML5",
-                lifecycle = ClientLifecycle.STABLE,
-                selectionMode = ClientSelectionMode.AUTOMATIC,
-                priority = 75,
-                authentication = AuthenticationPolicy.UNSUPPORTED,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsOptional),
-                request = webRequest,
-                content = normalWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
-                notes = "Player responses contained no direct or HLS audio usable by this profile.",
-            ),
-             */
             manifest(
                 id = "TVHTML5_DOWNGRADED",
                 client = YouTubeClient.TVHTML5_DOWNGRADED,
@@ -246,9 +228,9 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         ageRestricted = CapabilitySupport.SUPPORTED,
                     ),
                 benchmarkContent = globallyUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
-                    "Matches the current yt-dlp profile but YouTube returned UNPLAYABLE in August 2026 probes. " +
+                    "YouTube returned UNPLAYABLE in VyonEx's August 2026 probes. " +
                         "Retained for explicit compatibility testing only.",
             ),
             manifest(
@@ -263,7 +245,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsRequired),
                 request = webRequest,
                 content = validatedRestrictedWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes = "Passed normal, made-for-kids, and age-restricted playback with backward and forward seeks.",
             ),
             manifest(
@@ -278,7 +260,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsRequired),
                 request = webRequest,
                 content = validatedRestrictedWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Passed normal, made-for-kids, and age-restricted playback with backward and forward seeks. " +
                         "Requires a signed-in account.",
@@ -310,32 +292,11 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         explicit = CapabilitySupport.LIMITED,
                         kids = CapabilitySupport.SUPPORTED,
                     ),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "The two-token HLS path passed both normal samples, both made-for-kids " +
                         "samples, and one explicit sample with sustained playback and bidirectional seeks.",
             ),
-            /*
-             * Disabled after the 2026-08-13 Android playback benchmark passed 0/3 cases.
-             *
-            manifest(
-                id = "WEB_SAFARI",
-                client = YouTubeClient.WEB_SAFARI,
-                displayName = "Web Safari",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 48,
-                authentication = AuthenticationPolicy.OPTIONAL,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsRequired),
-                request = webRequest,
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YTDLP),
-                notes =
-                    "Current player responses may contain only SABR-capable data and no direct URL or HLS stream. " +
-                        "Use WEB_SAFARI_SABR for the validated transport path.",
-            ),
-             */
             manifest(
                 id = "WEB_EMBEDDED_PLAYER",
                 client = YouTubeClient.WEB_EMBEDDED_PLAYER,
@@ -365,27 +326,11 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         explicit = CapabilitySupport.UNSUPPORTED,
                         kids = CapabilitySupport.SUPPORTED,
                     ),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_WEB_PAGE_CAPTURE),
                 notes =
                     "Normal and made-for-kids playback passed sustained playback and both seek directions after " +
                         "fetching per-video encryptedHostFlags; age-restricted media was rejected.",
             ),
-            /*
-             * Disabled after the normal case timed out and the other two cases failed to resolve.
-             *
-            manifest(
-                id = "VISIONOS_SABR",
-                client = YouTubeClient.VISIONOS_SABR,
-                displayName = "visionOS 1.02 (SABR)",
-                lifecycle = ClientLifecycle.UNRELEASED,
-                selectionMode = ClientSelectionMode.AUTOMATIC,
-                priority = 78,
-                transports = setOf(PlaybackTransport.SABR),
-                content = normalSongsOnlyContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
-                notes = "Normal playback never became ready; the other benchmark content was rejected.",
-            ),
-             */
             manifest(
                 id = "ANDROID_VR_SABR",
                 client = YouTubeClient.ANDROID_VR_SABR,
@@ -397,30 +342,11 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = androidPlayerOptional, gvs = androidGvsRequired),
                 content = normalSongsOnlyContent(),
                 benchmarkContent = globallyUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Passed 0 of 6 current benchmark cases. Normal responses reached media but did not advance; " +
                         "explicit and made-for-kids samples were rejected or failed media without DroidGuard.",
             ),
-            /*
-             * Disabled after all three cases hit SABR attestation errors and fell back to another profile.
-             *
-            manifest(
-                id = "TVHTML5_SABR",
-                client = YouTubeClient.TVHTML5_SABR,
-                displayName = "TV HTML5 (SABR)",
-                lifecycle = ClientLifecycle.EXPERIMENTAL,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 58,
-                authentication = AuthenticationPolicy.OPTIONAL,
-                transports = setOf(PlaybackTransport.SABR),
-                poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsOptional),
-                request = webRequest,
-                content = normalWebContent,
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YTDLP),
-                notes = "Probe-only until full playback, protection, and seek behavior are benchmarked.",
-            ),
-             */
             manifest(
                 id = "WEB_REMIX_SABR",
                 client = YouTubeClient.WEB_REMIX_SABR,
@@ -461,7 +387,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = pageBoundGvsRequired),
                 request = webRequest.copy(webView = WebViewRequirement.REQUIRED_TOKEN_MINTING),
                 content = validatedProbeWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Page-bound GVS tokens passed all 6 current normal, explicit, and made-for-kids cases with " +
                         "90-second playback, bidirectional seeks, and complete telemetry.",
@@ -496,41 +422,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         "seeks, and complete telemetry. One of two explicit samples passed; explicit content " +
                         "remains excluded from automatic selection.",
             ),
-            /*
-             * Disabled after the 2026-08-13 Android playback benchmark passed 0/3 cases.
-             *
-            manifest(
-                id = "ANDROID",
-                client = YouTubeClient.ANDROID,
-                displayName = "Android 21.26.364",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 40,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = androidPlayerOptional, gvs = androidGvsRequired),
-                content = nativeDirectUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
-                notes =
-                    "Normal and made-for-kids requests return SABR-only metadata without direct URLs, while " +
-                        "age-restricted media requires login. This direct profile is not currently usable.",
-            ),
-             *
-             * Disabled after SABR attestation errors prevented both resolvable cases from staying on this profile.
-             *
-            manifest(
-                id = "ANDROID_SABR",
-                client = YouTubeClient.ANDROID_SABR,
-                displayName = "Android 21.26.364 (SABR)",
-                lifecycle = ClientLifecycle.CANARY,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 30,
-                transports = setOf(PlaybackTransport.SABR),
-                poTokens = ClientPoTokenCapabilities(player = androidPlayerOptional, gvs = androidGvsRequired),
-                content = ClientContentCapabilities(explicit = CapabilitySupport.UNKNOWN, kids = CapabilitySupport.UNKNOWN),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
-                notes = "Not automatic until a DroidGuard-compatible provider is available.",
-            ),
-             */
             manifest(
                 id = "MWEB",
                 client = YouTubeClient.MWEB,
@@ -543,7 +434,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = pageBoundGvsRequired),
                 request = webRequest,
                 content = validatedProbeWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Page-bound GVS tokens passed normal, made-for-kids, and age-restricted playback. " +
                         "Fresh tokenized URLs can return several transient HTTP 403 responses before becoming usable.",
@@ -561,7 +452,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 request = webRequest.copy(webView = WebViewRequirement.REQUIRED_TOKEN_MINTING),
                 content = validatedProbeWebContent,
                 benchmarkContent = validatedProbeWebContent.copy(explicit = CapabilitySupport.LIMITED),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Passed 5 of 6 current cases with 90-second playback and bidirectional seeks. One explicit " +
                         "sample had a media failure; runtime health fallback remains enabled.",
@@ -578,85 +469,11 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = pageBoundGvsRequired),
                 request = webRequest.copy(webView = WebViewRequirement.REQUIRED_TOKEN_MINTING),
                 content = validatedProbeWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Page-bound GVS tokens passed all 6 current normal, explicit, and made-for-kids cases with " +
                         "90-second playback, bidirectional seeks, and complete telemetry.",
             ),
-            /*
-             * Disabled after the 2026-08-13 Android playback benchmark passed 0/3 cases.
-             *
-            manifest(
-                id = "IOS",
-                client = YouTubeClient.IOS,
-                displayName = "iOS 21.26.4",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 35,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = iosPlayerOptional, gvs = iosGvsRequired),
-                content = nativeDirectUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
-                notes =
-                    "Normal and made-for-kids requests return SABR-only metadata without direct URLs. " +
-                        "Age-restricted media requires login; no iOS attestation provider is available.",
-            ),
-             *
-             * Disabled after both resolvable cases raised reload-player errors and switched to another profile.
-             *
-            manifest(
-                id = "IOS_SABR",
-                client = YouTubeClient.IOS_SABR,
-                displayName = "iOS 21.26.4 (SABR)",
-                lifecycle = ClientLifecycle.CANARY,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 25,
-                transports = setOf(PlaybackTransport.SABR),
-                poTokens = ClientPoTokenCapabilities(player = iosPlayerOptional, gvs = iosGvsRequired),
-                content = ClientContentCapabilities(),
-                evidence = setOf(SOURCE_YTDLP),
-            ),
-             *
-             * Disabled after the 2026-08-13 Android playback benchmark passed 0/3 cases.
-             *
-            manifest(
-                id = "IPADOS",
-                client = YouTubeClient.IPADOS,
-                displayName = "iPadOS 17.7.10",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
-                poTokens = ClientPoTokenCapabilities(player = iosPlayerOptional, gvs = iosGvsRequired),
-                content = nativeDirectUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX),
-                notes =
-                    "Current normal and made-for-kids responses are SABR-only without direct URLs; age-restricted " +
-                        "media requires login. Historical direct probes failed sequential GVS ranges around 1 MiB.",
-            ),
-             *
-             * Disabled after YouTube returned an unsupported-application error for all three cases.
-             *
-            manifest(
-                id = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-                client = YouTubeClient.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-                displayName = "TV HTML5 Simply Embedded",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.MANUAL_ONLY,
-                priority = 15,
-                transports = setOf(PlaybackTransport.DIRECT),
-                poTokens = ClientPoTokenCapabilities(player = webSessionPlayerRequired, gvs = webGvsRequired),
-                request =
-                    webRequest.copy(
-                        webView = WebViewRequirement.REQUIRED_TOKEN_MINTING,
-                        cookies = false,
-                        embedded = true,
-                    ),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YOUTUBE_JS),
-                notes = "YouTube reports this application and device as no longer supported.",
-            ),
-             */
             manifest(
                 id = "WEB_KIDS",
                 client = YouTubeClient.WEB_KIDS,
@@ -675,7 +492,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                         live = CapabilitySupport.UNSUPPORTED,
                         uploads = CapabilitySupport.UNSUPPORTED,
                     ),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Made-for-kids playback passed 70 seconds plus backward and forward seeks; normal and " +
                         "age-restricted playback are unavailable.",
@@ -692,7 +509,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsOptional),
                 request = webRequest,
                 content = normalWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes = "Previous probes returned no direct or HLS audio; retained for benchmark regression checks.",
             ),
             manifest(
@@ -707,7 +524,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsRequired),
                 request = webRequest,
                 content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes = "Previous responses exposed SABR-only media; retained to detect direct-stream regressions.",
             ),
             manifest(
@@ -720,7 +537,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 transports = setOf(PlaybackTransport.SABR),
                 content = normalSongsOnlyContent(),
                 benchmarkContent = normalSongsOnlyContent().copy(explicit = CapabilitySupport.LIMITED),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Passed both normal benchmark cases with 90-second playback, bidirectional seeks, and a " +
                         "current complete-track probe. Automatic selection is limited to normal content.",
@@ -737,7 +554,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsOptional),
                 request = webRequest,
                 content = normalWebContent,
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes = "Passed 0 of 6 current cases; every player request was rejected. Retained for regression checks.",
             ),
             manifest(
@@ -750,7 +567,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 transports = setOf(PlaybackTransport.DIRECT, PlaybackTransport.HLS),
                 poTokens = ClientPoTokenCapabilities(player = androidPlayerOptional, gvs = androidGvsRequired),
                 content = nativeDirectUnusableContent(),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_VYONEX),
                 notes = "Previous responses exposed SABR-only media and require unavailable DroidGuard attestation.",
             ),
             manifest(
@@ -764,7 +581,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = androidPlayerOptional, gvs = androidGvsRequired),
                 content = ClientContentCapabilities(explicit = CapabilitySupport.UNKNOWN, kids = CapabilitySupport.UNKNOWN),
                 benchmarkContent = globallyUnusableContent().copy(normal = CapabilitySupport.LIMITED),
-                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_BENCHMARK, SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes =
                     "Passed 1 of 2 normal cases but failed the other 5 current cases. No DroidGuard-compatible " +
                         "token provider is available, so this remains probe-only.",
@@ -792,7 +609,7 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 transports = setOf(PlaybackTransport.SABR),
                 poTokens = ClientPoTokenCapabilities(player = iosPlayerOptional, gvs = iosGvsRequired),
                 content = ClientContentCapabilities(),
-                evidence = setOf(SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_YTDLP),
+                evidence = setOf(SOURCE_ANDROID_SABR_BENCHMARK, SOURCE_VYONEX),
                 notes = "Passed 0 of 6 current cases. No iOS-compatible token provider is available.",
             ),
             manifest(
@@ -848,39 +665,6 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 evidence = setOf(SOURCE_YOUTUBE_JS),
                 notes = "Previous player requests returned HTTP 400 INVALID_ARGUMENT.",
             ),
-            /*
-             * Disabled after every player request returned HTTP 400 FAILED_PRECONDITION.
-             *
-            manifest(
-                id = "ANDROID_MUSIC",
-                client = YouTubeClient.ANDROID_MUSIC,
-                displayName = "Android Music 5.34.51",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 5,
-                transports = setOf(PlaybackTransport.DIRECT),
-                poTokens = ClientPoTokenCapabilities(player = androidPlayerRequired, gvs = androidGvsRequired),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YOUTUBE_JS),
-                notes = "Current player requests return HTTP 400 FAILED_PRECONDITION for every benchmark probe.",
-            ),
-             *
-             * Disabled after every player request returned HTTP 400 INVALID_ARGUMENT.
-             *
-            manifest(
-                id = "ANDROID_CREATOR",
-                client = YouTubeClient.ANDROID_CREATOR,
-                displayName = "Android Studio 25.03.101",
-                lifecycle = ClientLifecycle.BROKEN,
-                selectionMode = ClientSelectionMode.PROBE_ONLY,
-                priority = 0,
-                authentication = AuthenticationPolicy.REQUIRED,
-                transports = setOf(PlaybackTransport.DIRECT),
-                content = globallyUnusableContent(),
-                evidence = setOf(SOURCE_VYONEX, SOURCE_YOUTUBE_JS),
-                notes = "Both 25.03.101 and the YouTube.js 22.43.101 identity return HTTP 400.",
-            ),
-             */
             manifest(
                 id = "IOS_MUSIC",
                 client = YouTubeClient.IOS_MUSIC,
@@ -941,8 +725,10 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
                 poTokens = ClientPoTokenCapabilities(player = webPlayerNotRequired, gvs = webGvsRequired),
                 request = webRequest,
                 content = normalWebContent,
-                evidence = setOf(SOURCE_YTDLP, SOURCE_YOUTUBE_JS),
-                notes = "Used for metadata/transcript calls. Playback uses the explicit WEB_SABR profile.",
+                evidence = setOf(SOURCE_WEB_PAGE_CAPTURE),
+                notes =
+                    "The fallback identity matches the official watch-page context; runtime config supplies newer versions. " +
+                        "Playback uses the explicit WEB_SABR profile.",
             ),
         ).also(::validateInventory)
 
@@ -1094,6 +880,15 @@ object PlaybackClientCatalog : PlaybackClientCatalogView {
         require(manifests.map { it.id }.distinct().size == manifests.size) { "Playback client manifest IDs must be unique" }
         require(manifests.map { it.client }.distinct().size == manifests.size) {
             "Every manifest must have a distinguishable YouTubeClient request profile"
+        }
+        require(
+            manifests.filter(PlaybackClientManifest::isAutomatic).all { manifest ->
+                SOURCE_VYONEX in manifest.evidence ||
+                    SOURCE_ANDROID_BENCHMARK in manifest.evidence ||
+                    SOURCE_ANDROID_SABR_BENCHMARK in manifest.evidence
+            },
+        ) {
+            "Automatically selected profiles must have VyonEx playback evidence"
         }
     }
 }
