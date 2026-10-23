@@ -1023,22 +1023,12 @@ class InnerTubeExtractor internal constructor(
                 ).withResponseMetadata(response)
             }
 
-            val directAudioItags =
-                allFormats
-                    .asSequence()
-                    .filter { it.width == null && !it.url.isNullOrBlank() }
-                    .map { it.itag }
-                    .toSet()
+            val directAudioFormats =
+                allFormats.filter { it.isAudio && !it.url.isNullOrBlank() }
+            val directAudioItags = directAudioFormats.mapTo(mutableSetOf()) { it.itag }
 
             logger.d(TAG, "format inventory", details = mapOf("client" to result.clientName, "formatCount" to allFormats.size.toString()))
 
-            val directAudioFormats =
-                allFormats.filter {
-                    it.width == null &&
-                        !it.url.isNullOrBlank() &&
-                        (it.itag in directAudioItags)
-                }
-            val directFastPathCandidate = selectBestAudioFormat(directAudioFormats, audioQuality)
             val bestAvailableAudioFormat =
                 selectBestAudioFormat(
                     allFormats.filter { format ->
@@ -1052,22 +1042,28 @@ class InnerTubeExtractor internal constructor(
                     audioQuality,
                     requireUrl = false,
                 )
-            val directAudioIsBest = directFastPathCandidate?.itag == bestAvailableAudioFormat?.itag
+            val directFastPathCandidate =
+                selectBestAudioFormat(directAudioFormats, audioQuality)
+                    ?.takeIf { it.itag == bestAvailableAudioFormat?.itag }
             val wantVideo = hints.wantVideo
             val directVideoFormats =
                 if (wantVideo) preferredVideoFormats(streamingData, requireUrl = true) else emptyList()
             val preferredDirectVideo =
                 selectBestVideoFormat(directVideoFormats, maxHeight = hints.maxVideoHeight ?: 2160)
             val directFastPathVideo =
-                preferredDirectVideo?.takeIf { it.hasReadyVideoUrl() }
-                    ?: selectBestVideoFormat(
-                        directVideoFormats.filter {
-                            it.height == preferredDirectVideo?.height && it.hasReadyVideoUrl()
-                        },
-                        maxHeight = hints.maxVideoHeight ?: 2160,
-                    )
-                    ?: preferredDirectVideo
-            if (directFastPathCandidate != null && directAudioIsBest && (!wantVideo || directFastPathVideo != null)) {
+                preferredDirectVideo?.let { preferred ->
+                    if (preferred.hasReadyVideoUrl()) {
+                        preferred
+                    } else {
+                        selectBestVideoFormat(
+                            directVideoFormats.filter {
+                                it.height == preferred.height && it.hasReadyVideoUrl()
+                            },
+                            maxHeight = hints.maxVideoHeight ?: 2160,
+                        ) ?: preferred
+                    }
+                }
+            if (directFastPathCandidate != null && (!wantVideo || directFastPathVideo != null)) {
                 val directUrl =
                     appendClientPlaybackNonce(
                         directFastPathCandidate.url.orEmpty().withPoToken(result.streamingDataPoToken),
