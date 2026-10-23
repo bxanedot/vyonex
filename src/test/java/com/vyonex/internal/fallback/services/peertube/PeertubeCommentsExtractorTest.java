@@ -43,7 +43,7 @@ class PeertubeCommentsExtractorTest {
                    "createdAt":"2026-01-03T03:04:05Z","isDeleted":false,"totalReplies":0,
                    "account":{"displayName":"Bob","name":"bob","host":"tube.example"}},
                    "children":[{"comment":{"id":104,"threadId":101,"text":"Nested",
-                   "createdAt":"2026-01-04T03:04:05Z","isDeleted":false,"totalReplies":0,
+                   "createdAt":"2026-01-04T03:04:05Z","isDeleted":false,
                    "account":{"displayName":"Carol","name":"carol","host":"tube.example"}},
                    "children":[]}]}]}
                 """;
@@ -82,6 +82,7 @@ class PeertubeCommentsExtractorTest {
         final var nested = extractor.getPage(replies.getItems().get(0).getReplies());
         assertEquals(1, nested.getItems().size());
         assertEquals("104", nested.getItems().get(0).getCommentId());
+        assertEquals(0, nested.getItems().get(0).getReplyCount());
         assertNull(nested.getNextPage());
         assertEquals(List.of(commentsUrl + "?start=0&count=12", threadUrl),
                 downloader.requestedUrls);
