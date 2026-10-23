@@ -206,20 +206,20 @@ class InnerTube(
         get() = session.load().regionOverrideActive
         set(value) = updateSession { it.copy(regionOverrideActive = value) }
 
-    fun createIsolatedSession(includeAccount: Boolean): InnerTube =
-        InnerTube(httpClient, retryDelay, logger).also { isolated ->
-            isolated.locale = locale
-            isolated.regionOverrideActive = regionOverrideActive
-            sessionSnapshot().let { current ->
-                isolated.replaceSession(
-                    cookie = current.cookie.takeIf { includeAccount },
-                    visitorData = current.visitorData,
-                    dataSyncId = current.dataSyncId.takeIf { includeAccount },
-                    authUser = current.authUser.takeIf { includeAccount } ?: "0",
-                    useLoginForBrowse = current.useLoginForBrowse && includeAccount,
-                )
-            }
+    fun createIsolatedSession(includeAccount: Boolean): InnerTube {
+        val current = sessionSnapshot()
+        return InnerTube(httpClient, retryDelay, logger).also { isolated ->
+            isolated.locale = current.locale
+            isolated.regionOverrideActive = current.regionOverrideActive
+            isolated.replaceSession(
+                cookie = current.cookie.takeIf { includeAccount },
+                visitorData = current.visitorData,
+                dataSyncId = current.dataSyncId.takeIf { includeAccount },
+                authUser = current.authUser.takeIf { includeAccount } ?: "0",
+                useLoginForBrowse = current.useLoginForBrowse && includeAccount,
+            )
         }
+    }
 
     /**
      * Cancels library-owned visitor-data work and session-bound requests.
