@@ -5,6 +5,7 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.json.JsonObject;
@@ -66,6 +67,19 @@ class MediaCCCInfoItemTest {
         assertEquals(17, recent.getViewCount());
         assertEquals("https://cdn.example.test/poster.jpg", recent.getThumbnails().get(0).getUrl());
         assertEquals("2026-02-01T12:00:00.000UTC", recent.getTextualUploadDate());
+        assertEquals(DateWrapper.fromInstant("2026-02-01T12:00:00Z").getInstant(),
+                recent.getUploadDate().getInstant());
+        final MediaCCCRecentKioskExtractor offsetDate = new MediaCCCRecentKioskExtractor(
+                JsonParser.object().from("{\"date\":\"2026-02-01T12:00:00.000+02:00\"}"));
+        assertEquals(DateWrapper.fromInstant("2026-02-01T10:00:00Z").getInstant(),
+                offsetDate.getUploadDate().getInstant());
+
+        final MediaCCCRecentKioskExtractor undated = new MediaCCCRecentKioskExtractor(
+                JsonParser.object().from("{}"));
+        assertNull(undated.getUploadDate());
+        final MediaCCCRecentKioskExtractor invalidDate = new MediaCCCRecentKioskExtractor(
+                JsonParser.object().from("{\"date\":\"not-a-date\"}"));
+        assertThrows(ParsingException.class, invalidDate::getUploadDate);
 
         final JsonObject conference = JsonParser.object().from(
                 "{\"conference\":\"Chaos\",\"slug\":\"chaos-2026\"}");

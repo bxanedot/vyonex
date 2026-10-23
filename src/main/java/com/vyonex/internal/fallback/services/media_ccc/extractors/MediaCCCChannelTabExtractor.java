@@ -13,8 +13,6 @@ import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -34,14 +32,10 @@ public class MediaCCCChannelTabExtractor extends ChannelTabExtractor {
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws ExtractionException, IOException {
         if (events == null) {
-            final JsonObject conference = MediaCCCConferenceExtractor.fetchConferenceData(
-                    downloader, getId());
-            events = eventItems(conference.getArray("events"));
+            final MediaCCCConferenceExtractor.ConferenceData conference =
+                    MediaCCCConferenceExtractor.fetchConferenceData(downloader, getId());
+            events = conference.events();
         }
-    }
-
-    private static List<MediaCCCStreamInfoItemExtractor> eventItems(final JsonArray source) {
-        return source.streamAsJsonObjects().map(MediaCCCStreamInfoItemExtractor::new).toList();
     }
 
     @Nonnull @Override public ListExtractor.InfoItemsPage<InfoItem> getInitialPage() {

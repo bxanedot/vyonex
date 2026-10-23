@@ -13,6 +13,7 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
@@ -58,7 +59,7 @@ public final class SoundcloudCommentsExtractor extends CommentsExtractor {
                 items.commit(new SoundcloudCommentsInfoItemExtractor((JsonObject) value, getUrl()));
             }
         }
-        final String next = data.getString("next_href");
-        return new InfoItemsPage<>(items, next == null || next.isBlank() ? null : new Page(next));
+        final String next = SoundcloudParsingHelper.getNextPageUrl(data);
+        return new InfoItemsPage<>(items, next.isBlank() ? null : new Page(next));
     }
 }

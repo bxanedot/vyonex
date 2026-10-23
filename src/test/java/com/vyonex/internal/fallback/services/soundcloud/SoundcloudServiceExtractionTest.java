@@ -18,6 +18,7 @@ import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudCom
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudSuggestionExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudSearchQueryHandlerFactory;
 import com.vyonex.internal.fallback.stream.AudioStream;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +34,37 @@ class SoundcloudServiceExtractionTest {
     private static final String HOME = "https://soundcloud.com";
     private static final String SCRIPT = "https://cdn.sndcdn.com/assets/client.js";
     private static final String CLIENT_ID = "offline-key";
+
+    @Test
+    void buildsSearchUrlsForEachContentTypeAndEncodesTheQuery() throws Exception {
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                HOME, "<script src=\"" + SCRIPT + "\"></script>",
+                SCRIPT, "client_id:\"" + CLIENT_ID + "\""));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final var factory = SoundcloudSearchQueryHandlerFactory.getInstance();
+            final String common = "?q=ambient+%26+caf%C3%A9&client_id=" + CLIENT_ID
+                    + "&limit=10&offset=0";
+
+            assertEquals("https://api-v2.soundcloud.com/search" + common,
+                    factory.getUrl("ambient & café", List.of("all"), ""));
+            assertEquals("https://api-v2.soundcloud.com/search/tracks" + common,
+                    factory.getUrl("ambient & café", List.of("tracks"), ""));
+            assertEquals("https://api-v2.soundcloud.com/search/users" + common,
+                    factory.getUrl("ambient & café", List.of("users"), ""));
+            assertEquals("https://api-v2.soundcloud.com/search/playlists" + common,
+                    factory.getUrl("ambient & café", List.of("playlists"), ""));
+            assertEquals("https://api-v2.soundcloud.com/search" + common,
+                    factory.getUrl("ambient & café", List.of(), ""));
+            assertEquals("https://api-v2.soundcloud.com/search" + common,
+                    factory.getUrl("ambient & café", List.of("unsupported"), ""));
+            assertEquals("https://api-v2.soundcloud.com/search" + common,
+                    factory.getUrl("ambient & café", java.util.Arrays.asList((String) null), ""));
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
 
     @Test
     void mapsChannelProfileFromOfflineApiResponse() throws Exception {
@@ -83,6 +115,13 @@ class SoundcloudServiceExtractionTest {
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 searchUrl, search,
+                "https://api-v2.soundcloud.com/search?q=ambient&offset=10&client_id="
+                        + CLIENT_ID,
+                """
+                        {"collection":[{"kind":"track","id":43,"title":"Wind",
+                         "permalink_url":"https://soundcloud.com/a/wind",
+                         "user":{"username":"Alice"}}]}
+                        """,
                 "https://api-v2.soundcloud.com/search/queries?q=ambient&client_id="
                         + CLIENT_ID + "&limit=10",
                 "{\"collection\":[{\"query\":\"ambient music\"}]}"));
@@ -98,7 +137,10 @@ class SoundcloudServiceExtractionTest {
 
             assertEquals(1, firstPage.getItems().size());
             assertEquals("Rain", firstPage.getItems().get(0).getName());
-            assertTrue(firstPage.getNextPage().getUrl().contains("offset=10"));
+            assertEquals("https://api-v2.soundcloud.com/search?q=ambient&offset=10&client_id="
+                    + CLIENT_ID, firstPage.getNextPage().getUrl());
+            final var secondPage = extractor.getPage(firstPage.getNextPage());
+            assertEquals("Wind", secondPage.getItems().get(0).getName());
             assertEquals(List.of("ambient music"),
                     new SoundcloudSuggestionExtractor(service).suggestionList("ambient"));
         } finally {
@@ -162,10 +204,18 @@ class SoundcloudServiceExtractionTest {
     void parsesCommentPagesWithoutNetworkAccess() throws Exception {
         final String commentsUrl = "https://api-v2.soundcloud.com/tracks/42/comments?client_id="
                 + CLIENT_ID + "&threaded=0&filter_replies=1";
-        final StubDownloader downloader = new StubDownloader(Map.of(commentsUrl, """
+        final String nextCommentsUrl = "https://api-v2.soundcloud.com/tracks/42/comments?offset=10"
+                + "&client_id=" + CLIENT_ID;
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                HOME, "<script src=\"" + SCRIPT + "\"></script>",
+                SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
+                commentsUrl, """
                 {"collection":[{"id":5,"body":"Great","timestamp":3500,
                  "created_at":"2026-10-22T12:30:00Z","user":{"username":"Alice"}}],
                  "next_href":"https://api-v2.soundcloud.com/tracks/42/comments?offset=10"}
+                """, nextCommentsUrl, """
+                {"collection":[{"id":6,"body":"Thanks","timestamp":4000,
+                 "created_at":"2026-10-22T12:31:00Z","user":{"username":"Bob"}}]}
                 """));
         final Downloader previous = VyonEx.getDownloader();
         try {
@@ -178,7 +228,9 @@ class SoundcloudServiceExtractionTest {
             assertEquals(1, page.getItems().size());
             assertEquals("5", page.getItems().get(0).getCommentId());
             assertEquals("Great", page.getItems().get(0).getCommentText().getContent());
-            assertTrue(page.getNextPage().getUrl().contains("offset=10"));
+            assertEquals(nextCommentsUrl, page.getNextPage().getUrl());
+            final var nextPage = extractor.getPage(page.getNextPage());
+            assertEquals("6", nextPage.getItems().get(0).getCommentId());
         } finally {
             VyonEx.init(previous);
         }

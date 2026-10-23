@@ -26,11 +26,10 @@ public final class SoundcloudSubscriptionExtractor extends SubscriptionExtractor
         if (channelUrl == null || channelUrl.isBlank()) {
             throw new InvalidSourceException("Channel URL is empty");
         }
-        final String url = channelUrl.contains("://") ? channelUrl
-                : "https://soundcloud.com/" + channelUrl.replaceFirst("^/+", "");
+        final String url = normalizeChannelUrl(channelUrl);
         final String id;
         try {
-            id = service.getChannelLHFactory().fromUrl(url).getId();
+            id = service.getChannelLHFactory().getId(url);
         } catch (final ExtractionException e) {
             throw new InvalidSourceException(e);
         }
@@ -44,5 +43,14 @@ public final class SoundcloudSubscriptionExtractor extends SubscriptionExtractor
             subscriptions.add(new SubscriptionItem(user.getServiceId(), user.getUrl(), user.getName()));
         }
         return subscriptions;
+    }
+
+    private static String normalizeChannelUrl(final String channelUrl) {
+        final String value = channelUrl.trim();
+        if (value.contains("://")) return value;
+        if (value.matches("(?i)^(?:www\\.|m\\.)?soundcloud\\.com(?:/.*)?$")) {
+            return "https://" + value;
+        }
+        return "https://soundcloud.com/" + value.replaceFirst("^/+", "");
     }
 }

@@ -216,11 +216,18 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
 
     private record Transcoding(String endpoint, String protocol, String preset) { }
 
-    private static List<String> parseTags(final String input) {
+    static List<String> parseTags(final String input) {
+        if (input == null || input.isBlank()) return List.of();
         final List<String> tags = new ArrayList<>();
         final StringBuilder tag = new StringBuilder();
         boolean quoted = false;
-        for (final char c : input.toCharArray()) {
+        for (int i = 0; i < input.length(); i++) {
+            final char c = input.charAt(i);
+            if (c == '\\' && i + 1 < input.length()
+                    && (input.charAt(i + 1) == '"' || input.charAt(i + 1) == '\\')) {
+                tag.append(input.charAt(++i));
+                continue;
+            }
             if (c == '"') {
                 quoted = !quoted;
             } else if (Character.isWhitespace(c) && !quoted) {

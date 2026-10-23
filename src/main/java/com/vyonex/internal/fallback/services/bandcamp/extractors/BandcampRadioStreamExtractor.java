@@ -7,15 +7,18 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ContentNotSupportedException;
-import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
-import com.vyonex.internal.fallback.playlist.PlaylistInfoItemsCollector;
+import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.stream.AudioStream;
 import com.vyonex.internal.fallback.stream.Description;
+import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamSegment;
+import com.vyonex.internal.fallback.stream.StreamType;
+import com.vyonex.internal.fallback.stream.VideoStream;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
@@ -25,22 +28,21 @@ import org.jsoup.nodes.Element;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_API_URL;
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_URL;
 
-public class BandcampRadioStreamExtractor extends BandcampStreamExtractor {
-    private String subtitle;
-    private String imageCaption;
-    private String publishedDate;
-    private long showImageId;
-    private String descriptionText;
-    private long audioDuration;
-    private String mp3Url;
-    private String opusUrl;
-    private List<SegmentData> segments = List.of();
+public class BandcampRadioStreamExtractor extends StreamExtractor {
+    private static final String API_URL = BASE_API_URL + "/bcweekly/1/get?id=";
+    private static final String HOST_AVATAR = BASE_URL
+            + "/img/buttons/bandcamp-button-circle-whitecolor-512.png";
+
+    private RadioShow show;
 
     public BandcampRadioStreamExtractor(final StreamingService service,
                                         final LinkHandler linkHandler) {
@@ -49,44 +51,49 @@ public class BandcampRadioStreamExtractor extends BandcampStreamExtractor {
 
     static JsonObject query(final Downloader downloader, final int id) throws ParsingException {
         try {
-            return JsonParser.object().from(downloader.get(
-                    BASE_API_URL + "/bcweekly/1/get?id=" + id).responseBody());
-        } catch (final IOException | ReCaptchaException | JsonParserException e) {
-            throw new ParsingException("Could not load Bandcamp radio show", e);
+            final Response response = downloader.get(API_URL + id);
+            if (response == null || response.responseBody() == null
+                    || response.responseBody().isBlank() || response.responseCode() >= 400) {
+                throw new ParsingException("Bandcamp returned no radio-show data");
+            }
+            return JsonParser.object().from(response.responseBody());
+        } catch (final IOException | ReCaptchaException | JsonParserException error) {
+            throw new ParsingException("Could not load Bandcamp radio show", error);
         }
     }
 
     @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws ExtractionException {
+    public void onFetchPage(@Nonnull final Downloader downloader) throws ParsingException {
+        final int id;
         try {
-            final JsonObject show = query(downloader, Integer.parseInt(getId()));
-            subtitle = show.getString("subtitle");
-            imageCaption = show.getString("image_caption", "");
-            publishedDate = show.getString("published_date");
-            showImageId = show.getLong("show_image_id");
-            descriptionText = show.getString("desc");
-            audioDuration = show.getLong("audio_duration");
-            final JsonObject audioSources = show.getObject("audio_stream");
-            mp3Url = audioSources.getString("mp3-128");
-            opusUrl = audioSources.getString("opus-lo");
-            final List<SegmentData> mappedSegments = new ArrayList<>();
-            for (final Object value : show.getArray("tracks")) {
-                if (!(value instanceof JsonObject track)) continue;
-                final String title = track.getString("title");
-                if (title == null) continue;
-                mappedSegments.add(new SegmentData(title, track.getInt("timecode"),
-                        track.getLong("track_art_id"), track.getString("artist")));
-            }
-            segments = List.copyOf(mappedSegments);
-        } catch (final NumberFormatException e) {
-            throw new ParsingException("Invalid Bandcamp radio show ID", e);
+            id = Integer.parseInt(getId());
+        } catch (final NumberFormatException error) {
+            throw new ParsingException("Invalid Bandcamp radio show ID", error);
         }
+        show = readShow(query(downloader, id));
+    }
+
+    private static RadioShow readShow(final JsonObject data) {
+        final List<SegmentData> segments = new ArrayList<>();
+        for (final Object value : data.getArray("tracks")) {
+            if (!(value instanceof JsonObject track)) continue;
+            final String title = track.getString("title");
+            if (title == null || title.isBlank()) continue;
+            segments.add(new SegmentData(title, track.getInt("timecode"),
+                    track.getLong("track_art_id"), track.getString("artist")));
+        }
+
+        final JsonObject audio = data.getObject("audio_stream");
+        return new RadioShow(data.getString("subtitle"), data.getString("image_caption"),
+                data.getString("published_date"), data.getLong("show_image_id"),
+                data.getString("desc"), data.getLong("audio_duration"),
+                audio.getString("mp3-128"), audio.getString("opus-lo"), List.copyOf(segments));
     }
 
     @Nonnull
     @Override
     public String getName() throws ParsingException {
-        return required(subtitle, "subtitle");
+        return required(show().title(), "subtitle");
     }
 
     @Nonnull
@@ -97,102 +104,103 @@ public class BandcampRadioStreamExtractor extends BandcampStreamExtractor {
 
     @Nonnull
     @Override
-    public String getUrl() {
-        return getLinkHandler().getUrl();
-    }
+    public String getUrl() { return getLinkHandler().getUrl(); }
 
     @Nonnull
     @Override
     public String getUploaderName() throws ParsingException {
-        final Element name = Jsoup.parse(imageCaption)
-                .selectFirst("a");
-        if (name == null || name.text().isBlank()) {
+        final String caption = show().imageCaption();
+        final Element link = Jsoup.parse(caption == null ? "" : caption).selectFirst("a");
+        if (link == null || link.text().isBlank()) {
             throw new ParsingException("Bandcamp radio response has no host name");
         }
-        return name.text();
+        return link.text();
     }
 
     @Nullable
     @Override
-    public String getTextualUploadDate() {
-        return publishedDate;
+    public String getTextualUploadDate() { return show().publishedDate(); }
+
+    @Nullable
+    @Override
+    public DateWrapper getUploadDate() throws ParsingException {
+        final String date = show().publishedDate();
+        if (date == null || date.isBlank()) return null;
+        try {
+            return new DateWrapper(LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant());
+        } catch (final DateTimeParseException error) {
+            throw new ParsingException("Invalid Bandcamp radio publication date", error);
+        }
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromImageId(showImageId, false);
+        return BandcampExtractorHelper.getImagesFromImageId(show().imageId(), false);
     }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() {
-        return List.of(new Image(BASE_URL + "/img/buttons/bandcamp-button-circle-whitecolor-512.png",
-                512, 512, Image.ResolutionLevel.MEDIUM));
+        return List.of(new Image(HOST_AVATAR, 512, 512, Image.ResolutionLevel.MEDIUM));
     }
 
     @Nonnull
     @Override
     public Description getDescription() {
-        return new Description(descriptionText, Description.PLAIN_TEXT);
+        return new Description(show().description(), Description.PLAIN_TEXT);
     }
 
     @Override
-    public long getLength() {
-        return audioDuration;
-    }
+    public long getLength() { return show().duration(); }
 
     @Override
     public List<AudioStream> getAudioStreams() {
         final List<AudioStream> streams = new ArrayList<>(2);
-        addAudio(streams, mp3Url, "mp3-128", MediaFormat.MP3, 128);
-        addAudio(streams, opusUrl, "opus-lo", MediaFormat.OPUS, 100);
+        addAudio(streams, show().mp3Url(), "mp3-128", MediaFormat.MP3, 128);
+        addAudio(streams, show().opusUrl(), "opus-lo", MediaFormat.OPUS, 100);
         return streams;
     }
 
     @Nonnull
     @Override
     public List<StreamSegment> getStreamSegments() {
-        final List<StreamSegment> result = new ArrayList<>(segments.size());
-        for (final SegmentData data : segments) {
+        final List<StreamSegment> segments = new ArrayList<>(show().segments().size());
+        for (final SegmentData data : show().segments()) {
             final StreamSegment segment = new StreamSegment(data.title(), data.timecode());
-            segment.setPreviewUrl(BandcampExtractorHelper.getImageUrl(
-                    data.artId(), true));
+            segment.setPreviewUrl(BandcampExtractorHelper.getImageUrl(data.artId(), true));
             segment.setChannelName(data.artist());
-            result.add(segment);
+            segments.add(segment);
         }
-        return result;
+        return segments;
     }
 
-    @Nonnull
-    @Override
-    public String getLicence() { return ""; }
+    @Override public List<VideoStream> getVideoStreams() { return List.of(); }
+    @Override public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
+    @Override public StreamType getStreamType() { return StreamType.AUDIO_STREAM; }
 
-    @Nonnull
-    @Override
-    public String getCategory() { return ""; }
+    private RadioShow show() {
+        if (show == null) throw new IllegalStateException("Bandcamp radio page has not been fetched");
+        return show;
+    }
 
-    @Nonnull
-    @Override
-    public List<String> getTags() { return List.of(); }
-
-    @Override
-    public PlaylistInfoItemsCollector getRelatedItems() { return null; }
-
-    private String required(final String value, final String key) throws ParsingException {
+    private static String required(final String value, final String field) throws ParsingException {
         if (value == null || value.isBlank()) {
-            throw new ParsingException("Bandcamp radio response is missing " + key);
+            throw new ParsingException("Bandcamp radio response is missing " + field);
         }
         return value;
     }
 
-    private record SegmentData(String title, int timecode, long artId, String artist) { }
-
     private static void addAudio(final List<AudioStream> streams, final String url,
                                  final String id, final MediaFormat format, final int bitrate) {
-        if (url != null && !url.isBlank()) {
-            streams.add(new AudioStream.Builder().setId(id).setContent(url, true)
-                    .setMediaFormat(format).setAverageBitrate(bitrate).build());
-        }
+        if (url == null || url.isBlank()) return;
+        streams.add(new AudioStream.Builder().setId(id).setContent(url, true)
+                .setMediaFormat(format).setAverageBitrate(bitrate).build());
     }
+
+    private record RadioShow(String title, String imageCaption, String publishedDate,
+                             long imageId, String description, long duration, String mp3Url,
+                             String opusUrl, List<SegmentData> segments) { }
+
+    private record SegmentData(String title, int timecode, long artId, String artist) { }
 }

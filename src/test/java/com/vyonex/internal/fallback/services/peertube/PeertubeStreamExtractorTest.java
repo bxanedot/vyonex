@@ -6,12 +6,14 @@ package com.vyonex.internal.fallback.services.peertube;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.stream.DeliveryMethod;
 import com.vyonex.internal.fallback.stream.StreamType;
@@ -24,6 +26,38 @@ import java.util.List;
 import java.util.Map;
 
 class PeertubeStreamExtractorTest {
+    @Test
+    void treatsMissingOptionalSubresourcesDifferentlyFromServerFailures() throws Exception {
+        final String base = "https://tube.example";
+        final String videoUrl = base + "/api/v1/videos/video-1";
+        final String chaptersUrl = videoUrl + "/chapters";
+        final String storyboardsUrl = videoUrl + "/storyboards";
+        final Map<String, Response> responses = Map.of(
+                videoUrl, new Response(200, "OK", Map.of(),
+                        "{\"name\":\"Video\",\"isLive\":false}", videoUrl),
+                videoUrl + "/captions", new Response(200, "OK", Map.of(), "{\"data\":[]}",
+                        videoUrl + "/captions"),
+                chaptersUrl, new Response(400, "Bad Request", Map.of(), "", chaptersUrl),
+                storyboardsUrl, new Response(503, "Unavailable", Map.of(), "", storyboardsUrl));
+        VyonEx.init(new Downloader() {
+            @Override public Response execute(final Request request)
+                    throws IOException, ReCaptchaException {
+                final Response response = responses.get(request.url());
+                if (response == null) throw new IOException("No offline response for " + request.url());
+                return response;
+            }
+        });
+        final PeertubeService service = new PeertubeService(3,
+                new PeertubeInstance(base, "Offline"));
+        final var handler = PeertubeStreamLinkHandlerFactory.getInstance()
+                .fromUrl(base + "/videos/watch/video-1");
+        final var stream = service.getStreamExtractor(handler);
+        stream.fetchPage();
+
+        assertTrue(stream.getStreamSegments().isEmpty());
+        assertThrows(ExtractionException.class, stream::getFrames);
+    }
+
     @Test
     void liveStreamsExposeTheirHlsPlaylistWithoutSeparateAudio() throws Exception {
         final String base = "https://tube.example";
@@ -51,6 +85,35 @@ class PeertubeStreamExtractorTest {
     }
 
     @Test
+    void sameQualityFileVariantsKeepTheirSourceInTheStreamId() throws Exception {
+        final String base = "https://tube.example";
+        final String videoUrl = base + "/api/v1/videos/video-1";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                videoUrl, """
+                        {"name":"Variants","isLive":false,"files":[
+                          {"fileUrl":"https://cdn.example/720.mp4",
+                           "resolution":{"id":720,"label":"720p"}},
+                          {"fileDownloadUrl":"https://cdn.example/download/720.mp4",
+                           "resolution":{"id":720,"label":"720p"}}]}
+                        """,
+                videoUrl + "/captions", "{\"data\":[]}"));
+        VyonEx.init(downloader);
+        final PeertubeService service = new PeertubeService(3,
+                new PeertubeInstance(base, "Offline"));
+        final var handler = PeertubeStreamLinkHandlerFactory.getInstance()
+                .fromUrl(base + "/videos/watch/video-1");
+        final var stream = service.getStreamExtractor(handler);
+        stream.fetchPage();
+
+        final var variants = stream.getVideoStreams();
+        assertEquals(2, variants.size());
+        assertEquals("720p-mp4", variants.get(0).getId());
+        assertEquals("https://cdn.example/720.mp4", variants.get(0).getContent());
+        assertEquals("720p-mp4-fileDownloadUrl", variants.get(1).getId());
+        assertEquals("https://cdn.example/download/720.mp4", variants.get(1).getContent());
+    }
+
+    @Test
     void mapsMetadataMediaCaptionsChaptersStoryboardsAndRelatedVideosOffline() throws Exception {
         final String base = "https://tube.example";
         final String videoUrl = base + "/api/v1/videos/video-1";
@@ -71,7 +134,8 @@ class PeertubeStreamExtractorTest {
                  "thumbnailPath":"/video.jpg",
                  "files":[
                    {"fileUrl":"https://cdn.example/video-720.mp4",
-                    "resolution":{"id":720,"label":"720p"},"hasAudio":true},
+                    "resolution":{"id":720,"label":"720p"},"hasAudio":true,
+                    "torrentUrl":"https://cdn.example/video-720.torrent"},
                    {"fileUrl":"https://cdn.example/audio.webm",
                     "resolution":{"id":0,"label":"audio"}}],
                  "streamingPlaylists":[{"playlistUrl":"https://cdn.example/master.m3u8",
@@ -128,6 +192,12 @@ class PeertubeStreamExtractorTest {
                 .anyMatch(item -> item.getDeliveryMethod() == DeliveryMethod.HLS));
         assertTrue(stream.getVideoStreams().stream()
                 .anyMatch(item -> item.getDeliveryMethod() == DeliveryMethod.HLS));
+        assertTrue(stream.getAudioStreams().stream()
+                .anyMatch(item -> item.getId().equals("audio-hls")));
+        assertTrue(stream.getVideoStreams().stream()
+                .anyMatch(item -> item.getId().equals("720p-hls")));
+        assertTrue(stream.getVideoStreams().stream()
+                .anyMatch(item -> item.getId().equals("720p-torrent")));
         assertEquals("https://tube.example/captions/en.vtt",
                 stream.getSubtitlesDefault().get(0).getContent());
         assertFalse(stream.getSubtitlesDefault().get(0).isAutoGenerated());

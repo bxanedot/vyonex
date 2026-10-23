@@ -19,11 +19,12 @@ import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class BandcampChannelTabExtractor extends ChannelTabExtractor {
     private final String itemType;
-    private JsonArray discography;
+    private List<JsonObject> items;
 
     public BandcampChannelTabExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler) {
@@ -33,7 +34,8 @@ public class BandcampChannelTabExtractor extends ChannelTabExtractor {
         itemType = switch (filters.get(0)) {
             case ChannelTabs.TRACKS -> "track";
             case ChannelTabs.ALBUMS -> "album";
-            default -> throw new IllegalArgumentException("Unsupported channel tab: " + filters.get(0));
+            default -> throw new IllegalArgumentException(
+                    "Unsupported channel tab: " + filters.get(0));
         };
     }
 
@@ -42,34 +44,42 @@ public class BandcampChannelTabExtractor extends ChannelTabExtractor {
                                                               final JsonArray discography) {
         final BandcampChannelTabExtractor extractor =
                 new BandcampChannelTabExtractor(service, linkHandler);
-        extractor.discography = discography;
+        extractor.items = selectItems(discography, extractor.itemType);
         return extractor;
     }
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader) throws ParsingException {
-        if (discography == null) {
-            discography = BandcampExtractorHelper.getArtistDetails(downloader, getId())
-                    .getArray("discography");
+        if (items == null) {
+            final JsonArray discography = BandcampExtractorHelper
+                    .getArtistDetails(downloader, getId()).getArray("discography");
+            items = selectItems(discography, itemType);
         }
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<InfoItem> getInitialPage() throws IOException, ExtractionException {
-        final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
-        for (final Object value : discography) {
-            if (!(value instanceof JsonObject entry)
-                    || !itemType.equals(entry.getString("item_type"))) continue;
-            if ("track".equals(itemType)) {
-                items.commit(new BandcampDiscographStreamInfoItemExtractor(entry, getUrl()));
-            } else {
-                items.commit(new BandcampAlbumInfoItemExtractor(entry, getUrl()));
-            }
+        if (items == null) throw new ParsingException("Bandcamp tab has not been fetched");
+        final MultiInfoItemsCollector collector = new MultiInfoItemsCollector(getServiceId());
+        for (final JsonObject item : items) {
+            collector.commit("track".equals(itemType)
+                    ? new BandcampDiscographStreamInfoItemExtractor(item, getUrl())
+                    : new BandcampAlbumInfoItemExtractor(item, getUrl()));
         }
-        return new InfoItemsPage<>(items, null);
+        return new InfoItemsPage<>(collector, null);
     }
 
-    @Override
-    public InfoItemsPage<InfoItem> getPage(final Page page) { return null; }
+    @Override public InfoItemsPage<InfoItem> getPage(final Page page) { return null; }
+
+    private static List<JsonObject> selectItems(final JsonArray discography, final String type) {
+        if (discography == null) return List.of();
+        final List<JsonObject> selected = new ArrayList<>();
+        for (final Object value : discography) {
+            if (value instanceof JsonObject item && type.equals(item.getString("item_type"))) {
+                selected.add(item);
+            }
+        }
+        return List.copyOf(selected);
+    }
 }

@@ -27,6 +27,7 @@ import com.vyonex.internal.fallback.stream.VideoStream;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -95,6 +96,31 @@ class MediaCCCExtractorTest {
     }
 
     @Test
+    void conferenceVideoTabMapsEventsWhenFetchedWithoutChannelContext() throws Exception {
+        final String conferenceUrl = "https://api.media.ccc.de/public/conferences/fosdem";
+        final String conferenceBody = """
+                {"title":"FOSDEM","logo_url":"https://cdn.example.test/logo.jpg",
+                 "events":[{"title":"Closing session","guid":"closing-1","length":300,
+                   "view_count":4,"conference_title":"FOSDEM",
+                   "conference_url":"https://media.ccc.de/c/fosdem"}]}
+                """;
+        final StubDownloader downloader = new StubDownloader(Map.of(conferenceUrl, conferenceBody));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final ListLinkHandler link = MediaCCCConferenceLinkHandlerFactory.getInstance()
+                .fromUrl("https://media.ccc.de/c/fosdem");
+        final ChannelTabExtractor tab = new MediaCCCChannelTabExtractor(service, link, null);
+
+        tab.onFetchPage(downloader);
+
+        final List<InfoItem> items = tab.getInitialPage().getItems();
+        assertEquals(1, items.size());
+        assertEquals("Closing session", items.get(0).getName());
+        assertEquals("https://media.ccc.de/public/events/closing-1", items.get(0).getUrl());
+        assertEquals(List.of(conferenceUrl), downloader.requestedUrls);
+    }
+
+    @Test
     void recordingMapsMetadataAndAudioVideoFiles() throws Exception {
         final String eventUrl = "https://api.media.ccc.de/public/events/talk-1";
         final String conferenceUrl = "https://api.media.ccc.de/public/conferences/fosdem";
@@ -128,6 +154,8 @@ class MediaCCCExtractorTest {
         assertEquals("https://media.ccc.de/c/fosdem", recording.getUploaderUrl());
         assertEquals(1200, recording.getLength());
         assertEquals(34, recording.getViewCount());
+        assertEquals(Instant.parse("2026-02-01T12:00:00Z"),
+                recording.getUploadDate().getInstant());
         assertEquals(Locale.GERMAN, recording.getLanguageInfo());
         assertEquals(List.of("linux", "systems"), recording.getTags());
         assertEquals("https://cdn.example.test/logo.jpg", recording.getUploaderAvatars()
@@ -145,6 +173,35 @@ class MediaCCCExtractorTest {
         assertEquals("720p", video.get(0).getResolution());
         assertEquals("https://cdn.example.test/video.mp4", video.get(0).getContent());
         assertEquals(List.of(eventUrl, conferenceUrl), downloader.requestedUrls);
+    }
+
+    @Test
+    void recordingNormalizesConferenceWebLinkToCanonicalApiMetadata() throws Exception {
+        final String eventUrl = "https://api.media.ccc.de/public/events/talk-1";
+        final String conferenceApiUrl = "https://api.media.ccc.de/public/conferences/fosdem";
+        final String eventBody = """
+                {"title":"Talk","frontend_link":"https://media.ccc.de/v/talk-1",
+                 "length":1200,"view_count":34,"conference_url":"https://media.ccc.de/c/fosdem",
+                 "tags":[],"recordings":[]}
+                """;
+        final String conferenceBody = """
+                {"logo_url":"https://cdn.example.test/logo.jpg"}
+                """;
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                eventUrl, eventBody, conferenceApiUrl, conferenceBody));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final StreamExtractor recording = service.getStreamExtractor(
+                MediaCCCStreamLinkHandlerFactory.getInstance()
+                        .fromUrl("https://media.ccc.de/v/talk-1"));
+
+        recording.onFetchPage(downloader);
+
+        assertEquals("fosdem", recording.getUploaderName());
+        assertEquals("https://media.ccc.de/c/fosdem", recording.getUploaderUrl());
+        assertEquals("https://cdn.example.test/logo.jpg", recording.getUploaderAvatars()
+                .get(0).getUrl());
+        assertEquals(List.of(eventUrl, conferenceApiUrl), downloader.requestedUrls);
     }
 
     @Test

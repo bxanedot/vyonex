@@ -4,11 +4,16 @@
 package com.vyonex.internal.fallback.services.bandcamp.extractors;
 
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.VyonEx;
+import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Request;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,6 +28,26 @@ class BandcampExtractorHelperTest {
         assertTrue(BandcampExtractorHelper.isRadioUrl("https://bandcamp.com/?show=123"));
         assertFalse(BandcampExtractorHelper.isRadioUrl("https://example.test/?show=123"));
         assertFalse(BandcampExtractorHelper.isRadioUrl("https://bandcamp.com/?show=abc"));
+    }
+
+    @Test
+    void identifiesCustomArtistDomainsByTheirCartLink() throws Exception {
+        final Downloader previous = VyonEx.getDownloader();
+        final Downloader offline = new Downloader() {
+            @Override public Response execute(final Request request) {
+                final String html = request.url().contains("shop.example")
+                        ? "<div class='cart-wrapper'><a href='https://bandcamp.com/cart'>Cart</a></div>"
+                        : "<main>Not an artist page</main>";
+                return new Response(200, "OK", Map.of(), html, request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            assertTrue(BandcampExtractorHelper.isArtistDomain("https://shop.example/"));
+            assertFalse(BandcampExtractorHelper.isArtistDomain("https://plain.example/"));
+        } finally {
+            VyonEx.init(previous);
+        }
     }
 
     @Test

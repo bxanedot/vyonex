@@ -19,6 +19,7 @@ import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeComment
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,7 @@ class PeertubeCommentsExtractorTest {
                   {"id":101,"threadId":101,"text":"<p>Hello <strong>world</strong></p>",
                    "createdAt":"2026-01-02T03:04:05Z","isDeleted":false,
                    "totalReplies":2,"totalRepliesFromVideoAuthor":1,
-                   "account":{"displayName":"Alice","name":"alice","host":"tube.example",
+                   "account":{"displayName":"Alice","name":"alice","host":"federated.example",
                      "avatar":{"path":"/alice.png"}}},
                   {"id":102,"isDeleted":true}]}
                 """;
@@ -59,7 +60,11 @@ class PeertubeCommentsExtractorTest {
 
         assertEquals(1, firstPage.getItems().size());
         assertEquals("Hello world", firstPage.getItems().get(0).getCommentText().getContent());
-        assertEquals("alice@tube.example", firstPage.getItems().get(0).getUploaderName());
+        assertEquals(Instant.parse("2026-01-02T03:04:05Z"),
+                firstPage.getItems().get(0).getUploadDate().getInstant());
+        assertEquals("alice@federated.example", firstPage.getItems().get(0).getUploaderName());
+        assertEquals("https://tube.example/accounts/alice@federated.example",
+                firstPage.getItems().get(0).getUploaderUrl());
         assertEquals("https://tube.example/alice.png",
                 firstPage.getItems().get(0).getUploaderAvatars().get(0).getUrl());
         assertTrue(firstPage.getItems().get(0).hasCreatorReply());

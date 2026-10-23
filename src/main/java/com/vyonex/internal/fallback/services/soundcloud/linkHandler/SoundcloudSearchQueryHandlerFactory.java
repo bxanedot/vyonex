@@ -28,13 +28,7 @@ public final class SoundcloudSearchQueryHandlerFactory extends SearchQueryHandle
 
     @Override public String getUrl(final String query, final List<String> contentFilter,
                                    final String sortFilter) throws ParsingException {
-        String endpoint = SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL + "search";
-        if (!contentFilter.isEmpty()) {
-            final String filter = contentFilter.get(0);
-            if (TRACKS.equals(filter) || USERS.equals(filter) || PLAYLISTS.equals(filter)) {
-                endpoint += "/" + filter;
-            }
-        }
+        final String endpoint = endpointFor(contentFilter);
         try {
             return endpoint + "?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
                     + "&client_id=" + SoundcloudParsingHelper.clientId()
@@ -42,6 +36,15 @@ public final class SoundcloudSearchQueryHandlerFactory extends SearchQueryHandle
         } catch (final IOException | ExtractionException e) {
             throw new ParsingException("Unable to create SoundCloud search URL", e);
         }
+    }
+
+    private static String endpointFor(final List<String> contentFilter) {
+        final String selected = contentFilter.isEmpty() ? ALL : contentFilter.get(0);
+        final String suffix = switch (selected == null ? "" : selected) {
+            case TRACKS, USERS, PLAYLISTS -> "/" + selected;
+            default -> "";
+        };
+        return SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL + "search" + suffix;
     }
 
     @Override public String[] getAvailableContentFilter() {

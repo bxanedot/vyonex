@@ -8,6 +8,8 @@ import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
+import com.vyonex.internal.fallback.exceptions.PaidContentException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
@@ -69,6 +71,38 @@ class BandcampStreamExtractorTest {
         assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(""));
         assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(
                 "<div data-tralbum='not json'></div>"));
+    }
+
+    @Test
+    void distinguishesMissingAlbumTrackAndPaidTrackResponses() {
+        assertThrows(ParsingException.class,
+                () -> fetch("{\"trackinfo\":[]}"));
+        assertThrows(ExtractionException.class,
+                () -> fetch("{\"trackinfo\":[{},{}]}"));
+        assertThrows(PaidContentException.class,
+                () -> fetch("{\"trackinfo\":[{}]}"));
+    }
+
+    private static BandcampStreamExtractor fetch(final String data) throws Exception {
+        final String html = "<div data-tralbum='" + data + "'></div>";
+        final Downloader downloader = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(200, "OK", Map.of(), html, request.url());
+            }
+        };
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final BandcampStreamExtractor extractor = new BandcampStreamExtractor(
+                    new BandcampService(1), new LinkHandler(
+                    "https://artist.bandcamp.com/track/song",
+                    "https://artist.bandcamp.com/track/song", "song"));
+            extractor.onFetchPage(downloader);
+            return extractor;
+        } finally {
+            VyonEx.init(previous);
+        }
     }
 
     @Test

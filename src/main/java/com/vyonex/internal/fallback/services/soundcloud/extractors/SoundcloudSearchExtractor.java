@@ -14,6 +14,7 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
@@ -81,7 +82,7 @@ public final class SoundcloudSearchExtractor extends SearchExtractor {
                 default -> { }
             }
         }
-        final String next = data.getString("next_href");
-        return new InfoItemsPage<>(items, next == null || next.isBlank() ? null : new Page(next));
+        final String next = SoundcloudParsingHelper.getNextPageUrl(data);
+        return new InfoItemsPage<>(items, next.isBlank() ? null : new Page(next));
     }
 }
