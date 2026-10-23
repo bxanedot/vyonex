@@ -24,7 +24,12 @@ import java.util.List;
 
 public final class SoundcloudChannelExtractor extends ChannelExtractor {
     private String userId;
-    private JsonObject user;
+    private String name;
+    private String avatarUrl;
+    private List<String> visualUrls = List.of();
+    private long subscriberCount;
+    private String description;
+    private boolean verified;
 
     public SoundcloudChannelExtractor(final StreamingService service, final ListLinkHandler handler) {
         super(service, handler);
@@ -40,33 +45,44 @@ public final class SoundcloudChannelExtractor extends ChannelExtractor {
             throw new IOException("SoundCloud user request failed with HTTP " + response.responseCode());
         }
         try {
-            user = JsonParser.object().from(response.responseBody());
+            final JsonObject user = JsonParser.object().from(response.responseBody());
+            name = user.getString("username", "");
+            avatarUrl = user.getString("avatar_url");
+            subscriberCount = user.getLong("followers_count");
+            description = user.getString("description", "");
+            verified = user.getBoolean("verified");
+            final List<String> visuals = new ArrayList<>();
+            for (final Object item : user.getObject("visuals").getArray("visuals")) {
+                if (item instanceof JsonObject) {
+                    final String visualUrl = ((JsonObject) item).getString("visual_url");
+                    if (visualUrl != null) visuals.add(visualUrl);
+                }
+            }
+            visualUrls = List.copyOf(visuals);
         } catch (final JsonParserException e) {
             throw new ParsingException("Invalid SoundCloud user response", e);
         }
     }
 
     @Override public String getId() { return userId; }
-    @Override public String getName() { return user.getString("username", ""); }
+    @Override public String getName() { return name; }
     @Override public List<Image> getAvatars() {
-        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(user.getString("avatar_url"));
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(avatarUrl);
     }
     @Override public List<Image> getBanners() {
         final List<Image> images = new ArrayList<>();
-        for (final Object item : user.getObject("visuals").getArray("visuals")) {
-            if (!(item instanceof JsonObject)) continue;
-            final String url = ((JsonObject) item).getString("visual_url");
+        for (final String url : visualUrls) {
             images.addAll(SoundcloudParsingHelper.getAllImagesFromVisualUrl(url));
         }
         return images;
     }
     @Override public String getFeedUrl() { return null; }
-    @Override public long getSubscriberCount() { return user.getLong("followers_count"); }
-    @Override public String getDescription() { return user.getString("description", ""); }
+    @Override public long getSubscriberCount() { return subscriberCount; }
+    @Override public String getDescription() { return description; }
     @Override public String getParentChannelName() { return ""; }
     @Override public String getParentChannelUrl() { return ""; }
     @Override public List<Image> getParentChannelAvatars() { return List.of(); }
-    @Override public boolean isVerified() { return user.getBoolean("verified"); }
+    @Override public boolean isVerified() { return verified; }
 
     @Override public List<ListLinkHandler> getTabs() throws ParsingException {
         final String base = getUrl();

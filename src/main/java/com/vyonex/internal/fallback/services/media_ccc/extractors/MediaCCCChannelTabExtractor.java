@@ -26,9 +26,9 @@ public class MediaCCCChannelTabExtractor extends ChannelTabExtractor {
 
     public MediaCCCChannelTabExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler,
-                                       @Nullable final JsonObject conference) {
+                                       @Nullable final List<MediaCCCStreamInfoItemExtractor> events) {
         super(service, linkHandler);
-        if (conference != null) events = eventItems(conference.getArray("events"));
+        this.events = events;
     }
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)

@@ -20,12 +20,19 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
-import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public final class PeertubeChannelExtractor extends ChannelExtractor {
     private static final String API = "/api/v1/";
     private final String baseUrl;
-    private JsonObject channel;
+    private String apiId;
+    private String displayName;
+    private String description;
+    private long subscriberCount;
+    private String ownerName;
+    private String ownerUrl;
+    private List<Image> avatars = List.of();
+    private List<Image> banners = List.of();
+    private List<Image> ownerAvatars = List.of();
 
     public PeertubeChannelExtractor(final StreamingService service, final ListLinkHandler link)
             throws ParsingException {
@@ -34,23 +41,22 @@ public final class PeertubeChannelExtractor extends ChannelExtractor {
     }
 
     @Override public List<Image> getAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, channel);
+        return avatars;
     }
     @Override public List<Image> getBanners() {
-        return getBannersFromAccountOrVideoChannelObject(baseUrl, channel);
+        return banners;
     }
-    @Override public String getFeedUrl() { return baseUrl + "/feeds/videos.xml?videoChannelId=" + channel.get("id"); }
-    @Override public long getSubscriberCount() { return channel.getLong("followersCount"); }
-    @Override public String getDescription() { return channel.getString("description"); }
+    @Override public String getFeedUrl() { return baseUrl + "/feeds/videos.xml?videoChannelId=" + apiId; }
+    @Override public long getSubscriberCount() { return subscriberCount; }
+    @Override public String getDescription() { return description; }
     @Override public String getParentChannelName() throws ParsingException {
-        return requiredString(channel, "ownerAccount.name");
+        return requiredStoredString(ownerName, "ownerAccount.name");
     }
     @Override public String getParentChannelUrl() throws ParsingException {
-        return requiredString(channel, "ownerAccount.url");
+        return requiredStoredString(ownerUrl, "ownerAccount.url");
     }
     @Override public List<Image> getParentChannelAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl,
-                channel.getObject("ownerAccount"));
+        return ownerAvatars;
     }
     @Override public boolean isVerified() { return false; }
 
@@ -64,11 +70,27 @@ public final class PeertubeChannelExtractor extends ChannelExtractor {
 
     @Override
     public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
-        channel = readApiObject(downloader.get(baseUrl + API + getId()), "channel");
+        final JsonObject channel = readApiObject(downloader.get(baseUrl + API + getId()), "channel");
         PeertubeParsingHelper.validate(channel);
+        apiId = String.valueOf(channel.get("id"));
+        displayName = channel.getString("displayName");
+        description = channel.getString("description");
+        subscriberCount = channel.getLong("followersCount");
+        final JsonObject owner = channel.getObject("ownerAccount");
+        ownerName = owner.getString("name");
+        ownerUrl = owner.getString("url");
+        avatars = getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, channel);
+        banners = getBannersFromAccountOrVideoChannelObject(baseUrl, channel);
+        ownerAvatars = getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, owner);
     }
 
     @Override public String getName() throws ParsingException {
-        return requiredString(channel, "displayName");
+        return requiredStoredString(displayName, "displayName");
+    }
+
+    private static String requiredStoredString(final String value, final String field)
+            throws ParsingException {
+        if (value == null) throw new ParsingException("Missing string field: " + field);
+        return value;
     }
 }

@@ -10,8 +10,10 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
+import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudChannelExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudCommentsExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamExtractor;
@@ -31,6 +33,40 @@ class SoundcloudServiceExtractionTest {
     private static final String HOME = "https://soundcloud.com";
     private static final String SCRIPT = "https://cdn.sndcdn.com/assets/client.js";
     private static final String CLIENT_ID = "offline-key";
+
+    @Test
+    void mapsChannelProfileFromOfflineApiResponse() throws Exception {
+        final String profileUrl = "https://api-v2.soundcloud.com/users/7?client_id=" + CLIENT_ID;
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                HOME, "<script src=\"" + SCRIPT + "\"></script>",
+                SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
+                profileUrl, """
+                        {"username":"Alice","avatar_url":"https://images.example/alice.jpg",
+                         "followers_count":12,"description":"Producer","verified":true,
+                         "visuals":{"visuals":[{"visual_url":"https://images.example/banner.jpg"}]}}
+                        """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final String channelUrl = "https://soundcloud.com/alice";
+            final ListLinkHandler handler = new ListLinkHandler(
+                    channelUrl, channelUrl, "7", List.of(), "");
+            final SoundcloudChannelExtractor extractor = new SoundcloudChannelExtractor(
+                    new SoundcloudService(31), handler);
+            extractor.onFetchPage(downloader);
+
+            assertEquals("7", extractor.getId());
+            assertEquals("Alice", extractor.getName());
+            assertEquals("https://images.example/alice.jpg", extractor.getAvatars().get(0).getUrl());
+            assertEquals("https://images.example/banner.jpg", extractor.getBanners().get(0).getUrl());
+            assertEquals(12, extractor.getSubscriberCount());
+            assertEquals("Producer", extractor.getDescription());
+            assertTrue(extractor.isVerified());
+            assertEquals(4, extractor.getTabs().size());
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
 
     @Test
     void readsSuggestionsAndSearchPagesFromOfflineApiResponses() throws Exception {
@@ -81,7 +117,14 @@ class SoundcloudServiceExtractionTest {
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 resolveUrl, """
-                        {"id":42,"policy":"ALLOW","streamable":true,
+                        {"id":42,"title":"Song","policy":"ALLOW","streamable":true,
+                         "created_at":"2026-10-22T12:30:00Z","duration":125000,
+                         "playback_count":9,"likes_count":3,
+                         "description":"Rainy day","sharing":"public","genre":"ambient",
+                         "license":"cc-by","tag_list":"ambient \\\"chill beats\\\"",
+                         "artwork_url":"https://images.example/song.jpg",
+                         "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
+                           "avatar_url":"https://images.example/alice.jpg","verified":true},
                          "media":{"transcodings":[{"url":"https://api-v2.soundcloud.com/media/track/42/stream",
                            "preset":"mp3_0_0","format":{"protocol":"progressive"}}]}}
                         """,
@@ -93,6 +136,21 @@ class SoundcloudServiceExtractionTest {
                     new SoundcloudService(31), new LinkHandler(trackUrl, trackUrl, "42"));
             extractor.onFetchPage(downloader);
             final List<AudioStream> streams = extractor.getAudioStreams();
+            assertEquals("42", extractor.getId());
+            assertEquals("Song", extractor.getName());
+            assertEquals("2026-10-22T12:30:00Z", extractor.getTextualUploadDate());
+            assertEquals("Rainy day", extractor.getDescription().getContent());
+            assertEquals(125, extractor.getLength());
+            assertEquals(9, extractor.getViewCount());
+            assertEquals(3, extractor.getLikeCount());
+            assertEquals("Alice", extractor.getUploaderName());
+            assertEquals("https://soundcloud.com/alice", extractor.getUploaderUrl());
+            assertTrue(extractor.isUploaderVerified());
+            assertEquals("https://images.example/song.jpg", extractor.getThumbnails().get(0).getUrl());
+            assertEquals("public", extractor.getPrivacy().name().toLowerCase());
+            assertEquals("ambient", extractor.getCategory());
+            assertEquals("cc-by", extractor.getLicence());
+            assertEquals(List.of("ambient", "chill beats"), extractor.getTags());
             assertEquals(1, streams.size());
             assertEquals("https://audio.example/song.mp3", streams.get(0).getContent());
         } finally {
@@ -136,8 +194,11 @@ class SoundcloudServiceExtractionTest {
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 playlistUrl, """
-                        {"id":7,"title":"Mix","track_count":2,"tracks":[{"id":2},{"id":1}],
-                         "user":{"username":"Alice"}}
+                        {"id":7,"title":"Mix","permalink_url":"https://soundcloud.com/alice/sets/mix",
+                         "track_count":2,"description":"A short mix",
+                         "tracks":[{"id":2},{"id":1}],
+                         "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
+                           "avatar_url":"https://images.example/alice.jpg","verified":true}}
                         """,
                 tracksUrl, """
                         [{"id":1,"title":"First","duration":1000},
@@ -152,6 +213,14 @@ class SoundcloudServiceExtractionTest {
             final SoundcloudPlaylistExtractor extractor = new SoundcloudPlaylistExtractor(
                     new SoundcloudService(31), handler);
             extractor.onFetchPage(downloader);
+            assertEquals("Mix", extractor.getName());
+            assertEquals("https://soundcloud.com/alice", extractor.getUploaderUrl());
+            assertEquals("Alice", extractor.getUploaderName());
+            assertEquals("https://images.example/alice.jpg",
+                    extractor.getUploaderAvatars().get(0).getUrl());
+            assertTrue(extractor.isUploaderVerified());
+            assertEquals(2, extractor.getStreamCount());
+            assertEquals("A short mix", extractor.getDescription().getContent());
             final var firstPage = extractor.getInitialPage();
             final var tracks = extractor.getPage(firstPage.getNextPage());
 
