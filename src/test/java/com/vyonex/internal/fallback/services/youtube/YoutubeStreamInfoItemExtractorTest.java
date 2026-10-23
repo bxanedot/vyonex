@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.youtube;
 
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamInfoItemExtractor;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.stream.ContentAvailability;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonArray;
@@ -16,6 +17,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YoutubeStreamInfoItemExtractorTest {
@@ -105,6 +107,34 @@ class YoutubeStreamInfoItemExtractorTest {
         assertEquals(ContentAvailability.PAID, extractor.getContentAvailability());
         assertTrue(extractor.isShortFormContent());
         assertEquals("Short description", extractor.getShortDescription());
+    }
+
+    @Test
+    void readsAlternateDurationAvatarAndShortsRenderers() throws Exception {
+        final JsonObject withSeconds = json(
+                "title", json("simpleText", "Creator upload"),
+                "lengthSeconds", "125",
+                "shortBylineText", byline("Creator", "UC123"),
+                "channelThumbnail", json("thumbnails", array(thumbnail("alternate.jpg"))));
+        final YoutubeStreamInfoItemExtractor seconds =
+                new YoutubeStreamInfoItemExtractor(withSeconds, null);
+        assertEquals(125, seconds.getDuration());
+        assertEquals("Creator", seconds.getUploaderName());
+        assertEquals("https://img.example/alternate.jpg",
+                seconds.getUploaderAvatars().get(0).getUrl());
+
+        final JsonObject withOverlay = json(
+                "title", json("simpleText", "Short clip"),
+                "thumbnailOverlays", array(json("thumbnailOverlayTimeStatusRenderer",
+                        json("text", json("simpleText", "1:05"), "style", "SHORTS"))));
+        final YoutubeStreamInfoItemExtractor overlay =
+                new YoutubeStreamInfoItemExtractor(withOverlay, null);
+        assertEquals(65, overlay.getDuration());
+        assertTrue(overlay.isShortFormContent());
+        assertTrue(new YoutubeStreamInfoItemExtractor(
+                json("title", json("simpleText", "[Deleted video]")), null).isAd());
+        assertThrows(ParsingException.class,
+                () -> new YoutubeStreamInfoItemExtractor(new JsonObject(), null).getName());
     }
 
     private static JsonObject byline(final String name, final String channelId) {
