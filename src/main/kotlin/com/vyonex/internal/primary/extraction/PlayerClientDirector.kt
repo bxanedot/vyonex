@@ -863,7 +863,7 @@ internal class PlayerClientDirector(
             logger.w(TAG, "bearer player response rejected", details = mapOf("client" to client.clientName, "reason" to "drm"))
             return null
         }
-        val response = runCatching { json.decodeFromString<PlayerResponse>(payload) }.getOrNull()
+        val response = runCatching { PlayerResponse.parse(payload) }.getOrNull()
         if (response == null) {
             val root = parsedRoot ?: runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull()
             val elapsed = Clock.System.now().toEpochMilliseconds() - startTime
