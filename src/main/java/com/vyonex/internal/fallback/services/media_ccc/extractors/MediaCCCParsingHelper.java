@@ -19,7 +19,6 @@ import java.util.regex.Pattern;
 
 public final class MediaCCCParsingHelper {
     private static final Pattern LIVE_ID = Pattern.compile("[A-Za-z0-9_-]+/[A-Za-z0-9_-]+");
-    private static JsonArray liveStreams;
 
     private MediaCCCParsingHelper() { }
 
@@ -30,19 +29,16 @@ public final class MediaCCCParsingHelper {
     public static JsonArray getLiveStreams(final Downloader downloader,
                                            final Localization localization)
             throws ExtractionException {
-        if (liveStreams == null) {
-            try {
-                final String body = downloader.get(
-                        "https://streaming.media.ccc.de/streams/v2.json", localization)
-                        .responseBody();
-                liveStreams = JsonParser.array().from(body);
-            } catch (final IOException | ReCaptchaException error) {
-                throw new ExtractionException("Could not fetch live stream data.", error);
-            } catch (final JsonParserException error) {
-                throw new ExtractionException("Could not parse live stream data.", error);
-            }
+        try {
+            final String body = downloader.get(
+                    "https://streaming.media.ccc.de/streams/v2.json", localization)
+                    .responseBody();
+            return JsonParser.array().from(body);
+        } catch (final IOException | ReCaptchaException error) {
+            throw new ExtractionException("Could not fetch live stream data.", error);
+        } catch (final JsonParserException error) {
+            throw new ExtractionException("Could not parse live stream data.", error);
         }
-        return liveStreams;
     }
 
     public static List<Image> getImageListFromLogoImageUrl(final String url) {
