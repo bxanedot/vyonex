@@ -21,6 +21,10 @@ internal object PlayerScriptParser {
         Regex(
             """(?:(?:(?:var|let|const)\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function|function\s+([a-zA-Z_$][a-zA-Z0-9_$]*))\s*\(\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\)\s*\{""",
         )
+    private val arrowFunctionPattern =
+        Regex(
+            """(?:(?:var|let|const)\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?:\(\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\)|([a-zA-Z_$][a-zA-Z0-9_$]*))\s*=>\s*\{""",
+        )
 
     /**
      * N-parameter transform: first split/join-style function in the player is often (not always) the n-function.
@@ -100,11 +104,12 @@ internal object PlayerScriptParser {
         playerCode: String,
         functionName: String,
     ): String? {
+        val escapedName = Regex.escape(functionName)
         val patterns =
             listOf(
-                Regex("""(?s)var\s+${Regex.escape(functionName)}\s*=\s*function\s*\([^)]*\)\s*\{"""),
-                Regex("""(?s)function\s+${Regex.escape(functionName)}\s*\([^)]*\)\s*\{"""),
-                Regex("""(?s)${Regex.escape(functionName)}\s*=\s*function\s*\([^)]*\)\s*\{"""),
+                Regex("""(?s)(?:(?:var|let|const)\s+)?$escapedName\s*=\s*function\s*\([^)]*\)\s*\{"""),
+                Regex("""(?s)function\s+$escapedName\s*\([^)]*\)\s*\{"""),
+                Regex("""(?s)(?:(?:var|let|const)\s+)?$escapedName\s*=\s*(?:\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>\s*\{"""),
             )
         for (pattern in patterns) {
             val match = pattern.find(playerCode)
@@ -259,24 +264,51 @@ internal object PlayerScriptParser {
     }
 
     private fun splitJoinFunctions(code: String): List<FunctionMatch> =
-        functionPattern
-            .findAll(code)
-            .mapNotNull { match ->
-                val end = findFunctionEnd(code, match.range.first)
-                if (end <= match.range.first) return@mapNotNull null
-                val body = code.substring(match.range.first, end)
-                val parameter = match.groupValues[3]
+        functionDeclarations(code)
+            .mapNotNull { declaration ->
+                val end = findFunctionEnd(code, declaration.start)
+                if (end <= declaration.start) return@mapNotNull null
+                val body = code.substring(declaration.start, end)
+                val parameter = declaration.parameter
                 val escapedParameter = Regex.escape(parameter)
                 if (Regex("""$escapedParameter\s*=\s*$escapedParameter\.split\s*\(\s*(?:""|'')\s*\)""")
                         .containsMatchIn(body) &&
                     Regex("""return\s+$escapedParameter\.join\s*\(\s*(?:""|'')\s*\)""")
                         .containsMatchIn(body)
                 ) {
-                    FunctionMatch(match.groupValues[1].ifEmpty { match.groupValues[2] })
+                    FunctionMatch(declaration.name)
                 } else {
                     null
                 }
             }.toList()
+
+    private fun functionDeclarations(code: String): List<FunctionDeclaration> =
+        buildList {
+            functionPattern.findAll(code).forEach { match ->
+                add(
+                    FunctionDeclaration(
+                        name = match.groupValues[1].ifEmpty { match.groupValues[2] },
+                        parameter = match.groupValues[3],
+                        start = match.range.first,
+                    ),
+                )
+            }
+            arrowFunctionPattern.findAll(code).forEach { match ->
+                add(
+                    FunctionDeclaration(
+                        name = match.groupValues[1],
+                        parameter = match.groupValues[2].ifEmpty { match.groupValues[3] },
+                        start = match.range.first,
+                    ),
+                )
+            }
+        }.sortedBy(FunctionDeclaration::start)
+
+    private data class FunctionDeclaration(
+        val name: String,
+        val parameter: String,
+        val start: Int,
+    )
 
     private data class FunctionMatch(
         val name: String,

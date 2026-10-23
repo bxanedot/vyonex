@@ -35,6 +35,15 @@ class CipherScriptSupportTest {
         }
     """.trimIndent()
 
+    private val arrowFunctionPlayerCode = """
+        const nTransform = (value) => {
+            value = value.split(""); value.reverse(); return value.join("");
+        };
+        const signatureTransform = (value) => {
+            value = value.split(""); value.splice(0, 1); return value.join("");
+        };
+    """.trimIndent()
+
     @Test
     fun runsSignatureTransformFromPlayerCode() {
         val script = requireNotNull(CipherScriptSupport.signatureSolverScript(playerCode))
@@ -63,6 +72,15 @@ class CipherScriptSupportTest {
         val nScript = requireNotNull(CipherScriptSupport.nSolverScript(declaredFunctionPlayerCode))
 
         assertEquals("cdef", JavaScript.run(signatureScript, "deobfuscate", "abcdef"))
+        assertEquals("fedcba", JavaScript.run(nScript, "_solveN", "abcdef"))
+    }
+
+    @Test
+    fun supportsArrowTransformDeclarations() {
+        val signatureScript = requireNotNull(CipherScriptSupport.signatureSolverScript(arrowFunctionPlayerCode))
+        val nScript = requireNotNull(CipherScriptSupport.nSolverScript(arrowFunctionPlayerCode))
+
+        assertEquals("bcdef", JavaScript.run(signatureScript, "deobfuscate", "abcdef"))
         assertEquals("fedcba", JavaScript.run(nScript, "_solveN", "abcdef"))
     }
 }
