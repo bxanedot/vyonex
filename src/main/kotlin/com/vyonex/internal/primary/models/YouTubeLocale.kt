@@ -9,9 +9,11 @@ data class YouTubeLocale(
     val hl: String,
 ) {
     internal fun acceptLanguageHeader(): String {
-        val languageTag = hl.replace('_', '-')
-        val regionalTag = if ('-' in languageTag || gl.isEmpty()) languageTag else "$languageTag-$gl"
-        val fallback = languageTag.substringBefore('-')
-        return if (regionalTag == fallback) regionalTag else "$regionalTag,$fallback;q=0.9"
+        val languageTag = hl.trim().replace('_', '-')
+        val language = languageTag.substringBefore('-')
+        if (language.isEmpty()) return ""
+
+        val preferred = if ('-' in languageTag || gl.isEmpty()) languageTag else "$languageTag-$gl"
+        return if (preferred == language) language else "$preferred,$language;q=0.9"
     }
 }
