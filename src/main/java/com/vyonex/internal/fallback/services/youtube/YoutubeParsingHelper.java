@@ -656,7 +656,8 @@ public final class YoutubeParsingHelper {
 
         final Map<String, List<String>> headers = new HashMap<>(
                 getOriginReferrerHeaders(YOUTUBE_MUSIC_URL));
-        headers.putAll(getClientHeaders(WEB_REMIX_CLIENT_ID, WEB_HARDCODED_CLIENT_VERSION));
+        headers.putAll(getClientHeaders(WEB_REMIX_CLIENT_ID,
+                WEB_REMIX_HARDCODED_CLIENT_VERSION));
         final String endpoint = YOUTUBE_MUSIC_URL
                 + "/youtubei/v1/music/get_search_suggestions?"
                 + DISABLE_PRETTY_PRINT_PARAMETER;
