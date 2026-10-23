@@ -48,7 +48,8 @@ public class BandcampChannelExtractor(
             ?: return emptyList()
         val pageDownloader = downloader ?: return emptyList()
         return try {
-            val html = pageDownloader.get(artistUrl.replaceFirst("^http://", "https://"))
+            val secureUrl = artistUrl.replaceFirst(Regex("^http://"), "https://")
+            val html = pageDownloader.get(secureUrl)
                 .responseBody()
             Jsoup.parse(html).select("#customHeader img[src]")
                 .flatMap { image ->
