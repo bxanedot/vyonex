@@ -1,21 +1,9 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
 
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.DISABLE_PRETTY_PRINT_PARAMETER;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.YOUTUBEI_V1_URL;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getJsonPostResponse;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
 import com.google.protobuf.CodedOutputStream;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonWriter;
-
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
@@ -32,49 +20,40 @@ import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.utils.Utils;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.DISABLE_PRETTY_PRINT_PARAMETER;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.YOUTUBEI_V1_URL;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.extractPlaylistTypeFromPlaylistUrl;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getJsonPostResponse;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
 
+/** Reads playlist metadata and pages from YouTube's browse endpoint. */
 public class YoutubePlaylistExtractor extends PlaylistExtractor {
-    // Names of some objects in JSON response frequently used in this class
-    private static final String PLAYLIST_VIDEO_RENDERER = "playlistVideoRenderer";
-    private static final String RICH_ITEM_RENDERER = "richItemRenderer";
-    private static final String REEL_ITEM_RENDERER = "reelItemRenderer";
-    private static final String LOCKUP_VIEW_MODEL = "lockupViewModel";
-    private static final String SIDEBAR = "sidebar";
-    private static final String HEADER = "header";
-    private static final String VIDEO_OWNER_RENDERER = "videoOwnerRenderer";
-    private static final String MICROFORMAT = "microformat";
-    private static final String COMMAND_EXECUTOR_COMMAND = "commandExecutorCommand";
-    private static final String THUMBNAIL = "thumbnail";
-    private static final String THUMBNAILS = "thumbnails";
-    private static final String ON_RESPONSE_RECEIVED_ACTIONS = "onResponseReceivedActions";
-    private static final String CONTINUATION_ITEMS = "continuationItems";
-    private static final String APPEND_CONTINUATION_ITEMS_ACTION = "appendContinuationItemsAction";
-    private static final String CONTINUATION_COMMAND = "continuationCommand";
-    private static final String TITLE = "title";
+    private static final String PLAYLIST_ID_PREFIX = "VL";
+    private static final String UNAVAILABLE_VIDEO_PARAM = "wgYCCAA%3D";
+    private static final String CONTINUATION_SETTINGS = "CADCBgIIAA%3D%3D";
+    private static final String PLAYLIST_ITEM = "playlistVideoRenderer";
+    private static final String LOCKUP_ITEM = "lockupViewModel";
+    private static final String CONTINUATION_URL = YOUTUBEI_V1_URL + "browse?"
+            + DISABLE_PRETTY_PRINT_PARAMETER;
 
-    private static final String BROWSE_ENDPOINT = "browse";
-
-    // Continuation properties requesting first page and showing unavailable videos
-    private static final String PLAYLIST_CONTINUATION_PROPERTIES_BASE64 = "CADCBgIIAA%3D%3D";
-
-    private JsonObject browseMetadataResponse;
-    private JsonObject initialBrowseContinuationResponse;
-
-    private JsonObject playlistInfo;
-    private JsonObject uploaderInfo;
-    private JsonObject playlistHeader;
-
-    private boolean isNewPlaylistInterface;
-    private Boolean isCoursePlaylist = null;
+    @Nullable private JsonObject metadata;
+    @Nullable private JsonObject initialPage;
+    private boolean headerLayout;
 
     public YoutubePlaylistExtractor(final StreamingService service,
                                     final ListLinkHandler linkHandler) {
@@ -82,453 +61,310 @@ public class YoutubePlaylistExtractor extends PlaylistExtractor {
     }
 
     @Override
-    public void onFetchPage(@Nonnull final Downloader downloader) throws IOException,
-            ExtractionException {
+    public void onFetchPage(@Nonnull final Downloader downloader)
+            throws IOException, ExtractionException {
         final String playlistId = getId();
-
         final Localization localization = getExtractorLocalization();
-        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(localization,
-                        getExtractorContentCountry())
-                        .value("browseId", "VL" + playlistId)
-                        .value("params", "wgYCCAA%3D") // Show unavailable videos
-                        .done())
-                .getBytes(StandardCharsets.UTF_8);
+        final byte[] metadataBody = requestBody(localization, "browseId",
+                PLAYLIST_ID_PREFIX + playlistId, "params", UNAVAILABLE_VIDEO_PARAM);
+        metadata = getJsonPostResponse("browse",
+                List.of("$fields=sidebar,header,microformat,alerts"), metadataBody, localization);
+        YoutubeParsingHelper.defaultAlertsCheck(metadata);
+        headerLayout = metadata.has("header") && !metadata.has("sidebar");
 
-        browseMetadataResponse = getJsonPostResponse(BROWSE_ENDPOINT,
-                List.of("$fields=" + SIDEBAR + "," + HEADER + "," + MICROFORMAT + ",alerts"),
-                body,
-                localization);
-
-        YoutubeParsingHelper.defaultAlertsCheck(browseMetadataResponse);
-        isNewPlaylistInterface = checkIfResponseIsNewPlaylistInterface();
-
-        initialBrowseContinuationResponse = getJsonPostResponse(BROWSE_ENDPOINT,
-                JsonWriter.string(prepareDesktopJsonBuilder(localization,
-                        getExtractorContentCountry())
-                        .value("continuation", Utils.encodeUrlUtf8(Base64.getUrlEncoder()
-                                .encodeToString(encodePlaylistContinuation(playlistId))))
-                        .done())
-                        .getBytes(StandardCharsets.UTF_8),
+        final String opaqueContinuation = Base64.getUrlEncoder().encodeToString(
+                encodePlaylistContinuation(playlistId));
+        initialPage = getJsonPostResponse("browse",
+                requestBody(localization, "continuation", Utils.encodeUrlUtf8(opaqueContinuation)),
                 localization);
     }
 
     static byte[] encodePlaylistContinuation(final String playlistId) throws IOException {
-        final ByteArrayOutputStream parameterBytes = new ByteArrayOutputStream();
-        final CodedOutputStream parameters = CodedOutputStream.newInstance(parameterBytes);
-        parameters.writeString(2, "VL" + playlistId);
-        parameters.writeString(3, PLAYLIST_CONTINUATION_PROPERTIES_BASE64);
+        final ByteArrayOutputStream fields = new ByteArrayOutputStream();
+        final CodedOutputStream parameters = CodedOutputStream.newInstance(fields);
+        parameters.writeString(2, PLAYLIST_ID_PREFIX + playlistId);
+        parameters.writeString(3, CONTINUATION_SETTINGS);
         parameters.writeString(35, playlistId);
         parameters.flush();
 
-        final ByteArrayOutputStream continuationBytes = new ByteArrayOutputStream();
-        final CodedOutputStream continuation = CodedOutputStream.newInstance(continuationBytes);
-        continuation.writeByteArray(80226972, parameterBytes.toByteArray());
+        final ByteArrayOutputStream envelope = new ByteArrayOutputStream();
+        final CodedOutputStream continuation = CodedOutputStream.newInstance(envelope);
+        continuation.writeByteArray(80226972, fields.toByteArray());
         continuation.flush();
-        return continuationBytes.toByteArray();
-    }
-
-    /**
-     * Whether the playlist response is using only the new playlist design.
-     *
-     * <p>
-     * This new response changes how metadata is returned, and does not provide author thumbnails.
-     * </p>
-     *
-     * <p>
-     * The new response can be detected by checking whether a header JSON object is returned in the
-     * browse response (the old returns instead a sidebar one).
-     * </p>
-     *
-     * @return Whether the playlist response is using only the new playlist design
-     */
-    private boolean checkIfResponseIsNewPlaylistInterface() {
-        // The "old" playlist UI can be also returned with the new one
-        return browseMetadataResponse.has(HEADER) && !browseMetadataResponse.has(SIDEBAR);
+        return envelope.toByteArray();
     }
 
     @Nonnull
-    private JsonObject getUploaderInfo() throws ParsingException {
-        if (uploaderInfo == null) {
-            uploaderInfo = browseMetadataResponse.getObject(SIDEBAR)
-                    .getObject("playlistSidebarRenderer")
-                    .getArray("items")
-                    .streamAsJsonObjects()
-                    .filter(item -> item.getObject("playlistSidebarSecondaryInfoRenderer")
-                            .getObject("videoOwner")
-                            .has(VIDEO_OWNER_RENDERER))
-                    .map(item -> item.getObject("playlistSidebarSecondaryInfoRenderer")
-                            .getObject("videoOwner")
-                            .getObject(VIDEO_OWNER_RENDERER))
-                    .findFirst()
-                    .orElseThrow(() -> new ParsingException("Could not get uploader info"));
+    private byte[] requestBody(final Localization localization, final String... fields)
+            throws IOException, ExtractionException {
+        final var builder = prepareDesktopJsonBuilder(localization, getExtractorContentCountry());
+        for (int index = 0; index < fields.length; index += 2) {
+            builder.value(fields[index], fields[index + 1]);
         }
-
-        return uploaderInfo;
+        return JsonWriter.string(builder.done()).getBytes(StandardCharsets.UTF_8);
     }
 
     @Nonnull
-    private JsonObject getPlaylistInfo() throws ParsingException {
-        if (playlistInfo == null) {
-            playlistInfo = browseMetadataResponse.getObject(SIDEBAR)
-                    .getObject("playlistSidebarRenderer")
-                    .getArray("items")
-                    .streamAsJsonObjects()
-                    .filter(item -> item.has("playlistSidebarPrimaryInfoRenderer"))
-                    .map(item -> item.getObject("playlistSidebarPrimaryInfoRenderer"))
-                    .findFirst()
-                    .orElseThrow(() -> new ParsingException("Could not get playlist info"));
-        }
-
-        return playlistInfo;
+    private JsonObject metadata() throws ParsingException {
+        if (metadata == null) throw new ParsingException("Playlist metadata was not fetched");
+        return metadata;
     }
 
     @Nonnull
-    private JsonObject getPlaylistHeader() {
-        if (playlistHeader == null) {
-            playlistHeader = browseMetadataResponse.getObject(HEADER)
-                    .getObject("playlistHeaderRenderer");
-        }
-
-        return playlistHeader;
+    private JsonObject initialPage() throws ParsingException {
+        if (initialPage == null) throw new ParsingException("Playlist items were not fetched");
+        return initialPage;
     }
 
-    private boolean isCoursePlaylist() {
-        if (isCoursePlaylist == null) {
-            isCoursePlaylist = getPlaylistHeader().getObject("onDescriptionTap")
-                    .getObject(COMMAND_EXECUTOR_COMMAND)
-                    .getArray("commands")
-                    .streamAsJsonObjects()
-                    .anyMatch(object -> "engagement-panel-course-metadata".equals(
-                            object.getObject("showEngagementPanelEndpoint")
-                                    .getObject("identifier")
-                                    .getString("tag")));
+    @Nonnull
+    private JsonObject sidebarPlaylistInfo() throws ParsingException {
+        for (final JsonObject item : metadata().getObject("sidebar")
+                .getObject("playlistSidebarRenderer").getArray("items").streamAsJsonObjects().toList()) {
+            final JsonObject primary = item.getObject("playlistSidebarPrimaryInfoRenderer");
+            if (!primary.isEmpty()) return primary;
         }
+        throw new ParsingException("Playlist details are missing");
+    }
 
-        return isCoursePlaylist;
+    @Nonnull
+    private JsonObject sidebarOwnerInfo() throws ParsingException {
+        for (final JsonObject item : metadata().getObject("sidebar")
+                .getObject("playlistSidebarRenderer").getArray("items").streamAsJsonObjects().toList()) {
+            final JsonObject owner = item.getObject("playlistSidebarSecondaryInfoRenderer")
+                    .getObject("videoOwner").getObject("videoOwnerRenderer");
+            if (!owner.isEmpty()) return owner;
+        }
+        throw new ParsingException("Playlist owner is missing");
+    }
+
+    @Nonnull
+    private JsonObject playlistHeader() throws ParsingException {
+        final JsonObject header = metadata().getObject("header").getObject("playlistHeaderRenderer");
+        if (header.isEmpty()) throw new ParsingException("Playlist header is missing");
+        return header;
     }
 
     @Nonnull
     @Override
     public String getName() throws ParsingException {
-        final String name = getTextFromObject(getPlaylistInfo().getObject(TITLE));
-        if (!isNullOrEmpty(name)) {
-            return name;
-        }
-
-        return browseMetadataResponse.getObject(MICROFORMAT)
-                .getObject("microformatDataRenderer")
-                .getString(TITLE);
+        final String title = getTextFromObject(headerLayout
+                ? playlistHeader().getObject("title") : sidebarPlaylistInfo().getObject("title"));
+        if (title != null && !title.isBlank()) return title;
+        final String fallback = metadata().getObject("microformat")
+                .getObject("microformatDataRenderer").getString("title");
+        if (fallback == null || fallback.isBlank()) throw new ParsingException("Playlist title is missing");
+        return fallback;
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        final JsonArray playlistMetadataThumbnailsArray;
-        if (isNewPlaylistInterface) {
-            playlistMetadataThumbnailsArray = getPlaylistHeader().getObject("playlistHeaderBanner")
-                    .getObject("heroPlaylistThumbnailRenderer")
-                    .getObject(THUMBNAIL)
-                    .getArray(THUMBNAILS);
-        } else {
-            playlistMetadataThumbnailsArray = playlistInfo.getObject("thumbnailRenderer")
-                    .getObject("playlistVideoThumbnailRenderer")
-                    .getObject(THUMBNAIL)
-                    .getArray(THUMBNAILS);
-        }
+        final JsonArray thumbnails = headerLayout
+                ? playlistHeader().getObject("playlistHeaderBanner")
+                .getObject("heroPlaylistThumbnailRenderer").getObject("thumbnail")
+                .getArray("thumbnails")
+                : sidebarPlaylistInfo().getObject("thumbnailRenderer")
+                .getObject("playlistVideoThumbnailRenderer").getObject("thumbnail")
+                .getArray("thumbnails");
+        if (!thumbnails.isEmpty()) return getImagesFromThumbnailsArray(thumbnails);
 
-        if (!isNullOrEmpty(playlistMetadataThumbnailsArray)) {
-            return getImagesFromThumbnailsArray(playlistMetadataThumbnailsArray);
-        }
-
-        // This data structure is returned in both layouts
-        final JsonArray microFormatThumbnailsArray = browseMetadataResponse.getObject(MICROFORMAT)
-                    .getObject("microformatDataRenderer")
-                    .getObject(THUMBNAIL)
-                    .getArray(THUMBNAILS);
-
-        if (!isNullOrEmpty(microFormatThumbnailsArray)) {
-            return getImagesFromThumbnailsArray(microFormatThumbnailsArray);
-        }
-
-        throw new ParsingException("Could not get playlist thumbnails");
+        final JsonArray fallback = metadata().getObject("microformat")
+                .getObject("microformatDataRenderer").getObject("thumbnail")
+                .getArray("thumbnails");
+        if (!fallback.isEmpty()) return getImagesFromThumbnailsArray(fallback);
+        throw new ParsingException("Playlist thumbnails are missing");
     }
 
     @Override
     public String getUploaderUrl() throws ParsingException {
-        try {
-            return getUrlFromNavigationEndpoint(isNewPlaylistInterface
-                    ? getPlaylistHeader().getObject("ownerText")
-                    .getArray("runs")
-                    .getObject(0)
-                    .getObject("navigationEndpoint")
-                    : getUploaderInfo().getObject("navigationEndpoint"));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get playlist uploader url", e);
+        final JsonObject endpoint;
+        if (headerLayout) {
+            endpoint = playlistHeader().getObject("ownerText").getArray("runs")
+                    .getObject(0).getObject("navigationEndpoint");
+        } else {
+            endpoint = sidebarOwnerInfo().getObject("navigationEndpoint");
         }
+        final String url = getUrlFromNavigationEndpoint(endpoint);
+        if (url == null || url.isBlank()) throw new ParsingException("Playlist owner URL is missing");
+        return url;
     }
 
     @Override
     public String getUploaderName() throws ParsingException {
-        try {
-            return getTextFromObject(isNewPlaylistInterface
-                    ? getPlaylistHeader().getObject("ownerText")
-                    : getUploaderInfo().getObject(TITLE));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get playlist uploader name", e);
-        }
+        final String name = getTextFromObject(headerLayout
+                ? playlistHeader().getObject("ownerText") : sidebarOwnerInfo().getObject("title"));
+        if (name == null || name.isBlank()) throw new ParsingException("Playlist owner name is missing");
+        return name;
     }
 
     @Nonnull
     @Override
     public List<Image> getUploaderAvatars() throws ParsingException {
-        if (isNewPlaylistInterface) {
-            // The new playlist interface doesn't provide an uploader avatar
-            return List.of();
-        }
-
-        try {
-            return getImagesFromThumbnailsArray(getUploaderInfo().getObject(THUMBNAIL)
-                    .getArray(THUMBNAILS));
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get playlist uploader avatars", e);
-        }
+        if (headerLayout) return List.of();
+        final JsonArray thumbnails = sidebarOwnerInfo().getObject("thumbnail").getArray("thumbnails");
+        return getImagesFromThumbnailsArray(thumbnails);
     }
 
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        // YouTube doesn't provide this information
-        return false;
-    }
+    @Override public boolean isUploaderVerified() { return false; }
 
     @Override
     public long getStreamCount() throws ParsingException {
-        if (isNewPlaylistInterface) {
-            final String numVideosText =
-                    getTextFromObject(getPlaylistHeader().getObject("numVideosText"));
-            if (numVideosText != null) {
+        final JsonObject source = headerLayout ? playlistHeader() : sidebarPlaylistInfo();
+        final String direct = getTextFromObject(source.getObject("numVideosText"));
+        final String byline = getTextFromObject(source.getArray("byline").getObject(0)
+                .getObject("text"));
+        for (final String text : List.of(direct == null ? "" : direct,
+                byline == null ? "" : byline,
+                orEmpty(statisticText(source.getArray("briefStats"))),
+                orEmpty(statisticText(source.getArray("stats"))))) {
+            final String digits = Utils.removeNonDigitCharacters(text);
+            if (!digits.isBlank()) {
                 try {
-                    return Long.parseLong(Utils.removeNonDigitCharacters(numVideosText));
-                } catch (final NumberFormatException ignored) {
-                }
-            }
-
-            final String firstByLineRendererText = getTextFromObject(
-                    getPlaylistHeader().getArray("byline")
-                            .getObject(0)
-                            .getObject("text"));
-
-            if (firstByLineRendererText != null) {
-                try {
-                    return Long.parseLong(Utils.removeNonDigitCharacters(firstByLineRendererText));
-                } catch (final NumberFormatException ignored) {
+                    return Long.parseLong(digits);
+                } catch (final NumberFormatException error) {
+                    throw new ParsingException("Playlist video count is out of range", error);
                 }
             }
         }
-
-        // These data structures are returned in both layouts
-        final JsonArray briefStats =
-                (isNewPlaylistInterface ? getPlaylistHeader() : getPlaylistInfo())
-                        .getArray("briefStats");
-        if (!briefStats.isEmpty()) {
-            final String briefsStatsText = getTextFromObject(briefStats.getObject(0));
-            if (briefsStatsText != null) {
-                return Long.parseLong(Utils.removeNonDigitCharacters(briefsStatsText));
-            }
-        }
-
-        final JsonArray stats = (isNewPlaylistInterface ? getPlaylistHeader() : getPlaylistInfo())
-                .getArray("stats");
-        if (!stats.isEmpty()) {
-            final String statsText = getTextFromObject(stats.getObject(0));
-            if (statsText != null) {
-                return Long.parseLong(Utils.removeNonDigitCharacters(statsText));
-            }
-        }
-
         return ITEM_COUNT_UNKNOWN;
+    }
+
+    @Nullable
+    private static String statisticText(final JsonArray values) {
+        return values.isEmpty() ? null : getTextFromObject(values.getObject(0));
+    }
+
+    private static String orEmpty(@Nullable final String value) {
+        return value == null ? "" : value;
     }
 
     @Nonnull
     @Override
     public Description getDescription() throws ParsingException {
-        final String description = getTextFromObject(
-                getPlaylistInfo().getObject("description"),
-                true
-        );
-
-        return new Description(description, Description.HTML);
+        final JsonObject value = headerLayout
+                ? playlistHeader().getObject("descriptionText")
+                : sidebarPlaylistInfo().getObject("description");
+        return new Description(getTextFromObject(value, true), Description.HTML);
     }
 
     @Nonnull
     @Override
     public InfoItemsPage<StreamInfoItem> getInitialPage() throws IOException, ExtractionException {
+        final JsonArray items = findContinuationItems(initialPage());
         final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-
-        JsonArray initialItems = initialBrowseContinuationResponse
-                .getArray(ON_RESPONSE_RECEIVED_ACTIONS)
-                .getObject(0)
-                .getObject("reloadContinuationItemsCommand")
-                .getArray(CONTINUATION_ITEMS);
-
-        if (initialItems.isEmpty()) {
-            // New structure with lockup view models uses appendContinuationItemsAction for the
-            // initial continuation too
-            initialItems = initialBrowseContinuationResponse.getArray(ON_RESPONSE_RECEIVED_ACTIONS)
-                    .getObject(0)
-                    .getObject(APPEND_CONTINUATION_ITEMS_ACTION)
-                    .getArray(CONTINUATION_ITEMS);
-        }
-
-        collectStreamsFrom(collector, initialItems);
-
-        return new InfoItemsPage<>(collector, getNextPageFrom(initialItems));
+        collectStreams(items, collector);
+        return new InfoItemsPage<>(collector, nextPage(items));
     }
 
     @Override
-    public InfoItemsPage<StreamInfoItem> getPage(final Page page) throws IOException,
-            ExtractionException {
-        if (page == null || isNullOrEmpty(page.getUrl())) {
-            throw new IllegalArgumentException("Page doesn't contain an URL");
+    public InfoItemsPage<StreamInfoItem> getPage(final Page page)
+            throws IOException, ExtractionException {
+        if (page == null || page.getBody() == null) {
+            throw new IllegalArgumentException("Playlist continuation body is missing");
         }
-
-        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
-
-        final JsonObject ajaxJson = getJsonPostResponse(BROWSE_ENDPOINT, page.getBody(),
+        final JsonObject response = getJsonPostResponse("browse", page.getBody(),
                 getExtractorLocalization());
+        final JsonArray items = findContinuationItems(response);
+        final StreamInfoItemsCollector collector = new StreamInfoItemsCollector(getServiceId());
+        collectStreams(items, collector);
+        return new InfoItemsPage<>(collector, nextPage(items));
+    }
 
-        final JsonArray continuation = ajaxJson.getArray(ON_RESPONSE_RECEIVED_ACTIONS)
-                .getObject(0)
-                .getObject(APPEND_CONTINUATION_ITEMS_ACTION)
-                .getArray(CONTINUATION_ITEMS);
-
-        collectStreamsFrom(collector, continuation);
-
-        return new InfoItemsPage<>(collector, getNextPageFrom(continuation));
+    @Nonnull
+    private JsonArray findContinuationItems(final JsonObject response) {
+        for (final JsonObject action : response.getArray("onResponseReceivedActions")
+                .streamAsJsonObjects().toList()) {
+            for (final String key : List.of("reloadContinuationItemsCommand",
+                    "appendContinuationItemsAction")) {
+                final JsonArray items = action.getObject(key).getArray("continuationItems");
+                if (!items.isEmpty()) return items;
+            }
+        }
+        return new JsonArray();
     }
 
     @Nullable
-    private Page getNextPageFrom(final JsonArray contents)
-            throws IOException, ExtractionException {
-        if (isNullOrEmpty(contents)) {
-            return null;
-        }
-
-        final String continuation;
-
-        final JsonObject lastElement = contents.getObject(contents.size() - 1);
-        if (lastElement.has("continuationItemRenderer")) {
-            final JsonObject continuationEndpoint = lastElement
-                    .getObject("continuationItemRenderer")
-                    .getObject("continuationEndpoint");
-
-            final JsonObject continuationObject;
-            if (continuationEndpoint.has(COMMAND_EXECUTOR_COMMAND)) {
-                // This structure is only used at the time this code is written in initial playlist
-                // responses. continuationItemRenderer objects return multiple commands: one
-                // containing the continuation we need and one a playlistVotingRefreshPopupCommand
-                continuationObject = continuationEndpoint.getObject(COMMAND_EXECUTOR_COMMAND)
-                        .getArray("commands")
-                        .streamAsJsonObjects()
-                        .filter(command -> command.has(CONTINUATION_COMMAND))
-                        .findFirst()
-                        .orElse(new JsonObject());
-            } else {
-                // At the time this code is written, this "classic" continuation structure is only
-                // returned in browse responses of continuation requests
-                continuationObject = continuationEndpoint;
-            }
-
-            continuation = continuationObject.getObject(CONTINUATION_COMMAND)
-                    .getString("token");
-        } else if (lastElement.has("continuationItemViewModel")) {
-            final JsonObject continuationItemViewModel =
-                    lastElement.getObject("continuationItemViewModel");
-
-            continuation = continuationItemViewModel.getObject(CONTINUATION_COMMAND)
-                    .getObject("innertubeCommand")
-                    .getObject(CONTINUATION_COMMAND)
-                    .getString("token");
-        } else {
-            return null;
-        }
-
-        if (isNullOrEmpty(continuation)) {
-            // Invalid continuation or no continuation found
-            return null;
-        }
-
-        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(
-                        getExtractorLocalization(), getExtractorContentCountry())
-                        .value("continuation", continuation)
-                        .done())
-                .getBytes(StandardCharsets.UTF_8);
-
-        return new Page(YOUTUBEI_V1_URL + "browse?" + DISABLE_PRETTY_PRINT_PARAMETER, body);
+    private Page nextPage(final JsonArray items) throws IOException, ExtractionException {
+        if (items.isEmpty()) return null;
+        final JsonObject last = items.getObject(items.size() - 1);
+        final String token = continuationToken(last);
+        if (token == null || token.isBlank()) return null;
+        return new Page(CONTINUATION_URL, requestBody(getExtractorLocalization(),
+                "continuation", token));
     }
 
-    private void collectStreamsFrom(@Nonnull final StreamInfoItemsCollector collector,
-                                    @Nonnull final JsonArray videos) {
-        final TimeAgoParser timeAgoParser = getTimeAgoParser();
-        final PlaylistExtractor playlistExtractor = this;
-        final boolean isCoursePlaylistResult = isCoursePlaylist();
+    @Nullable
+    private String continuationToken(final JsonObject item) {
+        if (item.has("continuationItemRenderer")) {
+            final JsonObject endpoint = item.getObject("continuationItemRenderer")
+                    .getObject("continuationEndpoint");
+            final JsonArray commands = endpoint.getObject("commandExecutorCommand")
+                    .getArray("commands");
+            if (!commands.isEmpty()) {
+                for (final JsonObject command : commands.streamAsJsonObjects().toList()) {
+                    final String token = command.getObject("continuationCommand").getString("token");
+                    if (token != null && !token.isBlank()) return token;
+                }
+            }
+            return endpoint.getObject("continuationCommand").getString("token");
+        }
+        if (item.has("continuationItemViewModel")) {
+            return item.getObject("continuationItemViewModel").getObject("continuationCommand")
+                    .getObject("innertubeCommand").getObject("continuationCommand")
+                    .getString("token");
+        }
+        return null;
+    }
 
-        videos.streamAsJsonObjects()
-                .forEach(video -> {
-                    if (video.has(PLAYLIST_VIDEO_RENDERER)) {
-                        collector.commit(new YoutubeStreamInfoItemExtractor(
-                            video.getObject(PLAYLIST_VIDEO_RENDERER), timeAgoParser) {
-                                @Override
-                                public String getUploaderName() throws ParsingException {
-                                    if (isCoursePlaylistResult) {
-                                        return playlistExtractor.getUploaderName();
-                                    }
-                                    return super.getUploaderName();
-                                }
-
-                                @Override
-                                public String getUploaderUrl() throws ParsingException {
-                                    if (isCoursePlaylistResult) {
-                                        return playlistExtractor.getUploaderUrl();
-                                    }
-                                    return super.getUploaderUrl();
-                                }
-                            });
-                    } else if (video.has(RICH_ITEM_RENDERER)) {
-                        final JsonObject richItemRenderer = video.getObject(RICH_ITEM_RENDERER);
-                        if (richItemRenderer.has("content")) {
-                            final JsonObject richItemRendererContent =
-                                    richItemRenderer.getObject("content");
-                            if (richItemRendererContent.has(REEL_ITEM_RENDERER)) {
-                                collector.commit(new YoutubeReelInfoItemExtractor(
-                                        richItemRendererContent.getObject(REEL_ITEM_RENDERER)));
-                            }
-                        }
-                    } else if (video.has(LOCKUP_VIEW_MODEL)) {
-                        collector.commit(new YoutubeStreamInfoItemLockupExtractor(
-                                video.getObject(LOCKUP_VIEW_MODEL), timeAgoParser) {
-                            @Override
-                            public boolean isChannelOrCoursePlaylistLockupItem() {
-                                return isCoursePlaylistResult;
-                            }
-
-                            @Override
-                            public String getUploaderName() throws ParsingException {
-                                if (isCoursePlaylistResult) {
-                                    return playlistExtractor.getUploaderName();
-                                }
-                                return super.getUploaderName();
-                            }
-
-                            @Override
-                            public String getUploaderUrl() throws ParsingException {
-                                if (isCoursePlaylistResult) {
-                                    return playlistExtractor.getUploaderUrl();
-                                }
-                                return super.getUploaderUrl();
-                            }
-                        });
+    private void collectStreams(final JsonArray entries, final StreamInfoItemsCollector collector)
+            throws ParsingException {
+        final TimeAgoParser dates = getTimeAgoParser();
+        final boolean coursePlaylist = isCoursePlaylist();
+        for (final JsonObject entry : entries.streamAsJsonObjects().toList()) {
+            if (entry.has(PLAYLIST_ITEM)) {
+                collector.commit(new YoutubeStreamInfoItemExtractor(
+                        entry.getObject(PLAYLIST_ITEM), dates) {
+                    @Override public String getUploaderName() throws ParsingException {
+                        return coursePlaylist ? YoutubePlaylistExtractor.this.getUploaderName()
+                                : super.getUploaderName();
+                    }
+                    @Override public String getUploaderUrl() throws ParsingException {
+                        return coursePlaylist ? YoutubePlaylistExtractor.this.getUploaderUrl()
+                                : super.getUploaderUrl();
                     }
                 });
+            } else if (entry.has("richItemRenderer")) {
+                final JsonObject reel = entry.getObject("richItemRenderer")
+                        .getObject("content").getObject("reelItemRenderer");
+                if (!reel.isEmpty()) collector.commit(new YoutubeReelInfoItemExtractor(reel));
+            } else if (entry.has(LOCKUP_ITEM)) {
+                collector.commit(new YoutubeStreamInfoItemLockupExtractor(
+                        entry.getObject(LOCKUP_ITEM), dates) {
+                    @Override public boolean isChannelOrCoursePlaylistLockupItem() {
+                        return coursePlaylist;
+                    }
+                    @Override public String getUploaderName() throws ParsingException {
+                        return coursePlaylist ? YoutubePlaylistExtractor.this.getUploaderName()
+                                : super.getUploaderName();
+                    }
+                    @Override public String getUploaderUrl() throws ParsingException {
+                        return coursePlaylist ? YoutubePlaylistExtractor.this.getUploaderUrl()
+                                : super.getUploaderUrl();
+                    }
+                });
+            }
+        }
+    }
+
+    private boolean isCoursePlaylist() throws ParsingException {
+        final JsonObject tap = metadata().getObject("header").getObject("playlistHeaderRenderer")
+                .getObject("onDescriptionTap").getObject("commandExecutorCommand");
+        for (final JsonObject command : tap.getArray("commands").streamAsJsonObjects().toList()) {
+            if ("engagement-panel-course-metadata".equals(command
+                    .getObject("showEngagementPanelEndpoint").getObject("identifier")
+                    .getString("tag"))) return true;
+        }
+        return false;
     }
 
     @Nonnull
