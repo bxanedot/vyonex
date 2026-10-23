@@ -55,7 +55,11 @@ class YoutubeServiceTest {
         VyonEx.init(new Downloader() {
             @Override
             public Response execute(final Request request) throws IOException {
-                throw new IOException("Unexpected request: " + request.url());
+                return new Response(400, "Bad Request", Map.of("Content-Type",
+                        java.util.List.of("application/json")),
+                        "{\"error\":{\"message\":\"Request contains an invalid argument.\"},"
+                                + "\"padding\":\"" + "x".repeat(100) + "\"}",
+                        request.url());
             }
         }, previousLocalization, previousCountry);
         try {
@@ -77,7 +81,8 @@ class YoutubeServiceTest {
 
             kiosks.forceContentCountry(new ContentCountry("MY"));
             assertThrows(UnsupportedContentInCountryException.class,
-                    () -> kiosks.getExtractorById("trending_music", null).onFetchPage(null));
+                    () -> kiosks.getExtractorById("trending_music", null)
+                            .onFetchPage(VyonEx.getDownloader()));
         } finally {
             VyonEx.init(previousDownloader, previousLocalization, previousCountry);
         }
