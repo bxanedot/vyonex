@@ -63,6 +63,10 @@ public final class PeertubeSearchExtractor extends SearchExtractor {
             throw new ParsingException("Invalid PeerTube search response", error);
         }
         PeertubeParsingHelper.validate(data);
+        if (response.responseCode() < 200 || response.responseCode() >= 300) {
+            throw new ExtractionException("PeerTube search returned HTTP "
+                    + response.responseCode());
+        }
 
         final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
         collectItemsFrom(items, data, getBaseUrl(), sepia);
