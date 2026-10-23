@@ -1,11 +1,7 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.fallback.services.youtube.extractors;
-
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
-import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
-import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
-
-import com.vyonex.internal.json.JsonObject;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
@@ -14,75 +10,70 @@ import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeStreamLi
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.utils.Utils;
-
-import java.util.List;
+import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
-/**
- * A {@link StreamInfoItemExtractor} for YouTube's {@code reelItemRenderer}s.
- *
- * <p>
- * {@code reelItemRenderer}s were returned on YouTube for their short-form contents on almost every
- * place and every major client. They provide a limited amount of information and do not provide
- * the exact view count, any uploader info (name, URL, avatar, verified status) and the upload date.
- * </p>
- *
- * <p>
- * At the time this documentation has been updated, they are being replaced by
- * {@code shortsLockupViewModel}s. See {@link YoutubeShortsLockupInfoItemExtractor} for an
- * extractor for this new UI data type.
- * </p>
- */
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getTextFromObject;
+import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getThumbnailsFromInfoItem;
+
+/** Maps legacy YouTube short-form cards into VyonEx stream items. */
 public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
+    private final JsonObject item;
 
-    @Nonnull
-    private final JsonObject reelInfo;
-
-    public YoutubeReelInfoItemExtractor(@Nonnull final JsonObject reelInfo) {
-        this.reelInfo = reelInfo;
+    public YoutubeReelInfoItemExtractor(@Nonnull final JsonObject item) {
+        this.item = Objects.requireNonNull(item, "reel item is required");
     }
 
     @Override
     public String getName() throws ParsingException {
-        return getTextFromObject(reelInfo.getObject("headline"));
+        final String name = getTextFromObject(item.getObject("headline"));
+        if (name == null || name.isBlank()) {
+            throw new ParsingException("Short-form title is missing");
+        }
+        return name;
     }
 
     @Override
     public String getUrl() throws ParsingException {
+        final String videoId = item.getString("videoId");
+        if (videoId == null || videoId.isBlank()) {
+            throw new ParsingException("Short-form video ID is missing");
+        }
         try {
-            final String videoId = reelInfo.getString("videoId");
             return YoutubeStreamLinkHandlerFactory.getInstance().getUrl(videoId);
-        } catch (final Exception e) {
-            throw new ParsingException("Could not get URL", e);
+        } catch (final Exception error) {
+            throw new ParsingException("Could not build short-form URL", error);
         }
     }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() throws ParsingException {
-        return getThumbnailsFromInfoItem(reelInfo);
+        return getThumbnailsFromInfoItem(item);
     }
 
     @Override
-    public StreamType getStreamType() throws ParsingException {
+    public StreamType getStreamType() {
         return StreamType.VIDEO_STREAM;
     }
 
     @Override
     public long getViewCount() throws ParsingException {
-        final String viewCountText = getTextFromObject(reelInfo.getObject("viewCountText"));
-        if (!isNullOrEmpty(viewCountText)) {
-            // This approach is language dependent
-            if (viewCountText.toLowerCase().contains("no views")) {
-                return 0;
-            }
-
-            return Utils.mixedNumberWordToLong(viewCountText);
+        final String text = getTextFromObject(item.getObject("viewCountText"));
+        if (text == null || text.isBlank()) {
+            throw new ParsingException("Short-form view count is missing");
         }
-
-        throw new ParsingException("Could not get short view count");
+        if (text.toLowerCase(Locale.ROOT).contains("no views")) return 0;
+        try {
+            return Utils.mixedNumberWordToLong(text);
+        } catch (final NumberFormatException | ParsingException error) {
+            throw new ParsingException("Could not parse short-form view count", error);
+        }
     }
 
     @Override
@@ -90,42 +81,11 @@ public class YoutubeReelInfoItemExtractor implements StreamInfoItemExtractor {
         return true;
     }
 
-    // All the following properties cannot be obtained from reelItemRenderers
-
-    @Override
-    public boolean isAd() throws ParsingException {
-        return false;
-    }
-
-    @Override
-    public long getDuration() throws ParsingException {
-        return -1;
-    }
-
-    @Override
-    public String getUploaderName() throws ParsingException {
-        return null;
-    }
-
-    @Override
-    public String getUploaderUrl() throws ParsingException {
-        return null;
-    }
-
-    @Override
-    public boolean isUploaderVerified() throws ParsingException {
-        return false;
-    }
-
-    @Nullable
-    @Override
-    public String getTextualUploadDate() throws ParsingException {
-        return null;
-    }
-
-    @Nullable
-    @Override
-    public DateWrapper getUploadDate() throws ParsingException {
-        return null;
-    }
+    @Override public boolean isAd() { return false; }
+    @Override public long getDuration() { return -1; }
+    @Override public String getUploaderName() throws ParsingException { return null; }
+    @Override public String getUploaderUrl() throws ParsingException { return null; }
+    @Override public boolean isUploaderVerified() { return false; }
+    @Nullable @Override public String getTextualUploadDate() { return null; }
+    @Nullable @Override public DateWrapper getUploadDate() { return null; }
 }
