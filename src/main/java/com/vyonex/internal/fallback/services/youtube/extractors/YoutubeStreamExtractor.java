@@ -544,7 +544,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         // There is no DASH manifest available with the iOS and visionOS clients
         return getManifestUrl(
                 "dash",
-                List.of(new Pair<>(androidStreamingData, androidStreamingUrlsPoToken)),
+                List.of(new ManifestSource(androidStreamingData, androidStreamingUrlsPoToken)),
                 // Return version 7 of the DASH manifest, which is the latest one, reducing
                 // manifest size and allowing playback with some DASH players
                 "mpd_version=7");
@@ -561,28 +561,27 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         // response
         return getManifestUrl(
                 "hls",
-                List.of(new Pair<>(visionOsStreamingData, null),
-                        new Pair<>(iosStreamingData, iosStreamingUrlsPoToken),
-                        new Pair<>(androidStreamingData, androidStreamingUrlsPoToken)),
+                List.of(new ManifestSource(visionOsStreamingData, null),
+                        new ManifestSource(iosStreamingData, iosStreamingUrlsPoToken),
+                        new ManifestSource(androidStreamingData, androidStreamingUrlsPoToken)),
                 "");
     }
 
+    record ManifestSource(@Nullable JsonObject streamingData, @Nullable String poToken) { }
+
     @Nonnull
-    private static String getManifestUrl(
+    static String getManifestUrl(
             @Nonnull final String manifestType,
-            @Nonnull final List<Pair<JsonObject, String>> streamingDataObjects,
+            @Nonnull final List<ManifestSource> sources,
             @Nonnull final String partToAppendToManifestUrlEnd) {
         final String manifestKey = manifestType + "ManifestUrl";
 
-        for (final Pair<JsonObject, String> streamingDataObj : streamingDataObjects) {
-            if (streamingDataObj.getFirst() != null) {
-                final String manifestUrl = streamingDataObj.getFirst().getString(manifestKey);
-                if (isNullOrEmpty(manifestUrl)) {
-                    continue;
-                }
-                return appendManifestParameters(manifestUrl, streamingDataObj.getSecond(),
-                        partToAppendToManifestUrlEnd);
-            }
+        for (final ManifestSource source : sources) {
+            if (source.streamingData() == null) continue;
+            final String manifestUrl = source.streamingData().getString(manifestKey);
+            if (isNullOrEmpty(manifestUrl)) continue;
+            return appendManifestParameters(manifestUrl, source.poToken(),
+                    partToAppendToManifestUrlEnd);
         }
 
         return "";
@@ -955,41 +954,37 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             @Nonnull final Localization localization,
             @Nonnull final ContentCountry contentCountry,
             @Nonnull final String videoId) {
+        final JsonObject webPlayerResponse;
         try {
-            final JsonObject webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
+            webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
                     localization, contentCountry, videoId);
-
-            // Important note: we don't checkPlayabilityStatus() here, because we use this request
-            // exclusively for metadata, not for extracting streams. It turns out that when
-            // YouTube returns a playability status error, the metadata may still be there.
-
-            if (isPlayerResponseValid(webPlayerResponse, videoId)) {
-                // The microformat JSON object of the content is only returned on the WEB client,
-                // so we need to store it instead of getting it directly from the playerResponse
-                playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
-                        .getObject("playerMicroformatRenderer");
-
-                // Try to use web player response thumbnails first, as they should contain higher
-                // quality ones than mobile clients
-                final JsonObject thumbnailWebJsonObj = webPlayerResponse.getObject(VIDEO_DETAILS)
-                        .getObject(THUMBNAIL);
-                if (thumbnailWebJsonObj.containsKey(THUMBNAILS)) {
-                    thumbnailsArray = thumbnailWebJsonObj.getArray(THUMBNAILS);
-                } else {
-                    thumbnailsArray = playerResponse.getObject(VIDEO_DETAILS)
-                            .getObject(THUMBNAIL)
-                            .getArray(THUMBNAILS);
-                }
-            }
-        } catch (final Exception e) {
-            // Ignore exceptions related to WEB client fetching or parsing, as it is not
-            // compulsory to play contents
-            // Set thumbnails from playerResponse
-            playerMicroFormatRenderer = new JsonObject();
-            thumbnailsArray = playerResponse.getObject(VIDEO_DETAILS)
-                    .getObject(THUMBNAIL)
-                    .getArray(THUMBNAILS);
+        } catch (final Exception ignored) {
+            usePrimaryResponseMetadata();
+            return;
         }
+
+        if (!isPlayerResponseValid(webPlayerResponse, videoId)) {
+            usePrimaryResponseMetadata();
+            return;
+        }
+        playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
+                .getObject("playerMicroformatRenderer");
+        thumbnailsArray = preferredThumbnails(webPlayerResponse, playerResponse);
+    }
+
+    private void usePrimaryResponseMetadata() {
+        playerMicroFormatRenderer = new JsonObject();
+        thumbnailsArray = playerResponse.getObject(VIDEO_DETAILS)
+                .getObject(THUMBNAIL)
+                .getArray(THUMBNAILS);
+    }
+
+    static JsonArray preferredThumbnails(@Nonnull final JsonObject webResponse,
+                                         @Nonnull final JsonObject primaryResponse) {
+        final JsonArray web = webResponse.getObject(VIDEO_DETAILS)
+                .getObject(THUMBNAIL).getArray(THUMBNAILS);
+        return web.isEmpty() ? primaryResponse.getObject(VIDEO_DETAILS)
+                .getObject(THUMBNAIL).getArray(THUMBNAILS) : web;
     }
 
     static boolean isPlayerResponseValid(@Nonnull final JsonObject playerResponse,
@@ -1024,16 +1019,21 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Nonnull
     private JsonObject getVideoInfoRenderer(@Nonnull final String videoRendererName) {
-        return nextResponse.getObject("contents")
+        return findVideoRenderer(nextResponse, videoRendererName);
+    }
+
+    @Nonnull
+    static JsonObject findVideoRenderer(@Nonnull final JsonObject response,
+                                        @Nonnull final String rendererName) {
+        final JsonArray contents = response.getObject("contents")
                 .getObject("twoColumnWatchNextResults")
                 .getObject("results")
                 .getObject("results")
-                .getArray("contents")
-                .streamAsJsonObjects()
-                .filter(content -> content.has(videoRendererName))
-                .map(content -> content.getObject(videoRendererName))
-                .findFirst()
-                .orElse(new JsonObject());
+                .getArray("contents");
+        for (final JsonObject content : contents.streamAsJsonObjects().toList()) {
+            if (content.has(rendererName)) return content.getObject(rendererName);
+        }
+        return new JsonObject();
     }
 
     @Nonnull
@@ -1046,31 +1046,30 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             final String videoId = getId();
             final List<T> streamList = new ArrayList<>();
 
-            java.util.stream.Stream.of(
-                    new Pair<>(androidStreamingData,
-                            new Pair<>(androidCpn, androidStreamingUrlsPoToken)),
-                    new Pair<>(visionOsStreamingData, new Pair<>(visionOsCpn, (String) null)),
-                    new Pair<>(iosStreamingData,
-                            new Pair<>(iosCpn, iosStreamingUrlsPoToken)))
-                    .flatMap(pair -> getStreamsFromStreamingDataKey(
-                            videoId,
-                            pair.getFirst(),
-                            streamingDataKey,
-                            itagTypeWanted,
-                            pair.getSecond().getFirst(),
-                            pair.getSecond().getSecond()))
-                    .map(streamBuilderHelper)
-                    .forEachOrdered(stream -> {
-                        if (!Stream.containSimilarStream(stream, streamList)) {
-                            streamList.add(stream);
-                        }
-                    });
+            appendDistinctStreams(streamList, getStreamsFromStreamingDataKey(videoId,
+                    androidStreamingData, streamingDataKey, itagTypeWanted, androidCpn,
+                    androidStreamingUrlsPoToken), streamBuilderHelper);
+            appendDistinctStreams(streamList, getStreamsFromStreamingDataKey(videoId,
+                    visionOsStreamingData, streamingDataKey, itagTypeWanted, visionOsCpn, null),
+                    streamBuilderHelper);
+            appendDistinctStreams(streamList, getStreamsFromStreamingDataKey(videoId,
+                    iosStreamingData, streamingDataKey, itagTypeWanted, iosCpn,
+                    iosStreamingUrlsPoToken), streamBuilderHelper);
 
             return streamList;
         } catch (final Exception e) {
             throw new ParsingException(
                     "Could not get " + streamTypeExceptionMessage + " streams", e);
         }
+    }
+
+    static <T extends Stream> void appendDistinctStreams(
+            @Nonnull final List<T> target,
+            @Nonnull final java.util.stream.Stream<ItagInfo> candidates,
+            @Nonnull final java.util.function.Function<ItagInfo, T> builder) {
+        candidates.map(builder).forEachOrdered(stream -> {
+            if (!Stream.containSimilarStream(stream, target)) target.add(stream);
+        });
     }
 
     @Nonnull
@@ -1205,19 +1204,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     }
 
     static String parseLicense(@Nonnull final JsonObject secondaryInfo) {
-        final JsonObject metadataRowRenderer = secondaryInfo
-                .getObject("metadataRowContainer")
-                .getObject("metadataRowContainerRenderer")
-                .getArray("rows")
-                .getObject(0)
-                .getObject("metadataRowRenderer");
-
-        final String license = getTextFromObject(metadataRowRenderer.getArray("contents")
-                .getObject(0));
-        return license != null
-                && "Licence".equals(getTextFromObject(metadataRowRenderer.getObject(TITLE)))
-                ? license
-                : "YouTube licence";
+        final JsonArray rows = secondaryInfo.getObject("metadataRowContainer")
+                .getObject("metadataRowContainerRenderer").getArray("rows");
+        for (int index = 0; index < rows.size(); index++) {
+            final JsonObject row = rows.getObject(index).getObject("metadataRowRenderer");
+            if (!"Licence".equals(getTextFromObject(row.getObject(TITLE)))) continue;
+            final JsonArray contents = row.getArray("contents");
+            if (contents.isEmpty()) continue;
+            final String license = getTextFromObject(contents.getObject(0));
+            if (!isNullOrEmpty(license)) return license;
+        }
+        return "YouTube licence";
     }
 
     @Override

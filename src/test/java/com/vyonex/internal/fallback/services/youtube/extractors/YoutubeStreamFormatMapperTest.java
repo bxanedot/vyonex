@@ -11,6 +11,9 @@ import com.vyonex.internal.fallback.stream.VideoStream;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -86,5 +89,28 @@ class YoutubeStreamFormatMapperTest {
                 JsonParser.object().from("{\"itag\":140,"
                         + "\"mimeType\":\"audio/mp4\",\"url\":\" \"}"),
                 ItagItem.ItagType.AUDIO, StreamType.VIDEO_STREAM, "nonce", null));
+    }
+
+    @Test
+    void keepsTheFirstOfSimilarStreamsAcrossClientResponses() throws Exception {
+        final ItagInfo first = YoutubeStreamFormatMapper.map("video-id",
+                JsonParser.object().from("{\"itag\":18,"
+                        + "\"mimeType\":\"video/mp4\",\"qualityLabel\":\"360p\","
+                        + "\"url\":\"https://media.example/first\"}"),
+                ItagItem.ItagType.VIDEO, StreamType.VIDEO_STREAM, "nonce-one", null);
+        final ItagInfo second = YoutubeStreamFormatMapper.map("video-id",
+                JsonParser.object().from("{\"itag\":18,"
+                        + "\"mimeType\":\"video/mp4\",\"qualityLabel\":\"360p\","
+                        + "\"url\":\"https://media.example/second\"}"),
+                ItagItem.ItagType.VIDEO, StreamType.VIDEO_STREAM, "nonce-two", null);
+        final List<VideoStream> streams = new ArrayList<>();
+
+        YoutubeStreamExtractor.appendDistinctStreams(streams,
+                java.util.stream.Stream.of(first, second),
+                info -> YoutubeStreamFormatMapper.videoStream(
+                        info, StreamType.VIDEO_STREAM, false));
+
+        assertEquals(1, streams.size());
+        assertEquals(first.getContent(), streams.get(0).getContent());
     }
 }
