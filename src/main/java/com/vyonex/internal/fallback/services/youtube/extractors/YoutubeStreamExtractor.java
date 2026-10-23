@@ -93,7 +93,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Optional;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -207,36 +206,30 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        final String dateText = getTextualUploadDate();
-        try {
-            return DateWrapper.fromOffsetDateTime(dateText);
-        } catch (final ParsingException e) {
-            // Try other patterns first
-        }
-
-        try { // Premiered 20 hours ago
-            final var localization = new Localization("en");
-            return TimeAgoPatternsManager.getTimeAgoParserFor(localization).parse(dateText);
-        } catch (final ParsingException e) {
-            // Try other patterns first
-        }
-
-        return parseOptionalDate(dateText, "MMM dd, yyyy")
-                .or(() -> parseOptionalDate(dateText, "dd MMM yyyy"))
-                .map(date -> new DateWrapper(date.atStartOfDay(), true))
-                .orElseThrow(() ->
-                    new ParsingException("Could not parse upload date \"" + dateText + "\""));
+        return parseUploadDate(getTextualUploadDate());
     }
 
-    private Optional<LocalDate> parseOptionalDate(final String date, final String pattern) {
+    @Nullable
+    static DateWrapper parseUploadDate(@Nullable final String dateText) throws ParsingException {
+        if (dateText == null) return null;
         try {
-            // TODO: this parses English formatted dates only, we need a better approach to parse
-            // the textual date
-            final var formatter = DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH);
-            return Optional.of(LocalDate.parse(date, formatter));
-        } catch (final DateTimeParseException e) {
-            return Optional.empty();
+            return DateWrapper.fromOffsetDateTime(dateText);
+        } catch (final ParsingException ignored) { }
+
+        try {
+            return TimeAgoPatternsManager.getTimeAgoParserFor(new Localization("en"))
+                    .parse(dateText);
+        } catch (final ParsingException ignored) { }
+
+        for (final String pattern : List.of("MMM dd, yyyy", "dd MMM yyyy")) {
+            try {
+                final var formatter = DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH);
+                return new DateWrapper(LocalDate.parse(dateText, formatter).atStartOfDay(), true);
+            } catch (final DateTimeParseException ignored) {
+                // Try the next supported date layout.
+            }
         }
+        throw new ParsingException("Could not parse upload date \"" + dateText + "\"");
     }
 
     @Nonnull
