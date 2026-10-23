@@ -317,6 +317,48 @@ class MediaCCCExtractorTest {
         assertEquals(List.of(eventsUrl, conferencesUrl), downloader.requestedUrls);
     }
 
+    @Test
+    void eventOnlySearchDoesNotRequestConferences() throws Exception {
+        final String eventsUrl = "https://media.ccc.de/public/events/search?q=fos";
+        final StubDownloader downloader = new StubDownloader(Map.of(eventsUrl, """
+                {"events":[{"title":"Released talk","guid":"talk-1",
+                  "release_date":"2026-02-01T12:00:00Z"}]}
+                """));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final SearchExtractor search = service.getSearchExtractor(
+                MediaCCCSearchQueryHandlerFactory.getInstance()
+                        .fromQuery("fos", List.of(MediaCCCSearchQueryHandlerFactory.EVENTS), ""));
+
+        search.onFetchPage(downloader);
+
+        assertEquals(1, search.getInitialPage().getItems().size());
+        assertEquals(List.of(eventsUrl), downloader.requestedUrls);
+    }
+
+    @Test
+    void conferenceOnlySearchDoesNotRequestEvents() throws Exception {
+        final String conferencesUrl = "https://media.ccc.de/public/conferences";
+        final StubDownloader downloader = new StubDownloader(Map.of(conferencesUrl, """
+                {"Conferences":"Conferences","conferences":[
+                  {"title":"FOSDEM","url":"https://media.ccc.de/c/fosdem"},
+                  {"title":"Another event","url":"https://media.ccc.de/c/another"}]}
+                """));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final SearchExtractor search = service.getSearchExtractor(
+                MediaCCCSearchQueryHandlerFactory.getInstance()
+                        .fromQuery("fos", List.of(MediaCCCSearchQueryHandlerFactory.CONFERENCES), ""));
+
+        search.onFetchPage(downloader);
+
+        final List<InfoItem> items = search.getInitialPage().getItems();
+        assertEquals(1, items.size());
+        assertEquals(InfoType.CHANNEL, items.get(0).getInfoType());
+        assertEquals("FOSDEM", items.get(0).getName());
+        assertEquals(List.of(conferencesUrl), downloader.requestedUrls);
+    }
+
     private static final class StubDownloader extends Downloader {
         private final Map<String, String> bodies;
         private final int responseCode;
