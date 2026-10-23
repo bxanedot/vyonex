@@ -1,7 +1,6 @@
 // bxane
 package com.vyonex.internal.primary.utils
 
-import com.vyonex.internal.primary.models.WatchEndpoint
 import io.ktor.http.Url
 
 object YouTubeUrlParser {
@@ -81,8 +80,6 @@ object YouTubeUrlParser {
             is ParsedUrl.Album -> parsed.id
             else -> null
         }
-
-    fun createWatchEndpoint(url: String): WatchEndpoint? = extractVideoId(url)?.let(::WatchEndpoint)
 
     private fun parseUrl(value: String): Url? {
         val input = value.trim()
