@@ -10,8 +10,10 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
+import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudChannelExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudCommentsExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamExtractor;
@@ -31,6 +33,40 @@ class SoundcloudServiceExtractionTest {
     private static final String HOME = "https://soundcloud.com";
     private static final String SCRIPT = "https://cdn.sndcdn.com/assets/client.js";
     private static final String CLIENT_ID = "offline-key";
+
+    @Test
+    void mapsChannelProfileFromOfflineApiResponse() throws Exception {
+        final String profileUrl = "https://api-v2.soundcloud.com/users/7?client_id=" + CLIENT_ID;
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                HOME, "<script src=\"" + SCRIPT + "\"></script>",
+                SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
+                profileUrl, """
+                        {"username":"Alice","avatar_url":"https://images.example/alice.jpg",
+                         "followers_count":12,"description":"Producer","verified":true,
+                         "visuals":{"visuals":[{"visual_url":"https://images.example/banner.jpg"}]}}
+                        """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final String channelUrl = "https://soundcloud.com/alice";
+            final ListLinkHandler handler = new ListLinkHandler(
+                    channelUrl, channelUrl, "7", List.of(), "");
+            final SoundcloudChannelExtractor extractor = new SoundcloudChannelExtractor(
+                    new SoundcloudService(31), handler);
+            extractor.onFetchPage(downloader);
+
+            assertEquals("7", extractor.getId());
+            assertEquals("Alice", extractor.getName());
+            assertEquals("https://images.example/alice.jpg", extractor.getAvatars().get(0).getUrl());
+            assertEquals("https://images.example/banner.jpg", extractor.getBanners().get(0).getUrl());
+            assertEquals(12, extractor.getSubscriberCount());
+            assertEquals("Producer", extractor.getDescription());
+            assertTrue(extractor.isVerified());
+            assertEquals(4, extractor.getTabs().size());
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
 
     @Test
     void readsSuggestionsAndSearchPagesFromOfflineApiResponses() throws Exception {
