@@ -6,17 +6,21 @@ package com.vyonex.internal.fallback.services.bandcamp.extractors;
 import com.vyonex.internal.fallback.Page;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.downloader.Downloader;
+import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
+import com.vyonex.internal.json.JsonArray;
+import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper.BASE_API_URL;
@@ -35,10 +39,24 @@ public class BandcampRadioExtractor extends KioskExtractor<StreamInfoItem> {
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
+        final Response response = downloader.get(RADIO_API_URL);
+        if (response == null) throw new IOException("Bandcamp radio returned no response");
+        if (response.responseCode() >= 400) {
+            throw new IOException("Bandcamp radio request failed with HTTP "
+                    + response.responseCode());
+        }
         try {
-            shows = JsonParser.object().from(downloader.get(RADIO_API_URL).responseBody())
-                    .getArray("results").streamAsJsonObjects()
-                    .map(BandcampRadioInfoItemExtractor::new).toList();
+            final JsonObject data = JsonParser.object().from(response.responseBody());
+            if (!(data.get("results") instanceof JsonArray results)) {
+                throw new ParsingException("Bandcamp radio has no results");
+            }
+            final List<BandcampRadioInfoItemExtractor> parsed = new ArrayList<>(results.size());
+            for (final Object result : results) {
+                if (result instanceof JsonObject show) {
+                    parsed.add(new BandcampRadioInfoItemExtractor(show));
+                }
+            }
+            shows = List.copyOf(parsed);
         } catch (final JsonParserException e) {
             throw new ParsingException("Bandcamp radio response is invalid", e);
         }
