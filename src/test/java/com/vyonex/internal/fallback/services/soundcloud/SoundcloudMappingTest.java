@@ -71,14 +71,21 @@ class SoundcloudMappingTest {
 
         final var commentJson = JsonParser.object().from("""
                 {"id":9,"body":"Nice","timestamp":4200,"created_at":"2026-10-22T12:30:00Z",
-                 "user":{"username":"Alice","permalink":"alice","verified":false}}
+                 "user":{"username":"Alice","permalink":"alice",
+                   "permalink_url":"http://soundcloud.com/alice",
+                   "avatar_url":"https://images.example/alice.jpg","verified":true}}
                 """);
         final SoundcloudCommentsInfoItemExtractor comment =
                 new SoundcloudCommentsInfoItemExtractor(commentJson, "https://soundcloud.com/comment/9");
         assertEquals("9", comment.getCommentId());
         assertEquals("Nice", comment.getCommentText().getContent());
+        assertEquals("Alice", comment.getUploaderName());
+        assertEquals("https://soundcloud.com/alice", comment.getUploaderUrl());
+        assertTrue(comment.isUploaderVerified());
         assertEquals(4, comment.getStreamPosition());
         assertEquals("alice", comment.getName());
+        assertEquals("2026-10-22T12:30:00Z", comment.getTextualUploadDate());
+        assertEquals("https://images.example/alice.jpg", comment.getUploaderAvatars().get(0).getUrl());
     }
 
     @Test
