@@ -3,6 +3,11 @@ package com.vyonex.internal.primary.cipher
 
 import kotlinx.coroutines.CancellationException
 
+private const val N_PROBE_INPUT = "KdrqFlzJXl9EcCwlmEy"
+private const val SIGNATURE_FUNCTION = "__vyonexConfiguredSignature"
+private const val N_FUNCTION = "__vyonexConfiguredThrottle"
+private val VALID_N_RESULT = Regex("^[A-Za-z0-9_-]+$")
+
 internal fun configuredCipherPlayerUrl(playerUrl: String): String? =
     RemotePlayerConfigParser.extractPlayerHash(playerUrl)?.let { hash ->
         "https://www.youtube.com/s/player/$hash/player_ias.vflset/en_GB/base.js"
@@ -12,10 +17,6 @@ internal class PlayerConfigCipherSolver private constructor(
     private val engine: QuickJsEngine,
 ) {
     companion object {
-        private const val PLAYER_IIFE_TRAILER = "})(_yt_player);"
-        private const val N_PROBE_INPUT = "KdrqFlzJXl9EcCwlmEy"
-        private val VALID_N_RESULT = Regex("^[A-Za-z0-9_-]+$")
-
         suspend fun create(
             playerCode: String,
             config: RemotePlayerConfigParser.HardcodedPlayerConfig,
@@ -27,20 +28,20 @@ internal class PlayerConfigCipherSolver private constructor(
                 engine.execute("globalThis._yt_player = globalThis._yt_player || {};")
                 engine.execute(buildModifiedPlayerScript(playerCode, config))
 
-                val probe = engine.callFunction("_nTransformFunc", N_PROBE_INPUT)
+                val probe = engine.callFunction(N_FUNCTION, N_PROBE_INPUT)
                 check(
                     probe != null &&
                         probe != N_PROBE_INPUT &&
                         probe.length >= 5 &&
                         VALID_N_RESULT.matches(probe),
-                ) { "n-transform probe failed" }
+                ) { "configured throttle transform did not pass its probe" }
                 return PlayerConfigCipherSolver(engine)
-            } catch (e: CancellationException) {
+            } catch (error: CancellationException) {
                 engine.dispose()
-                throw e
-            } catch (e: Exception) {
+                throw error
+            } catch (error: Exception) {
                 engine.dispose()
-                throw e
+                throw error
             }
         }
 
@@ -48,23 +49,19 @@ internal class PlayerConfigCipherSolver private constructor(
             playerCode: String,
             config: RemotePlayerConfigParser.HardcodedPlayerConfig,
         ): String {
-            val sigExpression = requireNotNull(config.sigJsExpression).replace("INPUT", "sig")
-            val nExpression = requireNotNull(config.nJsExpression).replace("INPUT", "n")
-            val exports =
-                "; window._cipherSigFunc=function(sig){try{return $sigExpression;}catch(e){return null;}};" +
-                    "window._nTransformFunc=function(n){try{return $nExpression;}catch(e){return n;}}; "
-
-            return if (PLAYER_IIFE_TRAILER in playerCode) {
-                playerCode.replace(PLAYER_IIFE_TRAILER, "$exports $PLAYER_IIFE_TRAILER")
-            } else {
-                "$playerCode\n$exports"
-            }
+            val signature = requireNotNull(config.sigJsExpression).replace("INPUT", "input")
+            val throttle = requireNotNull(config.nJsExpression).replace("INPUT", "input")
+            val bridge =
+                ";globalThis.$SIGNATURE_FUNCTION=function(input){try{return $signature;}catch(_){return null;}};" +
+                    "globalThis.$N_FUNCTION=function(input){try{return $throttle;}catch(_){return input;}};"
+            return PlayerCipherScriptParser.insertIntoPlayerWrapper(playerCode, bridge)
+                ?: "$playerCode\n$bridge"
         }
     }
 
-    suspend fun solveSignature(input: String): String? = call("_cipherSigFunc", input)?.takeUnless { it.isBlank() }
+    suspend fun solveSignature(input: String): String? = call(SIGNATURE_FUNCTION, input)?.takeUnless(String::isBlank)
 
-    suspend fun solveN(input: String): String? = call("_nTransformFunc", input)?.takeUnless { it.isBlank() || it == input }
+    suspend fun solveN(input: String): String? = call(N_FUNCTION, input)?.takeUnless { it.isBlank() || it == input }
 
     private suspend fun call(
         functionName: String,
@@ -72,8 +69,8 @@ internal class PlayerConfigCipherSolver private constructor(
     ): String? =
         try {
             engine.callFunction(functionName, input)
-        } catch (e: CancellationException) {
-            throw e
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             null
         }

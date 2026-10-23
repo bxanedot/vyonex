@@ -28,6 +28,29 @@ internal object PlayerCipherScriptParser {
     )
 
     fun parse(source: String): ParsedPlayer? {
+        val wrapper = findPlayerWrapper(source) ?: return null
+        val entryName = wrapper.body.statements().firstNotNullOfOrNull(::transformFactoryName) ?: return null
+
+        return ParsedPlayer(
+            script = insertAtWrapperEnd(source, wrapper, "$FACTORY_EXPORT=$entryName;\n"),
+            factoryName = entryName,
+        )
+    }
+
+    fun insertIntoPlayerWrapper(
+        source: String,
+        statements: String,
+    ): String? {
+        val wrapper = findPlayerWrapper(source) ?: return null
+        return insertAtWrapperEnd(source, wrapper, statements)
+    }
+
+    private data class PlayerWrapper(
+        val body: Block,
+        val insertionPoint: Int,
+    )
+
+    private fun findPlayerWrapper(source: String): PlayerWrapper? {
         if (source.isBlank() || source.length > MAX_PLAYER_SCRIPT_LENGTH) return null
 
         val root =
@@ -52,15 +75,17 @@ internal object PlayerCipherScriptParser {
                 }.firstOrNull() ?: return null
 
         val body = wrapper.body as? Block ?: return null
-        val entryName = body.statements().firstNotNullOfOrNull(::transformFactoryName) ?: return null
         val insertionPoint = body.absolutePosition + body.length - 1
         if (insertionPoint !in source.indices || source[insertionPoint] != '}') return null
 
-        return ParsedPlayer(
-            script = source.substring(0, insertionPoint) + "$FACTORY_EXPORT=$entryName;\n" + source.substring(insertionPoint),
-            factoryName = entryName,
-        )
+        return PlayerWrapper(body, insertionPoint)
     }
+
+    private fun insertAtWrapperEnd(
+        source: String,
+        wrapper: PlayerWrapper,
+        statements: String,
+    ): String = source.substring(0, wrapper.insertionPoint) + statements + source.substring(wrapper.insertionPoint)
 
     private fun transformFactoryName(statement: AstNode): String? {
         return when (statement) {
