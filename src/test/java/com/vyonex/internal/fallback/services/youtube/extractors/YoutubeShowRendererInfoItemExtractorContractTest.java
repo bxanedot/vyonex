@@ -44,4 +44,18 @@ class YoutubeShowRendererInfoItemExtractorContractTest {
         assertThrows(ParsingException.class, extractor::getUrl);
         assertThrows(ParsingException.class, extractor::getStreamCount);
     }
+
+    @Test
+    void fallsBackToShortBylineForUploaderDetails() throws Exception {
+        final var extractor = new YoutubeShowRendererInfoItemExtractor(JsonParser.object().from("""
+                {
+                  "title":"Show",
+                  "shortBylineText":{"runs":[{"text":"Short creator","navigationEndpoint":{"browseEndpoint":{"browseId":"UC456"}}}]}
+                }
+                """));
+
+        assertEquals("Short creator", extractor.getUploaderName());
+        assertEquals("https://www.youtube.com/channel/UC456", extractor.getUploaderUrl());
+        assertFalse(extractor.isUploaderVerified());
+    }
 }
