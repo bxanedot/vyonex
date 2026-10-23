@@ -46,6 +46,24 @@ class YoutubeShowRendererInfoItemExtractorContractTest {
     }
 
     @Test
+    void rejectsBrowseIdsThatEscapeThePlaylistParameter() throws Exception {
+        final var extractor = new YoutubeShowRendererInfoItemExtractor(JsonParser.object().from("""
+                {"navigationEndpoint":{"browseEndpoint":{"browseId":"VLPL55&v=abcdefghijk"}}}
+                """));
+
+        assertThrows(ParsingException.class, extractor::getUrl);
+    }
+
+    @Test
+    void rejectsBrowseIdsThatAreNotPlaylistRoutes() throws Exception {
+        final var extractor = new YoutubeShowRendererInfoItemExtractor(JsonParser.object().from("""
+                {"navigationEndpoint":{"browseEndpoint":{"browseId":"UC123"}}}
+                """));
+
+        assertThrows(ParsingException.class, extractor::getUrl);
+    }
+
+    @Test
     void fallsBackToShortBylineForUploaderDetails() throws Exception {
         final var extractor = new YoutubeShowRendererInfoItemExtractor(JsonParser.object().from("""
                 {
