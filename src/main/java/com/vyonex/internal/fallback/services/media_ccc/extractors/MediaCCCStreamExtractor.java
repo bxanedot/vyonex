@@ -44,7 +44,7 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
 
     @Nullable @Override public String getTextualUploadDate() { return event.releaseDate(); }
     @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
-        return DateWrapper.fromOffsetDateTime(getTextualUploadDate());
+        return DateWrapper.fromInstant(getTextualUploadDate());
     }
     @Nonnull @Override public List<Image> getThumbnails() { return event.thumbnails(); }
     @Nonnull @Override public Description getDescription() {
@@ -53,10 +53,11 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
     @Override public long getLength() { return event.length(); }
     @Override public long getViewCount() { return event.viewCount(); }
     @Nonnull @Override public String getUploaderUrl() throws ParsingException {
-        return MediaCCCConferenceLinkHandlerFactory.CONFERENCE_PATH + getUploaderName();
+        return MediaCCCConferenceLinkHandlerFactory.getInstance()
+                .getUrl(event.conferenceId(), List.of(), "");
     }
     @Nonnull @Override public String getUploaderName() throws ParsingException {
-        return MediaCCCConferenceLinkHandlerFactory.getInstance().getId(event.conferenceUrl());
+        return event.conferenceId();
     }
     @Override public List<Image> getUploaderAvatars() {
         return getImageListFromLogoImageUrl(conferenceLogo);
@@ -113,16 +114,18 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
             throws IOException, ExtractionException {
         final String eventUrl = MediaCCCStreamLinkHandlerFactory.VIDEO_API_ENDPOINT + getId();
         event = readEvent(downloader, eventUrl);
-        conferenceLogo = readConferenceLogo(downloader, event.conferenceUrl());
+        conferenceLogo = readConferenceLogo(downloader, event.conferenceId());
     }
 
     private static Event readEvent(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
         final JsonObject object = MediaCCCParsingHelper.fetchJsonObject(downloader, url, null);
-        final String conferenceUrl = object.getString("conference_url");
-        if (conferenceUrl == null || conferenceUrl.isBlank()) {
+        final String conferenceReference = object.getString("conference_url");
+        if (conferenceReference == null || conferenceReference.isBlank()) {
             throw new ExtractionException("The event response has no conference URL.");
         }
+        final String conferenceId = MediaCCCConferenceLinkHandlerFactory.getInstance()
+                .getId(conferenceReference);
         final List<String> tags = new ArrayList<>();
         for (final Object tag : object.getArray("tags")) {
             if (tag instanceof String) tags.add((String) tag);
@@ -135,13 +138,15 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
         }
         return new Event(object.getString("title"), object.getString("release_date"),
                 object.getString("description"), object.getLong("length"),
-                object.getLong("view_count"), conferenceUrl, object.getString("frontend_link"),
+                object.getLong("view_count"), conferenceId, object.getString("frontend_link"),
                 object.getString("original_language"), List.copyOf(tags),
                 List.copyOf(recordings), getThumbnailsFromStreamItem(object));
     }
 
-    private static String readConferenceLogo(final Downloader downloader, final String url)
+    private static String readConferenceLogo(final Downloader downloader, final String conferenceId)
             throws IOException, ExtractionException {
+        final String url = MediaCCCConferenceLinkHandlerFactory.CONFERENCE_API_ENDPOINT
+                + conferenceId;
         return MediaCCCParsingHelper.fetchJsonObject(downloader, url, null).getString("logo_url");
     }
 
@@ -154,7 +159,7 @@ public class MediaCCCStreamExtractor extends StreamExtractor {
 
     private record Event(@Nullable String title, @Nullable String releaseDate,
                          @Nullable String description, long length, long viewCount,
-                         String conferenceUrl, @Nullable String frontendLink,
+                         String conferenceId, @Nullable String frontendLink,
                          @Nullable String originalLanguage, List<String> tags,
                          List<Recording> recordings, List<Image> thumbnails) { }
 

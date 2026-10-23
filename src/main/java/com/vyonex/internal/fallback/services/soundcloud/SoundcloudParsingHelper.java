@@ -18,6 +18,7 @@ import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudLik
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
+import com.vyonex.internal.fallback.utils.ImageSuffix;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
@@ -42,6 +43,25 @@ import java.util.regex.Pattern;
 
 public final class SoundcloudParsingHelper {
     public static final String SOUNDCLOUD_API_V2_URL = "https://api-v2.soundcloud.com/";
+    private static final List<ImageSuffix> ARTWORK_SIZES = List.of(
+            new ImageSuffix("mini", 16, 16, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t20x20", 20, 20, Image.ResolutionLevel.LOW),
+            new ImageSuffix("small", 32, 32, Image.ResolutionLevel.LOW),
+            new ImageSuffix("badge", 47, 47, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t50x50", 50, 50, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t60x60", 60, 60, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t67x67", 67, 67, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t80x80", 80, 80, Image.ResolutionLevel.LOW),
+            new ImageSuffix("large", 100, 100, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t120x120", 120, 120, Image.ResolutionLevel.LOW),
+            new ImageSuffix("t200x200", 200, 200, Image.ResolutionLevel.MEDIUM),
+            new ImageSuffix("t240x240", 240, 240, Image.ResolutionLevel.MEDIUM),
+            new ImageSuffix("t250x250", 250, 250, Image.ResolutionLevel.MEDIUM),
+            new ImageSuffix("t300x300", 300, 300, Image.ResolutionLevel.MEDIUM),
+            new ImageSuffix("t500x500", 500, 500, Image.ResolutionLevel.MEDIUM));
+    private static final List<ImageSuffix> VISUAL_SIZES = List.of(
+            new ImageSuffix("t1240x260", 260, 1240, Image.ResolutionLevel.MEDIUM),
+            new ImageSuffix("t2480x520", 520, 2480, Image.ResolutionLevel.MEDIUM));
     private static final String SITE = "https://soundcloud.com";
     private static final Pattern CLIENT_ID = Pattern.compile(
             "client_id\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']");
@@ -166,7 +186,7 @@ public final class SoundcloudParsingHelper {
                 collector.commit(new SoundcloudChannelInfoItemExtractor((JsonObject) value));
             }
         }
-        return nextPage(response);
+        return getNextPageUrl(response);
     }
 
     public static String getStreamsFromApiMinItems(final int minimum,
@@ -199,7 +219,7 @@ public final class SoundcloudParsingHelper {
             collector.commit(new SoundcloudStreamInfoItemExtractor(
                     charts ? item.getObject("track") : item));
         }
-        return nextPage(response);
+        return getNextPageUrl(response);
     }
 
     public static String getInfoItemsFromApi(final MultiInfoItemsCollector collector,
@@ -222,7 +242,7 @@ public final class SoundcloudParsingHelper {
                 default -> { }
             }
         }
-        return nextPage(response);
+        return getNextPageUrl(response);
     }
 
     public static String getUploaderUrl(final JsonObject object) {
@@ -244,21 +264,29 @@ public final class SoundcloudParsingHelper {
         String url = track.getString("artwork_url");
         if (url == null) url = track.getObject("user").getString("avatar_url");
         if (url == null || url.isBlank()) throw new ParsingException("Track has no artwork");
-        return image(url);
+        return getAllImagesFromArtworkOrAvatarUrl(url);
     }
 
     public static List<Image> getAllImagesFromArtworkOrAvatarUrl(final String url) {
-        return image(url);
+        return imageVariants(url, "large", ARTWORK_SIZES);
     }
 
     public static List<Image> getAllImagesFromVisualUrl(final String url) {
-        return image(url);
+        return imageVariants(url, "original", VISUAL_SIZES);
     }
 
-    private static List<Image> image(final String url) {
-        // shortcut: image dimensions are unknown; add variants after validating current service URLs.
-        return url == null || url.isBlank() ? List.of() : List.of(new Image(https(url),
-                Image.HEIGHT_UNKNOWN, Image.WIDTH_UNKNOWN, Image.ResolutionLevel.UNKNOWN));
+    private static List<Image> imageVariants(final String url, final String baseSize,
+                                             final List<ImageSuffix> sizes) {
+        if (url == null || url.isBlank()) return List.of();
+        final String marker = "-" + baseSize + ".";
+        if (!url.contains(marker)) {
+            // shortcut: suffixless URLs have unknown dimensions, parse new markers if SoundCloud changes format.
+            return List.of(new Image(https(url), Image.HEIGHT_UNKNOWN, Image.WIDTH_UNKNOWN,
+                    Image.ResolutionLevel.UNKNOWN));
+        }
+        return sizes.stream().map(size -> new Image(
+                https(url.replace(marker, "-" + size.getSuffix() + ".")), size.getHeight(),
+                size.getWidth(), size.getResolutionLevel())).toList();
     }
 
     private static JsonObject requestObject(final Downloader downloader, final String url)
@@ -277,7 +305,7 @@ public final class SoundcloudParsingHelper {
         }
     }
 
-    private static String nextPage(final JsonObject response) {
+    public static String getNextPageUrl(final JsonObject response) {
         final String next = response.getString("next_href");
         if (next == null || next.isBlank()) return "";
         if (next.contains("client_id=")) return next;

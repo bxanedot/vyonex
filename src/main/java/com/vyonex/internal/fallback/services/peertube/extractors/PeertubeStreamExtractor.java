@@ -357,7 +357,9 @@ public final class PeertubeStreamExtractor extends StreamExtractor {
         for (final Object entry : files) {
             if (!(entry instanceof JsonObject)) continue;
             final JsonObject file = (JsonObject) entry;
-            final String url = file.getString("fileUrl", file.getString("fileDownloadUrl"));
+            final String urlField = hasText(file.getString("fileUrl"))
+                    ? "fileUrl" : "fileDownloadUrl";
+            final String url = file.getString(urlField);
             if (!hasText(url)) continue;
 
             final String resolution = file.getObject("resolution").getString("label", "");
@@ -365,21 +367,24 @@ public final class PeertubeStreamExtractor extends StreamExtractor {
             final MediaFormat format = MediaFormat.getFromSuffix(suffix);
             final String id = hasText(resolution) ? resolution : "unknown";
             if (isAudio(file, resolution)) {
-                addAudio(file, url, suffix, format, id, playlistUrl);
+                addAudio(file, url, suffix, format, id, urlField, playlistUrl);
             } else {
-                addVideo(file, url, suffix, format, id, resolution, playlistUrl);
+                addVideo(file, url, suffix, format, id, urlField, resolution, playlistUrl);
             }
         }
     }
 
     private void addAudio(final JsonObject file, final String url, final String suffix,
-                          final MediaFormat format, final String id, final String playlistUrl) {
-        audioStreams.add(new AudioStream.Builder().setId(id + "-" + suffix)
+                          final MediaFormat format, final String id, final String urlField,
+                          final String playlistUrl) {
+        audioStreams.add(new AudioStream.Builder()
+                .setId(uniqueId(audioStreams, id + "-" + suffix, urlField))
                 .setContent(url, true).setMediaFormat(format)
                 .setAverageBitrate(AudioStream.UNKNOWN_BITRATE).build());
         if (hasText(playlistUrl)) {
             final String hlsUrl = renditionUrl(file, url, suffix, playlistUrl);
-            final AudioStream hls = new AudioStream.Builder().setId(id + "-hls")
+            final AudioStream hls = new AudioStream.Builder()
+                    .setId(uniqueId(audioStreams, id + "-hls", urlField))
                     .setContent(hlsUrl, true).setDeliveryMethod(DeliveryMethod.HLS)
                     .setMediaFormat(format).setManifestUrl(playlistUrl)
                     .setAverageBitrate(AudioStream.UNKNOWN_BITRATE).build();
@@ -387,22 +392,25 @@ public final class PeertubeStreamExtractor extends StreamExtractor {
         }
         final String torrent = file.getString("torrentUrl");
         if (hasText(torrent)) {
-            audioStreams.add(new AudioStream.Builder().setId(id + "-torrent")
+            audioStreams.add(new AudioStream.Builder()
+                    .setId(uniqueId(audioStreams, id + "-torrent", urlField))
                     .setContent(torrent, true).setDeliveryMethod(DeliveryMethod.TORRENT)
                     .setMediaFormat(format).setAverageBitrate(AudioStream.UNKNOWN_BITRATE).build());
         }
     }
 
     private void addVideo(final JsonObject file, final String url, final String suffix,
-                          final MediaFormat format, final String id, final String resolution,
-                          final String playlistUrl) {
+                          final MediaFormat format, final String id, final String urlField,
+                          final String resolution, final String playlistUrl) {
         final boolean videoOnly = file.has("hasAudio") && !file.getBoolean("hasAudio");
-        videoStreams.add(new VideoStream.Builder().setId(id + "-" + suffix)
+        videoStreams.add(new VideoStream.Builder()
+                .setId(uniqueId(videoStreams, id + "-" + suffix, urlField))
                 .setContent(url, true).setIsVideoOnly(videoOnly).setResolution(resolution)
                 .setMediaFormat(format).build());
         if (hasText(playlistUrl)) {
             final VideoStream hls = new VideoStream.Builder()
-                    .setId(id + "-hls").setContent(renditionUrl(file, url, suffix, playlistUrl), true)
+                    .setId(uniqueId(videoStreams, id + "-hls", urlField))
+                    .setContent(renditionUrl(file, url, suffix, playlistUrl), true)
                     .setIsVideoOnly(videoOnly).setDeliveryMethod(DeliveryMethod.HLS)
                     .setResolution(resolution).setMediaFormat(format)
                     .setManifestUrl(playlistUrl).build();
@@ -410,7 +418,8 @@ public final class PeertubeStreamExtractor extends StreamExtractor {
         }
         final String torrent = file.getString("torrentUrl");
         if (hasText(torrent)) {
-            videoStreams.add(new VideoStream.Builder().setId(id + "-torrent")
+            videoStreams.add(new VideoStream.Builder()
+                    .setId(uniqueId(videoStreams, id + "-torrent", urlField))
                     .setContent(torrent, true).setIsVideoOnly(videoOnly)
                     .setDeliveryMethod(DeliveryMethod.TORRENT).setResolution(resolution)
                     .setMediaFormat(format).build());
@@ -436,16 +445,35 @@ public final class PeertubeStreamExtractor extends StreamExtractor {
         if (!Stream.containSimilarStream(candidate, streams)) streams.add(candidate);
     }
 
+    private static String uniqueId(final List<? extends Stream> streams, final String base,
+                                   final String source) {
+        if (!hasId(streams, base)) return base;
+
+        String candidate = base + "-" + source;
+        int suffix = 2;
+        while (hasId(streams, candidate)) {
+            candidate = base + "-" + source + "-" + suffix++;
+        }
+        return candidate;
+    }
+
+    private static boolean hasId(final List<? extends Stream> streams, final String id) {
+        for (final Stream stream : streams) {
+            if (stream.getId().equals(id)) return true;
+        }
+        return false;
+    }
+
     private JsonObject fetchSubApiContent(final String path)
             throws IOException, ReCaptchaException, ParsingException {
         final Response response = getDownloader().get(videoApi("/" + path));
         if (response == null) throw new ParsingException("PeerTube returned no " + path + " data");
-        if (response.responseCode() == 400) return null;
-        if (response.responseCode() != 200) {
-            throw new ParsingException("PeerTube " + path + " request failed with HTTP "
-                    + response.responseCode());
-        }
-        return readObject(response.responseBody(), path);
+        return switch (response.responseCode()) {
+            case 200 -> readObject(response.responseBody(), path);
+            case 400 -> null;
+            default -> throw new ParsingException("PeerTube " + path
+                    + " request failed with HTTP " + response.responseCode());
+        };
     }
 
     private String accountVideosUrl() throws ParsingException {

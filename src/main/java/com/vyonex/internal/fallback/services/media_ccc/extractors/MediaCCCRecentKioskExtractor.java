@@ -13,15 +13,12 @@ import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
 
 public class MediaCCCRecentKioskExtractor implements StreamInfoItemExtractor {
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSzzzz");
+    private static final String UTC_SUFFIX = "UTC";
     @Nullable private final String title;
     @Nullable private final String url;
     @Nullable private final String conferenceTitle;
@@ -56,6 +53,10 @@ public class MediaCCCRecentKioskExtractor implements StreamInfoItemExtractor {
     @Override public boolean isUploaderVerified() { return false; }
     @Nullable @Override public String getTextualUploadDate() { return date; }
     @Nullable @Override public DateWrapper getUploadDate() throws ParsingException {
-        return date == null ? null : new DateWrapper(ZonedDateTime.parse(date, DATE_FORMAT).toInstant());
+        if (date == null) return null;
+        // shortcut: API dates use UTC/offsets, use zone-aware parsing if named zones appear.
+        final String isoDate = date.endsWith(UTC_SUFFIX)
+                ? date.substring(0, date.length() - UTC_SUFFIX.length()) + "Z" : date;
+        return DateWrapper.fromInstant(isoDate);
     }
 }

@@ -16,6 +16,7 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItem;
+import com.vyonex.internal.fallback.services.peertube.extractors.PeertubeSepiaStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -144,13 +145,20 @@ class PeertubeParsingHelperTest {
         final MultiInfoItemsCollector sepia = new MultiInfoItemsCollector(3);
         PeertubeParsingHelper.collectItemsFrom(sepia, JsonParser.object().from("""
                 {"data":[{"uuid":"remote-1","name":"Remote",
-                  "embedUrl":"https://remote.example/videos/embed/remote-1",
+                  "embedUrl":"https://remote.example/peertube/videos/embed/remote-1",
+                  "embedPath":"/videos/embed/remote-1",
+                  "account":{"name":"alice","host":"remote.example",
+                    "displayName":"Alice","avatar":{"path":"/avatar.jpg"}},
                   "thumbnailPath":"/remote.jpg"}]}
                 """), "https://tube.example", true);
         final StreamInfoItem remoteVideo = (StreamInfoItem) sepia.getItems().get(0);
-        assertEquals("https://remote.example/videos/watch/remote-1", remoteVideo.getUrl());
         assertEquals("https://remote.example/remote.jpg",
                 remoteVideo.getThumbnails().get(0).getUrl());
+        assertEquals("https://remote.example/avatar.jpg",
+                remoteVideo.getUploaderAvatars().get(0).getUrl());
+        assertEquals("https://remote.example/peertube/accounts/alice@remote.example",
+                remoteVideo.getUploaderUrl());
+        assertEquals("https://remote.example/peertube/videos/watch/remote-1", remoteVideo.getUrl());
     }
 
     @Test
@@ -158,5 +166,16 @@ class PeertubeParsingHelperTest {
         assertThrows(ParsingException.class, () -> PeertubeParsingHelper.collectItemsFrom(
                 new MultiInfoItemsCollector(3), JsonParser.object().from("{\"data\":{}}"),
                 "https://tube.example"));
+    }
+
+    @Test
+    void sepiaItemsRejectMalformedEmbedUrls() throws Exception {
+        final var item = JsonParser.object().from("""
+                {"uuid":"broken","name":"Broken","embedUrl":"https://[bad"}
+                """);
+        final var extractor = new PeertubeSepiaStreamInfoItemExtractor(item, "https://tube.example");
+
+        final ParsingException error = assertThrows(ParsingException.class, extractor::getUrl);
+        assertEquals("Invalid Sepia video URL", error.getMessage());
     }
 }

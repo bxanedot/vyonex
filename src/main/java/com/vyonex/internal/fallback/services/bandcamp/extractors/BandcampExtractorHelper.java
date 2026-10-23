@@ -27,6 +27,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class BandcampExtractorHelper {
     public static final String BASE_URL = "https://bandcamp.com";
@@ -45,7 +46,7 @@ public final class BandcampExtractorHelper {
         final String endpoint = BASE_API_URL + "/mobile/22/tralbum_details?band_id=" + bandId
                 + "&tralbum_id=" + itemId + "&tralbum_type=" + itemType.charAt(0);
         try {
-            return https(JsonParser.object().from(downloader().get(endpoint)
+            return forceHttps(JsonParser.object().from(currentDownloader().get(endpoint)
                     .responseBody()).getString("bandcamp_url"));
         } catch (final IOException | ReCaptchaException | JsonParserException e) {
             throw new ParsingException("Could not resolve Bandcamp item URL", e);
@@ -53,7 +54,7 @@ public final class BandcampExtractorHelper {
     }
 
     public static JsonObject getArtistDetails(final String id) throws ParsingException {
-        return getArtistDetails(downloader(), id);
+        return getArtistDetails(currentDownloader(), id);
     }
 
     public static JsonObject getArtistDetails(final Downloader downloader, final String id)
@@ -62,8 +63,7 @@ public final class BandcampExtractorHelper {
                 .getBytes(StandardCharsets.UTF_8);
         try {
             return JsonParser.object().from(downloader.postWithContentTypeJson(
-                    BASE_API_URL + "/mobile/22/band_details", java.util.Map.of(), body)
-                    .responseBody());
+                    BASE_API_URL + "/mobile/22/band_details", Map.of(), body).responseBody());
         } catch (final IOException | ReCaptchaException | JsonParserException e) {
             throw new ParsingException("Could not load Bandcamp artist details", e);
         }
@@ -74,16 +74,16 @@ public final class BandcampExtractorHelper {
     }
 
     public static boolean isArtistDomain(final String url) throws ParsingException {
-        final URI uri = parseUri(url);
+        final URI uri = parseWebUri(url);
         final String host = uri.getHost().toLowerCase(Locale.ROOT);
-        if (host.equals("bandcamp.com")) return false;
+        if ("bandcamp.com".equals(host)) return false;
         if (host.endsWith(".bandcamp.com")) return true;
         if (VyonEx.getDownloader() == null) return false;
 
         try {
-            final String html = downloader().get(https(uri.toString())).responseBody();
-            return org.jsoup.Jsoup.parse(html).select(
-                    ".cart-wrapper a[href='https://bandcamp.com/cart']").size() > 0;
+            final String html = currentDownloader().get(forceHttps(uri.toString())).responseBody();
+            return Jsoup.parse(html).selectFirst(
+                    ".cart-wrapper a[href='https://bandcamp.com/cart']") != null;
         } catch (final IOException | ReCaptchaException e) {
             throw new ParsingException("Could not verify custom Bandcamp artist domain", e);
         }
@@ -92,9 +92,9 @@ public final class BandcampExtractorHelper {
     public static boolean isRadioUrl(final String url) {
         try {
             final URI uri = new URI(url);
+            final String scheme = uri.getScheme();
             return "bandcamp.com".equalsIgnoreCase(uri.getHost())
-                    && ("http".equalsIgnoreCase(uri.getScheme())
-                    || "https".equalsIgnoreCase(uri.getScheme()))
+                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
                     && (uri.getPath().isEmpty() || "/".equals(uri.getPath()))
                     && uri.getRawQuery() != null
                     && uri.getRawQuery().matches("show=[0-9]+");
@@ -113,7 +113,7 @@ public final class BandcampExtractorHelper {
 
     public static JsonObject getJsonAttribute(final String html, final String attribute)
             throws ParsingException {
-        final Element element = Jsoup.parse(html).selectFirst("[" + attribute + "]");
+        final Element element = Jsoup.parse(html).getElementsByAttribute(attribute).first();
         if (element == null) throw new ParsingException("Page is missing " + attribute + " data");
         try {
             return JsonParser.object().from(element.attr(attribute));
@@ -131,13 +131,15 @@ public final class BandcampExtractorHelper {
     @Nonnull
     public static List<Image> getImagesFromImageUrl(@Nullable final String imageUrl) {
         if (imageUrl == null || imageUrl.isBlank()) return List.of();
+        final String absolute = imageUrl.startsWith("//") ? "https:" + imageUrl : imageUrl;
         try {
-            final URI uri = URI.create(imageUrl.startsWith("//") ? "https:" + imageUrl : imageUrl);
-            if (!"https".equalsIgnoreCase(uri.getScheme())
-                    && !"http".equalsIgnoreCase(uri.getScheme())) return List.of();
-            return List.of(new Image(https(uri.toString()), Image.HEIGHT_UNKNOWN,
+            final URI uri = new URI(absolute);
+            if (uri.getHost() == null || uri.getUserInfo() != null
+                    || !("http".equalsIgnoreCase(uri.getScheme())
+                    || "https".equalsIgnoreCase(uri.getScheme()))) return List.of();
+            return List.of(new Image(forceHttps(uri.toString()), Image.HEIGHT_UNKNOWN,
                     Image.WIDTH_UNKNOWN, Image.ResolutionLevel.UNKNOWN));
-        } catch (final IllegalArgumentException e) {
+        } catch (final URISyntaxException | NullPointerException e) {
             return List.of();
         }
     }
@@ -147,13 +149,13 @@ public final class BandcampExtractorHelper {
         return id == 0 ? List.of() : getImagesFromImageUrl(getImageUrl(id, album));
     }
 
-    private static URI parseUri(final String value) throws ParsingException {
+    private static URI parseWebUri(final String value) throws ParsingException {
         try {
             final URI uri = new URI(value);
+            final String scheme = uri.getScheme();
             if (uri.getHost() == null || uri.getUserInfo() != null
-                    || !("http".equalsIgnoreCase(uri.getScheme())
-                    || "https".equalsIgnoreCase(uri.getScheme()))) {
-                throw new URISyntaxException(value, "Expected an HTTP(S) URL with a host");
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                throw new URISyntaxException(value, "Expected a web address");
             }
             return uri;
         } catch (final URISyntaxException | NullPointerException e) {
@@ -161,11 +163,12 @@ public final class BandcampExtractorHelper {
         }
     }
 
-    private static String https(final String url) {
-        return url != null && url.startsWith("http://") ? "https://" + url.substring(7) : url;
+    private static String forceHttps(final String value) {
+        return value != null && value.startsWith("http://")
+                ? "https://" + value.substring(7) : value;
     }
 
-    private static Downloader downloader() throws ParsingException {
+    private static Downloader currentDownloader() throws ParsingException {
         final Downloader downloader = VyonEx.getDownloader();
         if (downloader == null) throw new ParsingException("VyonEx has not been initialized");
         return downloader;

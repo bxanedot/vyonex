@@ -70,6 +70,34 @@ class SoundcloudParsingHelperTest {
     }
 
     @Test
+    void mapsSoundcloudArtworkAndVisualSizeVariants() {
+        final List<Image> artwork = SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
+                "https://i1.sndcdn.com/artworks-abc-large.jpg");
+        assertEquals(15, artwork.size());
+        assertEquals("https://i1.sndcdn.com/artworks-abc-mini.jpg", artwork.get(0).getUrl());
+        assertEquals(16, artwork.get(0).getWidth());
+        assertEquals(Image.ResolutionLevel.LOW, artwork.get(0).getEstimatedResolutionLevel());
+        assertEquals("https://i1.sndcdn.com/artworks-abc-t500x500.jpg",
+                artwork.get(14).getUrl());
+        assertEquals(500, artwork.get(14).getHeight());
+        assertEquals(Image.ResolutionLevel.MEDIUM,
+                artwork.get(14).getEstimatedResolutionLevel());
+        final List<Image> queryArtwork = SoundcloudParsingHelper
+                .getAllImagesFromArtworkOrAvatarUrl(
+                        "https://i1.sndcdn.com/artworks-abc-large.jpg?token=a%20b");
+        assertEquals("https://i1.sndcdn.com/artworks-abc-mini.jpg?token=a%20b",
+                queryArtwork.get(0).getUrl());
+
+        final List<Image> visuals = SoundcloudParsingHelper.getAllImagesFromVisualUrl(
+                "https://i1.sndcdn.com/visuals-abc-original.jpg");
+        assertEquals(List.of("https://i1.sndcdn.com/visuals-abc-t1240x260.jpg",
+                        "https://i1.sndcdn.com/visuals-abc-t2480x520.jpg"),
+                visuals.stream().map(Image::getUrl).toList());
+        assertEquals(1240, visuals.get(0).getWidth());
+        assertEquals(260, visuals.get(0).getHeight());
+    }
+
+    @Test
     void stopsWhenTheApiRepeatsTheSamePaginationUrl() throws Exception {
         final String url = "https://api-v2.soundcloud.com/users/7/followings?client_id=offline-key";
         final StubDownloader downloader = new StubDownloader(Map.of(url,

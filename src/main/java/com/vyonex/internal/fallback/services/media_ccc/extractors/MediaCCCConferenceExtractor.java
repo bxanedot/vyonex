@@ -17,31 +17,34 @@ import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.Medi
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 
 import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getImageListFromLogoImageUrl;
 
 public class MediaCCCConferenceExtractor extends ChannelExtractor {
-    private String name;
-    private String logoUrl;
-    private List<MediaCCCStreamInfoItemExtractor> events;
+    private ConferenceData conference;
 
     public MediaCCCConferenceExtractor(final StreamingService service,
                                        final ListLinkHandler linkHandler) {
         super(service, linkHandler);
     }
 
-    static JsonObject fetchConferenceData(@Nonnull final Downloader downloader,
-                                          @Nonnull final String conferenceId)
+    static ConferenceData fetchConferenceData(@Nonnull final Downloader downloader,
+                                              @Nonnull final String conferenceId)
             throws IOException, ExtractionException {
         final String url = MediaCCCConferenceLinkHandlerFactory.CONFERENCE_API_ENDPOINT
                 + conferenceId;
-        return MediaCCCParsingHelper.fetchJsonObject(downloader, url, null);
+        final JsonObject payload = MediaCCCParsingHelper.fetchJsonObject(downloader, url, null);
+        final List<MediaCCCStreamInfoItemExtractor> events = payload.getArray("events")
+                .streamAsJsonObjects().map(MediaCCCStreamInfoItemExtractor::new).toList();
+        return new ConferenceData(payload.getString("title"), payload.getString("logo_url"),
+                events);
     }
 
     @Nonnull @Override public List<Image> getAvatars() {
-        return getImageListFromLogoImageUrl(logoUrl);
+        return getImageListFromLogoImageUrl(conference.logoUrl());
     }
     @Nonnull @Override public List<Image> getBanners() { return List.of(); }
     @Override public String getFeedUrl() { return null; }
@@ -53,21 +56,20 @@ public class MediaCCCConferenceExtractor extends ChannelExtractor {
     @Override public boolean isVerified() { return false; }
 
     @Nonnull @Override public List<ListLinkHandler> getTabs() throws ParsingException {
-        final List<MediaCCCStreamInfoItemExtractor> fetched = events;
+        final List<MediaCCCStreamInfoItemExtractor> fetched = conference.events();
         return List.of(new ReadyChannelTabListLinkHandler(getUrl(), getId(), ChannelTabs.VIDEOS,
                 (service, link) -> new MediaCCCChannelTabExtractor(service, link, fetched)));
     }
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final JsonObject conference = fetchConferenceData(downloader, getId());
-        name = conference.getString("title");
-        logoUrl = conference.getString("logo_url");
-        events = conference.getArray("events").streamAsJsonObjects()
-                .map(MediaCCCStreamInfoItemExtractor::new).toList();
+        conference = fetchConferenceData(downloader, getId());
     }
 
     @Nonnull @Override public String getName() throws ParsingException {
-        return name;
+        return conference.title();
     }
+
+    record ConferenceData(@Nullable String title, @Nullable String logoUrl,
+                         List<MediaCCCStreamInfoItemExtractor> events) { }
 }

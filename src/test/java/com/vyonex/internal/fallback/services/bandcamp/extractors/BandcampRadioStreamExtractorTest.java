@@ -52,6 +52,8 @@ class BandcampRadioStreamExtractorTest {
             assertEquals("Weekly episode", extractor.getName());
             assertEquals("Host", extractor.getUploaderName());
             assertEquals("2024-06-15", extractor.getTextualUploadDate());
+            assertEquals("2024-06-15T00:00:00Z",
+                    extractor.getUploadDate().getInstant().toString());
             assertEquals("Episode description", extractor.getDescription().getContent());
             assertEquals(3600, extractor.getLength());
             assertEquals(2, extractor.getAudioStreams().size());

@@ -5,11 +5,11 @@ package com.vyonex.internal.fallback.services.peertube.extractors;
 
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.Page;
-import com.vyonex.internal.fallback.ServiceList;
 import com.vyonex.internal.fallback.comments.CommentsInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper;
+import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
@@ -72,7 +72,7 @@ public final class PeertubeCommentsInfoItemExtractor implements CommentsInfoItem
         return required(createdAt, "createdAt");
     }
     @Override public DateWrapper getUploadDate() throws ParsingException {
-        return DateWrapper.fromInstant(getTextualUploadDate());
+        return DateWrapper.fromInstant(required(createdAt, "createdAt"));
     }
     @Override public Description getCommentText() throws ParsingException {
         return new Description(Jsoup.parse(required(text, "text")).text(), Description.PLAIN_TEXT);
@@ -82,13 +82,11 @@ public final class PeertubeCommentsInfoItemExtractor implements CommentsInfoItem
     }
     @Override public List<Image> getUploaderAvatars() { return avatars; }
     @Override public String getUploaderName() throws ParsingException {
-        return required(accountName, "account.name") + "@" + required(accountHost, "account.host");
+        return accountHandle();
     }
     @Override public String getUploaderUrl() throws ParsingException {
-        final String name = required(accountName, "account.name");
-        final String host = required(accountHost, "account.host");
-        return ServiceList.PeerTube.getChannelLHFactory()
-                .fromId("accounts/" + name + "@" + host, baseUrl).getUrl();
+        return PeertubeChannelLinkHandlerFactory.getInstance()
+                .fromId("accounts/" + accountHandle(), baseUrl).getUrl();
     }
     @Override public Page getReplies() throws ParsingException {
         if (getReplyCount() == 0) return null;
@@ -117,6 +115,11 @@ public final class PeertubeCommentsInfoItemExtractor implements CommentsInfoItem
             throws ParsingException {
         if (value == null) throw new ParsingException("Missing numeric field: " + field);
         return value;
+    }
+
+    private String accountHandle() throws ParsingException {
+        return required(accountName, "account.name") + "@"
+                + required(accountHost, "account.host");
     }
 
     private static byte[] childReplyBody(final JsonArray children) {

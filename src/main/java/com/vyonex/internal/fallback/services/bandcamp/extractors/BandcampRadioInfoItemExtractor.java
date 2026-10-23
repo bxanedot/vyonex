@@ -15,50 +15,46 @@ import javax.annotation.Nullable;
 import java.util.List;
 
 public class BandcampRadioInfoItemExtractor implements StreamInfoItemExtractor {
-    private final long showId;
-    @Nullable private final String description;
-    @Nullable private final String uploadDate;
-    private final String name;
-    private final long imageId;
-    private final String uploaderName;
+    private final JsonObject show;
 
     public BandcampRadioInfoItemExtractor(final JsonObject show) {
-        showId = show.getLong("id");
-        description = show.getString("desc");
-        uploadDate = show.getString("date");
-        name = show.getString("subtitle");
-        imageId = show.getLong("image_id");
-        uploaderName = show.getString("title", "");
+        this.show = show;
     }
 
-    @Override
-    public long getDuration() { return 0; }
+    @Override public long getDuration() { return 0; }
 
     @Nullable
     @Override
-    public String getShortDescription() { return description; }
+    public String getShortDescription() { return show.getString("desc"); }
 
     @Nullable
     @Override
-    public String getTextualUploadDate() { return uploadDate; }
+    public String getTextualUploadDate() { return show.getString("date"); }
 
     @Nullable
     @Override
     public DateWrapper getUploadDate() throws ParsingException {
-        final String date = getTextualUploadDate();
+        final String date = show.getString("date");
         return date == null || date.isBlank() ? null : BandcampExtractorHelper.parseDate(date);
     }
 
     @Override
-    public String getName() throws ParsingException { return required(); }
+    public String getName() throws ParsingException {
+        final String subtitle = show.getString("subtitle");
+        if (subtitle == null || subtitle.isBlank()) {
+            throw new ParsingException("Bandcamp radio item is missing subtitle");
+        }
+        return subtitle;
+    }
 
-    @Override
-    public String getUrl() { return BandcampExtractorHelper.BASE_URL + "/?show=" + showId; }
+    @Override public String getUrl() {
+        return BandcampExtractorHelper.BASE_URL + "/?show=" + show.getLong("id");
+    }
 
     @Nonnull
     @Override
     public List<Image> getThumbnails() {
-        return BandcampExtractorHelper.getImagesFromImageId(imageId, false);
+        return BandcampExtractorHelper.getImagesFromImageId(show.getLong("image_id"), false);
     }
 
     @Override
@@ -68,7 +64,7 @@ public class BandcampRadioInfoItemExtractor implements StreamInfoItemExtractor {
     public long getViewCount() { return -1; }
 
     @Override
-    public String getUploaderName() { return uploaderName; }
+    public String getUploaderName() { return show.getString("title", ""); }
 
     @Override
     public String getUploaderUrl() { return ""; }
@@ -79,10 +75,4 @@ public class BandcampRadioInfoItemExtractor implements StreamInfoItemExtractor {
     @Override
     public boolean isAd() { return false; }
 
-    private String required() throws ParsingException {
-        if (name == null || name.isBlank()) {
-            throw new ParsingException("Bandcamp radio item is missing subtitle");
-        }
-        return name;
-    }
 }
