@@ -172,8 +172,11 @@ class SoundcloudServiceExtractionTest {
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 playlistUrl, """
-                        {"id":7,"title":"Mix","track_count":2,"tracks":[{"id":2},{"id":1}],
-                         "user":{"username":"Alice"}}
+                        {"id":7,"title":"Mix","permalink_url":"https://soundcloud.com/alice/sets/mix",
+                         "track_count":2,"description":"A short mix",
+                         "tracks":[{"id":2},{"id":1}],
+                         "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
+                           "avatar_url":"https://images.example/alice.jpg","verified":true}}
                         """,
                 tracksUrl, """
                         [{"id":1,"title":"First","duration":1000},
@@ -188,6 +191,14 @@ class SoundcloudServiceExtractionTest {
             final SoundcloudPlaylistExtractor extractor = new SoundcloudPlaylistExtractor(
                     new SoundcloudService(31), handler);
             extractor.onFetchPage(downloader);
+            assertEquals("Mix", extractor.getName());
+            assertEquals("https://soundcloud.com/alice", extractor.getUploaderUrl());
+            assertEquals("Alice", extractor.getUploaderName());
+            assertEquals("https://images.example/alice.jpg",
+                    extractor.getUploaderAvatars().get(0).getUrl());
+            assertTrue(extractor.isUploaderVerified());
+            assertEquals(2, extractor.getStreamCount());
+            assertEquals("A short mix", extractor.getDescription().getContent());
             final var firstPage = extractor.getInitialPage();
             final var tracks = extractor.getPage(firstPage.getNextPage());
 

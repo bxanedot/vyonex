@@ -16,6 +16,7 @@ import com.vyonex.internal.fallback.playlist.PlaylistExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
+import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
@@ -32,7 +33,11 @@ import java.util.Objects;
 public final class SoundcloudPlaylistExtractor extends PlaylistExtractor {
     private static final int IDS_PER_REQUEST = 15;
     private String playlistId;
-    private JsonObject playlist;
+    private SoundcloudPlaylistInfoItemExtractor playlistInfo;
+    private String avatarUrl;
+    private Description description;
+    private List<StreamInfoItemExtractor> initialTracks = List.of();
+    private List<String> unresolvedTrackIds = List.of();
 
     public SoundcloudPlaylistExtractor(final StreamingService service, final ListLinkHandler handler) {
         super(service, handler);
@@ -50,50 +55,54 @@ public final class SoundcloudPlaylistExtractor extends PlaylistExtractor {
                     + response.responseCode());
         }
         try {
-            playlist = JsonParser.object().from(response.responseBody());
+            final JsonObject playlist = JsonParser.object().from(response.responseBody());
+            playlistInfo = new SoundcloudPlaylistInfoItemExtractor(playlist);
+            avatarUrl = SoundcloudParsingHelper.getAvatarUrl(playlist);
+            final String descriptionText = playlist.getString("description", "");
+            description = descriptionText.isBlank() ? Description.EMPTY_DESCRIPTION
+                    : new Description(descriptionText, Description.PLAIN_TEXT);
+
+            final List<StreamInfoItemExtractor> tracks = new ArrayList<>();
+            final List<String> unresolvedIds = new ArrayList<>();
+            for (final Object value : playlist.getArray("tracks")) {
+                if (!(value instanceof JsonObject)) continue;
+                final JsonObject track = (JsonObject) value;
+                if (track.getString("title") != null) {
+                    tracks.add(new SoundcloudStreamInfoItemExtractor(track));
+                } else if (track.get("id") != null) {
+                    unresolvedIds.add(track.get("id").toString());
+                }
+            }
+            initialTracks = List.copyOf(tracks);
+            unresolvedTrackIds = List.copyOf(unresolvedIds);
         } catch (final JsonParserException e) {
             throw new ParsingException("Invalid SoundCloud playlist response", e);
         }
     }
 
     @Override public String getId() { return playlistId; }
-    @Override public String getName() { return playlist.getString("title", ""); }
+    @Override public String getName() { return playlistInfo.getName(); }
     @Override public List<Image> getThumbnails() {
         try {
-            return new SoundcloudPlaylistInfoItemExtractor(playlist).getThumbnails();
+            return playlistInfo.getThumbnails();
         } catch (final ParsingException e) {
             return List.of();
         }
     }
-    @Override public String getUploaderUrl() { return SoundcloudParsingHelper.getUploaderUrl(playlist); }
-    @Override public String getUploaderName() { return SoundcloudParsingHelper.getUploaderName(playlist); }
+    @Override public String getUploaderUrl() { return playlistInfo.getUploaderUrl(); }
+    @Override public String getUploaderName() { return playlistInfo.getUploaderName(); }
     @Override public List<Image> getUploaderAvatars() {
-        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(
-                SoundcloudParsingHelper.getAvatarUrl(playlist));
+        return SoundcloudParsingHelper.getAllImagesFromArtworkOrAvatarUrl(avatarUrl);
     }
-    @Override public boolean isUploaderVerified() {
-        return playlist.getObject("user").getBoolean("verified");
-    }
-    @Override public long getStreamCount() { return playlist.getLong("track_count"); }
-    @Override public Description getDescription() {
-        final String description = playlist.getString("description", "");
-        return description.isBlank() ? Description.EMPTY_DESCRIPTION
-                : new Description(description, Description.PLAIN_TEXT);
-    }
+    @Override public boolean isUploaderVerified() { return playlistInfo.isUploaderVerified(); }
+    @Override public long getStreamCount() { return playlistInfo.getStreamCount(); }
+    @Override public Description getDescription() { return description; }
 
     @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
-        final List<String> unresolvedIds = new ArrayList<>();
-        for (final Object value : playlist.getArray("tracks")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject track = (JsonObject) value;
-            if (track.getString("title") != null) {
-                items.commit(new SoundcloudStreamInfoItemExtractor(track));
-            } else if (track.get("id") != null) {
-                unresolvedIds.add(track.get("id").toString());
-            }
-        }
-        return new InfoItemsPage<>(items, unresolvedIds.isEmpty() ? null : new Page(unresolvedIds));
+        initialTracks.forEach(items::commit);
+        return new InfoItemsPage<>(items, unresolvedTrackIds.isEmpty()
+                ? null : new Page(unresolvedTrackIds));
     }
 
     @Override public InfoItemsPage<StreamInfoItem> getPage(final Page page)
