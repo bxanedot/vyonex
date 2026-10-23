@@ -36,7 +36,8 @@ class PeertubeProfilesAndListsTest {
         final String channelsUrl = accountUrl + "/video-channels";
         final StubDownloader downloader = new StubDownloader(Map.of(
                 accountUrl, """
-                {"id":7,"displayName":"Alice","followersCount":5,"avatar":{"path":"/alice.png"}}
+                {"id":7,"displayName":"Alice","description":"Producer","followersCount":5,
+                 "avatar":{"path":"/alice.png"},"banner":{"path":"/account-banner.jpg"}}
                 """,
                 channelsUrl, """
                 {"data":[{"followersCount":2},{"followersCount":3}]}
@@ -49,6 +50,7 @@ class PeertubeProfilesAndListsTest {
         account.fetchPage();
 
         assertEquals("Alice", account.getName());
+        assertEquals("Producer", account.getDescription());
         assertEquals(10, account.getSubscriberCount());
         assertEquals(BASE + "/feeds/videos.xml?accountId=7", account.getFeedUrl());
         assertEquals(BASE + "/accounts/alice@tube.example/videos",
@@ -56,13 +58,15 @@ class PeertubeProfilesAndListsTest {
         assertEquals(BASE + "/accounts/alice@tube.example/video-channels",
                 account.getTabs().get(1).getUrl());
         assertEquals(BASE + "/alice.png", account.getAvatars().get(0).getUrl());
+        assertEquals(BASE + "/account-banner.jpg", account.getBanners().get(0).getUrl());
     }
 
     @Test
     void channelExposesItsOwnerAndPlaylistTab() throws Exception {
         final String channelUrl = BASE + "/api/v1/video-channels/music@tube.example";
         final StubDownloader downloader = new StubDownloader(Map.of(channelUrl, """
-                {"id":9,"displayName":"Music","followersCount":12,
+                {"id":9,"displayName":"Music","description":"Independent music","followersCount":12,
+                 "avatar":{"path":"/channel.png"},
                  "ownerAccount":{"name":"alice","url":"https://tube.example/a/alice",
                    "avatar":{"path":"/alice.png"}},"banner":{"path":"/banner.jpg"}}
                 """));
@@ -73,9 +77,12 @@ class PeertubeProfilesAndListsTest {
         channel.fetchPage();
 
         assertEquals("Music", channel.getName());
+        assertEquals("Independent music", channel.getDescription());
         assertEquals(12, channel.getSubscriberCount());
+        assertEquals(BASE + "/channel.png", channel.getAvatars().get(0).getUrl());
         assertEquals("alice", channel.getParentChannelName());
         assertEquals("https://tube.example/a/alice", channel.getParentChannelUrl());
+        assertEquals(BASE + "/alice.png", channel.getParentChannelAvatars().get(0).getUrl());
         assertEquals(BASE + "/feeds/videos.xml?videoChannelId=9", channel.getFeedUrl());
         assertEquals(ChannelTabs.PLAYLISTS,
                 service.getChannelTabExtractor(channel.getTabs().get(1)).getName());

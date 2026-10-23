@@ -22,12 +22,16 @@ import java.util.List;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getAvatarsFromOwnerAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject;
 import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.readApiObject;
-import static com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper.requiredString;
 
 public final class PeertubeAccountExtractor extends ChannelExtractor {
     private static final String API = "/api/v1/";
     private final String baseUrl;
-    private JsonObject account;
+    private String apiId;
+    private String displayName;
+    private String description;
+    private long accountFollowers;
+    private List<Image> avatars = List.of();
+    private List<Image> banners = List.of();
 
     public PeertubeAccountExtractor(final StreamingService service, final ListLinkHandler link)
             throws ParsingException {
@@ -36,13 +40,13 @@ public final class PeertubeAccountExtractor extends ChannelExtractor {
     }
 
     @Override public List<Image> getAvatars() {
-        return getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, account);
+        return avatars;
     }
     @Override public List<Image> getBanners() {
-        return getBannersFromAccountOrVideoChannelObject(baseUrl, account);
+        return banners;
     }
-    @Override public String getFeedUrl() { return baseUrl + "/feeds/videos.xml?accountId=" + account.get("id"); }
-    @Override public String getDescription() { return account.getString("description"); }
+    @Override public String getFeedUrl() { return baseUrl + "/feeds/videos.xml?accountId=" + apiId; }
+    @Override public String getDescription() { return description; }
     @Override public String getParentChannelName() { return ""; }
     @Override public String getParentChannelUrl() { return ""; }
     @Override public List<Image> getParentChannelAvatars() { return List.of(); }
@@ -50,7 +54,7 @@ public final class PeertubeAccountExtractor extends ChannelExtractor {
 
     @Override
     public long getSubscriberCount() throws ParsingException {
-        long followers = account.getLong("followersCount");
+        long followers = accountFollowers;
         final String channelListUrl = baseUrl + API + getId() + "/video-channels";
         try {
             final Response response = getDownloader().get(channelListUrl);
@@ -78,11 +82,18 @@ public final class PeertubeAccountExtractor extends ChannelExtractor {
 
     @Override
     public void onFetchPage(final Downloader downloader) throws IOException, ExtractionException {
-        account = readApiObject(downloader.get(baseUrl + API + getId()), "account");
+        final JsonObject account = readApiObject(downloader.get(baseUrl + API + getId()), "account");
         PeertubeParsingHelper.validate(account);
+        apiId = String.valueOf(account.get("id"));
+        displayName = account.getString("displayName");
+        description = account.getString("description");
+        accountFollowers = account.getLong("followersCount");
+        avatars = getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, account);
+        banners = getBannersFromAccountOrVideoChannelObject(baseUrl, account);
     }
 
     @Override public String getName() throws ParsingException {
-        return requiredString(account, "displayName");
+        if (displayName == null) throw new ParsingException("Missing string field: displayName");
+        return displayName;
     }
 }
