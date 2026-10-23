@@ -638,6 +638,20 @@ class InnerTubeExtractor internal constructor(
         prefetchedPoToken: Deferred<PoTokenResult?>? = null,
         tvBearerCredential: TvBearerCredential? = null,
     ): ExtractedStream? {
+        suspend fun extract(config: PlayerConfig): ExtractedStream? =
+            extractWithConfig(
+                videoId = videoId,
+                hints = hints,
+                excludedClients = excludedClients,
+                clientPlaybackNonce = clientPlaybackNonce,
+                playerConfig = config,
+                totalStartMs = totalStartMs,
+                audioQuality = audioQuality,
+                diagnostics = diagnostics,
+                prefetchedPoToken = prefetchedPoToken,
+                tvBearerCredential = tvBearerCredential,
+            )
+
         val nowMs = now().toEpochMilliseconds()
         val cachedConfig = getCachedPlayerConfig(useLoginCookies, nowMs)
         if (cachedConfig != null) {
@@ -653,31 +667,18 @@ class InnerTubeExtractor internal constructor(
                         "ageMs" to cacheAgeMs.toString(),
                     ),
             )
-            val cachedStream =
-                extractWithConfig(
-                    videoId = videoId,
-                    hints = hints,
-                    excludedClients = excludedClients,
-                    clientPlaybackNonce = clientPlaybackNonce,
-                    playerConfig = cachedConfig.config,
-                    totalStartMs = totalStartMs,
-                    audioQuality = audioQuality,
-                    diagnostics = diagnostics,
-                    prefetchedPoToken = prefetchedPoToken,
-                    tvBearerCredential = tvBearerCredential,
-                )
-            if (cachedStream != null) return cachedStream
+            extract(cachedConfig.config)?.let { return it }
             logger.w(TAG, "watch page cache unusable", details = mapOf("authenticated" to useLoginCookies.toString()))
         }
 
         val configStart = Clock.System.now().toEpochMilliseconds()
         var fetchedFreshConfig = false
-        val freshCachedConfig =
+        val selectedConfig =
             playerConfigFetchMutex.withLock {
                 if (cachedConfig != null && playerConfigCache[useLoginCookies] === cachedConfig) {
                     playerConfigCache.remove(useLoginCookies)
                 }
-                if (diagnostics.requestBudget.remaining <= 0) return null
+                if (diagnostics.requestBudget.remaining <= 0) return@withLock null
                 getCachedPlayerConfigLocked(useLoginCookies, now().toEpochMilliseconds())
                     ?: run {
                         val expectedSession = innerTube.sessionSnapshot()
@@ -688,31 +689,20 @@ class InnerTubeExtractor internal constructor(
                         fetchedFreshConfig = true
                         cachePlayerConfig(useLoginCookies, config, expectedSession)
                     }
-            }
+            } ?: return null
         diagnostics.usedAuthenticatedWatchPage =
-            diagnostics.usedAuthenticatedWatchPage || freshCachedConfig.usedLoginCookies
+            diagnostics.usedAuthenticatedWatchPage || selectedConfig.usedLoginCookies
         logger.d(
             TAG,
             "watch page config ready",
             details =
                 mapOf(
                     "fetched" to fetchedFreshConfig.toString(),
-                    "authenticated" to freshCachedConfig.usedLoginCookies.toString(),
+                    "authenticated" to selectedConfig.usedLoginCookies.toString(),
                     "elapsedMs" to (Clock.System.now().toEpochMilliseconds() - configStart).toString(),
                 ),
         )
-        return extractWithConfig(
-            videoId = videoId,
-            hints = hints,
-            excludedClients = excludedClients,
-            clientPlaybackNonce = clientPlaybackNonce,
-            playerConfig = freshCachedConfig.config,
-            totalStartMs = totalStartMs,
-            audioQuality = audioQuality,
-            diagnostics = diagnostics,
-            prefetchedPoToken = prefetchedPoToken,
-            tvBearerCredential = tvBearerCredential,
-        )
+        return extract(selectedConfig.config)
     }
 
     private suspend fun getCachedPlayerConfig(
