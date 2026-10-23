@@ -9,10 +9,9 @@ import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getImagesFromThumbnailsArray;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.getUrlFromNavigationEndpoint;
 import static com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper.prepareDesktopJsonBuilder;
-import static com.vyonex.internal.fallback.services.youtube.protos.playlist.PlaylistProtobufContinuation.ContinuationParams;
-import static com.vyonex.internal.fallback.services.youtube.protos.playlist.PlaylistProtobufContinuation.PlaylistContinuation;
 import static com.vyonex.internal.fallback.utils.Utils.isNullOrEmpty;
 
+import com.google.protobuf.CodedOutputStream;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonWriter;
@@ -34,6 +33,7 @@ import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.utils.Utils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -102,22 +102,29 @@ public class YoutubePlaylistExtractor extends PlaylistExtractor {
         YoutubeParsingHelper.defaultAlertsCheck(browseMetadataResponse);
         isNewPlaylistInterface = checkIfResponseIsNewPlaylistInterface();
 
-        final PlaylistContinuation playlistContinuation = PlaylistContinuation.newBuilder()
-                .setParameters(ContinuationParams.newBuilder()
-                        .setBrowseId("VL" + playlistId)
-                        .setPlaylistId(playlistId)
-                        .setContinuationProperties(PLAYLIST_CONTINUATION_PROPERTIES_BASE64)
-                        .build())
-                .build();
-
         initialBrowseContinuationResponse = getJsonPostResponse(BROWSE_ENDPOINT,
                 JsonWriter.string(prepareDesktopJsonBuilder(localization,
                         getExtractorContentCountry())
                         .value("continuation", Utils.encodeUrlUtf8(Base64.getUrlEncoder()
-                                .encodeToString(playlistContinuation.toByteArray())))
+                                .encodeToString(encodePlaylistContinuation(playlistId))))
                         .done())
                         .getBytes(StandardCharsets.UTF_8),
                 localization);
+    }
+
+    static byte[] encodePlaylistContinuation(final String playlistId) throws IOException {
+        final ByteArrayOutputStream parameterBytes = new ByteArrayOutputStream();
+        final CodedOutputStream parameters = CodedOutputStream.newInstance(parameterBytes);
+        parameters.writeString(2, "VL" + playlistId);
+        parameters.writeString(3, PLAYLIST_CONTINUATION_PROPERTIES_BASE64);
+        parameters.writeString(35, playlistId);
+        parameters.flush();
+
+        final ByteArrayOutputStream continuationBytes = new ByteArrayOutputStream();
+        final CodedOutputStream continuation = CodedOutputStream.newInstance(continuationBytes);
+        continuation.writeByteArray(80226972, parameterBytes.toByteArray());
+        continuation.flush();
+        return continuationBytes.toByteArray();
     }
 
     /**

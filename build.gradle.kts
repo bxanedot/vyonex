@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("java-library")
-    id("com.google.protobuf")
     id("maven-publish")
 }
 
@@ -79,12 +78,4 @@ publishing {
     }
 }
 
-protobuf {
-    protoc { artifact = "com.google.protobuf:protoc:4.35.0" }
-    generateProtoTasks {
-        all().forEach { task ->
-            task.builtins { named("java") { option("lite") } }
-        }
-    }
-}
 // bxane
