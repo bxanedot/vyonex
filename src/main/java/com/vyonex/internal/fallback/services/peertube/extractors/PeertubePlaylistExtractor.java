@@ -98,7 +98,14 @@ public final class PeertubePlaylistExtractor extends PlaylistExtractor {
 
     private static JsonObject readObject(final Response response, final String kind)
             throws ExtractionException {
-        if (response == null || response.responseBody().isBlank()) {
+        if (response == null) {
+            throw new ExtractionException("PeerTube returned no " + kind + " data");
+        }
+        if (response.responseCode() >= 400) {
+            throw new ExtractionException("PeerTube " + kind + " request failed with HTTP "
+                    + response.responseCode());
+        }
+        if (response.responseBody().isBlank()) {
             throw new ExtractionException("PeerTube returned no " + kind + " data");
         }
         try {
