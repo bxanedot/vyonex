@@ -279,15 +279,13 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     static int parseAgeLimit(@Nonnull final JsonObject secondaryInfo) {
         final JsonArray rows = secondaryInfo.getObject("metadataRowContainer")
                 .getObject("metadataRowContainerRenderer").getArray("rows");
-        for (int row = 0; row < rows.size(); row++) {
-            final JsonArray contents = rows.getObject(row).getObject("metadataRowRenderer")
+        for (final JsonObject row : rows.streamAsJsonObjects().toList()) {
+            final JsonArray contents = row.getObject("metadataRowRenderer")
                     .getArray("contents");
-            for (int content = 0; content < contents.size(); content++) {
-                final JsonArray runs = contents.getObject(content).getArray("runs");
-                for (int run = 0; run < runs.size(); run++) {
-                    if (runs.getObject(run).getString("text", "").contains("Age-restricted")) {
-                        return 18;
-                    }
+            for (final JsonObject content : contents.streamAsJsonObjects().toList()) {
+                final String text = getTextFromObject(content);
+                if (text != null && text.toLowerCase(Locale.ROOT).contains("age-restricted")) {
+                    return 18;
                 }
             }
         }
