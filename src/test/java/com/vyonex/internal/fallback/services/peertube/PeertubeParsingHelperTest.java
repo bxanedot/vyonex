@@ -44,6 +44,16 @@ class PeertubeParsingHelperTest {
     }
 
     @Test
+    void ignoresInvalidOrOverflowedPageOffsets() {
+        assertNull(PeertubeParsingHelper.getNextPage(
+                "https://tube.example/api/videos?start=not-a-number", 100));
+        assertNull(PeertubeParsingHelper.getNextPage(
+                "https://tube.example/api/videos?start=-1", 100));
+        assertNull(PeertubeParsingHelper.getNextPage(
+                "https://tube.example/api/videos?start=9223372036854775807", Long.MAX_VALUE));
+    }
+
+    @Test
     void reportsUnavailableResponseErrors() throws Exception {
         assertThrows(ContentNotAvailableException.class, () -> PeertubeParsingHelper.validate(
                 JsonParser.object().from("{\"error\":\"Video unavailable\"}")));
