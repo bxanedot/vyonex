@@ -19,6 +19,7 @@ import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
 
+import javax.annotation.Nullable;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -149,9 +150,15 @@ public final class PeertubeParsingHelper {
 
     public static List<Image> getThumbnailsFromPlaylistOrVideoItem(
             final String baseUrl, final JsonObject item) {
+        return getThumbnailsFromPlaylistOrVideoItem(baseUrl,
+                item.getString("thumbnailPath"), item.getString("previewPath"));
+    }
+
+    public static List<Image> getThumbnailsFromPlaylistOrVideoItem(final String baseUrl,
+            @Nullable final String thumbnailPath, @Nullable final String previewPath) {
         final List<Image> thumbnails = new ArrayList<>(2);
-        addThumbnail(thumbnails, baseUrl, item.getString("thumbnailPath"), ResolutionLevel.LOW);
-        addThumbnail(thumbnails, baseUrl, item.getString("previewPath"), ResolutionLevel.MEDIUM);
+        addThumbnail(thumbnails, baseUrl, thumbnailPath, ResolutionLevel.LOW);
+        addThumbnail(thumbnails, baseUrl, previewPath, ResolutionLevel.MEDIUM);
         return Collections.unmodifiableList(thumbnails);
     }
 

@@ -98,7 +98,8 @@ class PeertubeParsingHelperTest {
         final String response = """
                 {"data":[
                   {"uuid":"video-1","name":"Video","views":10,"duration":90,
-                   "account":{"name":"alice","host":"tube.example","displayName":"Alice"},
+                   "account":{"name":"alice","host":"tube.example","displayName":"Alice",
+                     "avatar":{"path":"/alice.jpg"}},
                    "publishedAt":"2026-01-02T03:04:05Z","thumbnailPath":"/video.jpg"},
                   {"displayName":"Channel","url":"https://tube.example/video-channels/c1",
                    "followersCount":7,"description":"Talks","avatars":[{"path":"/channel.jpg"}]},
@@ -118,6 +119,9 @@ class PeertubeParsingHelperTest {
         assertEquals("Video", video.getName());
         assertEquals("https://tube.example/videos/watch/video-1", collector.getItems().get(0).getUrl());
         assertEquals("Alice", video.getUploaderName());
+        assertEquals("https://tube.example/accounts/alice@tube.example", video.getUploaderUrl());
+        assertEquals("https://tube.example/video.jpg", video.getThumbnails().get(0).getUrl());
+        assertEquals("https://tube.example/alice.jpg", video.getUploaderAvatars().get(0).getUrl());
         assertEquals(10, video.getViewCount());
         assertEquals(90, video.getDuration());
         assertEquals(InfoItem.InfoType.CHANNEL, collector.getItems().get(1).getInfoType());
@@ -140,9 +144,13 @@ class PeertubeParsingHelperTest {
         final MultiInfoItemsCollector sepia = new MultiInfoItemsCollector(3);
         PeertubeParsingHelper.collectItemsFrom(sepia, JsonParser.object().from("""
                 {"data":[{"uuid":"remote-1","name":"Remote",
-                  "embedUrl":"https://remote.example/videos/embed/remote-1"}]}
+                  "embedUrl":"https://remote.example/videos/embed/remote-1",
+                  "thumbnailPath":"/remote.jpg"}]}
                 """), "https://tube.example", true);
-        assertEquals("https://remote.example/videos/watch/remote-1", sepia.getItems().get(0).getUrl());
+        final StreamInfoItem remoteVideo = (StreamInfoItem) sepia.getItems().get(0);
+        assertEquals("https://remote.example/videos/watch/remote-1", remoteVideo.getUrl());
+        assertEquals("https://remote.example/remote.jpg",
+                remoteVideo.getThumbnails().get(0).getUrl());
     }
 
     @Test
