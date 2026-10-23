@@ -87,6 +87,54 @@ class InnerTubeExtractorRoutingContractTest {
         }
     }
 
+    @Test
+    fun rejectsEmbeddedConfigWithoutEncryptedHostFlags() = runBlocking {
+        val client = HttpClient(MockEngine { error("Unexpected network request") })
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser().apply {
+            embeddedConfig = EMBEDDED_CONFIG.copy(encryptedHostFlags = null)
+        }
+        try {
+            val failure =
+                failToExtract(
+                    innerTube,
+                    parser,
+                    ContentHints(playbackClientOverrideId = "WEB_EMBEDDED_PLAYER"),
+                )
+
+            assertEquals(StreamResolveException.Reason.NO_PLAYABLE_STREAM, failure.reason)
+            assertEquals(emptyList<Boolean>(), parser.watchCookieModes)
+            assertEquals(1, parser.embeddedFetches)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
+    @Test
+    fun reportsEmbeddedConfigFetchFailureAsNetworkFailure() = runBlocking {
+        val client = HttpClient(MockEngine { error("Unexpected network request") })
+        val innerTube = InnerTube(client)
+        val parser = RecordingConfigParser().apply {
+            embeddedFailure = IllegalStateException("offline config parser")
+        }
+        try {
+            val failure =
+                failToExtract(
+                    innerTube,
+                    parser,
+                    ContentHints(playbackClientOverrideId = "WEB_EMBEDDED_PLAYER"),
+                )
+
+            assertEquals(StreamResolveException.Reason.NETWORK, failure.reason)
+            assertEquals(emptyList<Boolean>(), parser.watchCookieModes)
+            assertEquals(1, parser.embeddedFetches)
+        } finally {
+            innerTube.close()
+            client.close()
+        }
+    }
+
     private suspend fun failToExtract(
         innerTube: InnerTube,
         parser: RecordingConfigParser,
@@ -115,6 +163,8 @@ class InnerTubeExtractorRoutingContractTest {
     private class RecordingConfigParser : YtConfigParser {
         val watchCookieModes = mutableListOf<Boolean>()
         var embeddedFetches = 0
+        var embeddedConfig = EMBEDDED_CONFIG
+        var embeddedFailure: Exception? = null
 
         override suspend fun fetchConfig(videoId: String, useLoginCookies: Boolean): PlayerConfig {
             watchCookieModes += useLoginCookies
@@ -123,7 +173,8 @@ class InnerTubeExtractorRoutingContractTest {
 
         override suspend fun fetchEmbeddedConfig(videoId: String, useLoginCookies: Boolean): PlayerConfig {
             embeddedFetches++
-            return EMBEDDED_CONFIG
+            embeddedFailure?.let { throw it }
+            return embeddedConfig
         }
     }
 
