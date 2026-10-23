@@ -101,7 +101,7 @@ class PeertubeParsingHelperTest {
                    "account":{"name":"alice","host":"tube.example","displayName":"Alice"},
                    "publishedAt":"2026-01-02T03:04:05Z","thumbnailPath":"/video.jpg"},
                   {"displayName":"Channel","url":"https://tube.example/video-channels/c1",
-                   "followersCount":7},
+                   "followersCount":7,"description":"Talks","avatars":[{"path":"/channel.jpg"}]},
                   {"displayName":"Playlist","url":"https://tube.example/videos/watch/playlist",
                    "videosLength":2,"thumbnailPath":"/playlist.jpg",
                    "uploader":{"displayName":"Alice","url":"https://tube.example/a/alice"}}
@@ -123,7 +123,10 @@ class PeertubeParsingHelperTest {
         assertEquals(InfoItem.InfoType.CHANNEL, collector.getItems().get(1).getInfoType());
         final ChannelInfoItem channel = (ChannelInfoItem) collector.getItems().get(1);
         assertEquals("Channel", channel.getName());
+        assertEquals("https://tube.example/video-channels/c1", channel.getUrl());
+        assertEquals("Talks", channel.getDescription());
         assertEquals(7, channel.getSubscriberCount());
+        assertEquals("https://tube.example/channel.jpg", channel.getThumbnails().get(0).getUrl());
         assertEquals(InfoItem.InfoType.PLAYLIST, collector.getItems().get(2).getInfoType());
         final PlaylistInfoItem playlist = (PlaylistInfoItem) collector.getItems().get(2);
         assertEquals("Playlist", playlist.getName());
