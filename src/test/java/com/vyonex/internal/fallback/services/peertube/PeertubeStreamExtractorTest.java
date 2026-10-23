@@ -105,6 +105,29 @@ class PeertubeStreamExtractorTest {
     }
 
     @Test
+    void liveStreamsKeepTheMasterPlaylistWhenVariantEntriesHaveNoUrl() throws Exception {
+        final String base = "https://tube.example";
+        final String videoUrl = base + "/api/v1/videos/live-1";
+        VyonEx.init(new StubDownloader(Map.of(
+                videoUrl, """
+                        {"name":"Live","isLive":true,
+                         "streamingPlaylists":[{"playlistUrl":"https://cdn.example/live.m3u8",
+                           "files":[{"resolution":{"id":720,"label":"720p"}}]}]}
+                        """)));
+        final PeertubeService service = new PeertubeService(3,
+                new PeertubeInstance(base, "Offline"));
+        final var handler = PeertubeStreamLinkHandlerFactory.getInstance()
+                .fromUrl(base + "/videos/watch/live-1");
+        final var stream = service.getStreamExtractor(handler);
+        stream.fetchPage();
+
+        assertEquals(1, stream.getVideoStreams().size());
+        assertEquals("https://cdn.example/live.m3u8", stream.getVideoStreams().get(0).getContent());
+        assertEquals(DeliveryMethod.HLS, stream.getVideoStreams().get(0).getDeliveryMethod());
+        assertTrue(stream.getAudioStreams().isEmpty());
+    }
+
+    @Test
     void sameQualityFileVariantsKeepTheirSourceInTheStreamId() throws Exception {
         final String base = "https://tube.example";
         final String videoUrl = base + "/api/v1/videos/video-1";
