@@ -21,6 +21,22 @@ import org.junit.jupiter.api.Test
 
 class CaptionsContractTest {
     @Test
+    fun transcriptReaderSkipsMalformedCueGroupsAndDefaultsMissingDuration() {
+        val response =
+            """{"actions":[{"updateEngagementPanelAction":{"content":{"transcriptRenderer":{"body":{"transcriptBodyRenderer":{"cueGroups":[]}}}}}},{"updateEngagementPanelAction":{"content":{"transcriptRenderer":{"body":{"transcriptBodyRenderer":{"cueGroups":[{"transcriptCueGroupRenderer":{"cues":[{"transcriptCueRenderer":{"cue":{"simpleText":"♪ First ♪"}}}]}},{"transcriptCueGroupRenderer":{"cues":[{"transcriptCueRenderer":{"cue":{"simpleText":" Second "},"startOffsetMs":80}}]}}]}}}}}}]}"""
+
+        assertEquals(listOf(TranscriptCue("Second", 80L, 0L)), parseTranscriptCues(response))
+    }
+
+    @Test
+    fun transcriptReaderRejectsExcessiveCueGroups() {
+        val groups = List(20_001) { "{}" }.joinToString(",")
+        val response = """{"actions":[{"updateEngagementPanelAction":{"content":{"transcriptRenderer":{"body":{"transcriptBodyRenderer":{"cueGroups":[$groups]}}}}}}]}"""
+
+        assertThrows(IllegalArgumentException::class.java) { parseTranscriptCues(response) }
+    }
+
+    @Test
     fun transcriptReaderSkipsActionsWithoutTranscriptPanels() = runBlocking {
         val requests = mutableListOf<String>()
         val client =

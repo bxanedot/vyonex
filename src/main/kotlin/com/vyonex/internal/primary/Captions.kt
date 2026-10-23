@@ -3,13 +3,17 @@ package com.vyonex.internal.primary
 
 import com.vyonex.internal.primary.cipher.getTextWithoutRedirects
 import com.vyonex.internal.primary.models.YouTubeClient
-import com.vyonex.internal.primary.models.response.GetTranscriptResponse
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.JsonPrimitive
 
 public data class TranscriptCue(
     val text: String,
@@ -31,42 +35,50 @@ public suspend fun InnerTube.transcriptCues(
 ): List<TranscriptCue> {
     require(SAFE_VIDEO_ID.matches(videoId)) { "Invalid video ID" }
     val response = getTranscript(client, videoId)
-    val transcript = RESPONSE_JSON.decodeFromString<GetTranscriptResponse>(response.bodyAsTextLimited(MAX_TRANSCRIPT_BYTES))
+    return parseTranscriptCues(response.bodyAsTextLimited(MAX_TRANSCRIPT_BYTES))
+}
+
+internal fun parseTranscriptCues(response: String): List<TranscriptCue> {
+    val root = RESPONSE_JSON.parseToJsonElement(response).jsonObject
     val groups =
-        transcript.actions
+        (root["actions"] as? JsonArray)
             .orEmpty()
             .asSequence()
             .mapNotNull { action ->
-                action.updateEngagementPanelAction
-                    ?.content
-                    ?.transcriptRenderer
-                    ?.body
-                    ?.transcriptBodyRenderer
-                    ?.cueGroups
+                action.objectAt(
+                    "updateEngagementPanelAction",
+                    "content",
+                    "transcriptRenderer",
+                    "body",
+                    "transcriptBodyRenderer",
+                )?.get("cueGroups") as? JsonArray
             }
             .firstOrNull { it.isNotEmpty() }
             .orEmpty()
     require(groups.size <= MAX_TRANSCRIPT_CUES) { "Transcript cue count exceeded the supported limit" }
     return groups.mapNotNull { group ->
         val cue =
-            group.transcriptCueGroupRenderer
-                ?.cues
+            (group.objectAt("transcriptCueGroupRenderer")?.get("cues") as? JsonArray)
                 ?.firstOrNull()
-                ?.transcriptCueRenderer ?: return@mapNotNull null
+                ?.objectAt("transcriptCueRenderer") ?: return@mapNotNull null
         val text =
-            cue.cue
-                ?.simpleText
+            (cue.objectAt("cue")?.get("simpleText") as? JsonPrimitive)
+                ?.takeIf { it.isString }
+                ?.contentOrNull
                 ?.trim('\u266a')
                 ?.trim()
                 ?.takeIf { it.isNotBlank() && it.length <= MAX_TRANSCRIPT_CUE_TEXT_LENGTH }
                 ?: return@mapNotNull null
         TranscriptCue(
             text = text,
-            startMs = cue.startOffsetMs ?: return@mapNotNull null,
-            durationMs = cue.durationMs ?: 0L,
+            startMs = (cue["startOffsetMs"] as? JsonPrimitive)?.longOrNull ?: return@mapNotNull null,
+            durationMs = (cue["durationMs"] as? JsonPrimitive)?.longOrNull ?: 0L,
         )
     }
 }
+
+private fun JsonElement.objectAt(vararg fields: String): JsonObject? =
+    fields.fold(this as? JsonObject) { current, field -> current?.get(field) as? JsonObject }
 
 /** Fetches a public YouTube caption track without redirects, cookies, or account headers. */
 public suspend fun InnerTube.fetchCaptionText(url: String): String {
