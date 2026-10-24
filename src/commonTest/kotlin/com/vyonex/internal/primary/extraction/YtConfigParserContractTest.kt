@@ -46,6 +46,32 @@ class YtConfigParserContractTest {
     }
 
     @Test
+    fun readsTheWatchPagePlayerResponseForFallbackExtraction() = runTest {
+        val client =
+            HttpClient(
+                MockEngine {
+                    respond(
+                        ByteReadChannel(WATCH_PAGE_WITH_PLAYER_RESPONSE),
+                        HttpStatusCode.OK,
+                        headers { append(HttpHeaders.ContentType, "text/html") },
+                    )
+                },
+            )
+        try {
+            val page = YtConfigParserImpl(client, InnerTube(client)).fetchWatchPage(VIDEO_ID, useLoginCookies = false)
+
+            assertEquals(PLAYER_URL, page?.playerUrl)
+            assertEquals(VIDEO_ID, page?.playerResponse?.videoDetails?.videoId)
+            assertEquals(
+                "https://media.example/audio",
+                page?.playerResponse?.streamingData?.adaptiveFormats?.single()?.url,
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
     fun retriesAnAuthenticatedEmbedPageWithoutCookiesAndKeepsItsReferer() = runTest {
         val requests = mutableListOf<Pair<String?, String?>>()
         val client =
@@ -113,5 +139,7 @@ class YtConfigParserContractTest {
         const val PLAYER_URL = "https://www.youtube.com/s/player/abc123/player_ias.vflset/en_US/base.js"
         const val WATCH_PAGE =
             """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js","signatureTimestamp":12345,"visitorData":"visitor-token","INNERTUBE_CLIENT_VERSION":"2.20261001.00.00","encryptedHostFlags":"secret-flag"}</script>"""
+        const val WATCH_PAGE_WITH_PLAYER_RESPONSE =
+            """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js"}</script><script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"abcdefghijk"},"streamingData":{"adaptiveFormats":[{"itag":140,"mimeType":"audio/mp4","bitrate":128000,"url":"https://media.example/audio"}]}};</script>"""
     }
 }

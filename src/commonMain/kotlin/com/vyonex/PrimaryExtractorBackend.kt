@@ -18,8 +18,12 @@ import com.vyonex.internal.primary.extraction.PoTokenResult
 import com.vyonex.internal.primary.extraction.TokenProvider
 import com.vyonex.internal.primary.extraction.TokenProviderCapabilities
 import com.vyonex.internal.primary.extraction.YtConfigParserImpl
+import com.vyonex.internal.primary.extraction.isAllowedMediaUrl
+import com.vyonex.internal.primary.extraction.selectBestAudioFormat
 import com.vyonex.internal.primary.extraction.generateClientPlaybackNonce
+import com.vyonex.internal.primary.models.YouTubeClient
 import com.vyonex.internal.primary.models.YouTubeLocale
+import com.vyonex.internal.primary.models.response.PlayerResponse.StreamingData.Format
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -28,10 +32,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Primary client selection and cipher resolution. */
-internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
+internal class PrimaryExtractorBackend(
+    private val host: VyonExHostServices,
+    private val platform: PlatformExtractorDependencies = platformExtractorDependencies(host),
+) {
     private val stateLock = PlatformStateLock()
     private var warmup: Job? = null
-    private val platform = platformExtractorDependencies(host)
     private val minted = mutableMapOf<String, VyonExStream>()
     private val excluded = mutableMapOf<String, MutableMap<String, Long>>()
 
@@ -108,8 +114,9 @@ internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
     private val innerTube = InnerTube(http, logger = logger)
     private val remoteStore = RemotePlayerConfigStore(http, repository, logger)
     private val cipherService = YouTubeCipherService(http, remoteStore, logger)
+    private val configParser = YtConfigParserImpl(http, innerTube, remoteStore, logger)
     private val extractor = InnerTubeExtractor(
-        configParser = YtConfigParserImpl(http, innerTube, remoteStore, logger),
+        configParser = configParser,
         clientDirector = PlayerClientDirector(
             innerTube = innerTube,
             fallbackStrategy = ContentAwareFallbackStrategy(),
@@ -161,6 +168,94 @@ internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
         return extracted
     }
 
+    suspend fun extractWithWatchPageFallback(
+        videoId: String,
+        maxKbps: Int,
+        skipClients: Set<String> = emptySet(),
+        requireM4a: Boolean = false,
+    ): VyonExStream? {
+        val primaryStream =
+            try {
+                extract(videoId, maxKbps, skipClients, requireM4a)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                host.log(
+                    VyonExLogLevel.WARN,
+                    "VyonEx primary extraction failed; trying watch-page fallback: ${error::class.simpleName}",
+                    videoId,
+                )
+                null
+            }
+        return primaryStream ?: extractWatchPageFallback(videoId, maxKbps, skipClients, requireM4a)
+    }
+
+    internal suspend fun extractWatchPageFallback(
+        videoId: String,
+        maxKbps: Int,
+        skipClients: Set<String> = emptySet(),
+        requireM4a: Boolean = false,
+    ): VyonExStream? {
+        val excluded = excludedFor(videoId)
+        if (YouTubeClient.WEB.clientName in skipClients || WATCH_PAGE_PROFILE in skipClients ||
+            YouTubeClient.WEB.clientName in excluded || WATCH_PAGE_PROFILE in excluded
+        ) return null
+
+        applySession()
+        val includeLoginCookies = innerTube.hasSapCookieAuth()
+        val page = configParser.fetchWatchPage(videoId, useLoginCookies = includeLoginCookies) ?: return null
+        val response = page.playerResponse
+        if (response.playabilityStatus.status != "OK") return null
+
+        val formats =
+            response.streamingData?.let { it.formats.orEmpty() + it.adaptiveFormats }
+                ?.filter(Format::isAudio)
+                .orEmpty()
+        val resolvedFormats =
+            page.playerUrl?.let { cipherService.processFormats(it, formats) } ?: formats
+        val audioQuality =
+            when {
+                requireM4a -> AudioQuality.MP4
+                maxKbps <= LOW_KBPS -> AudioQuality.LOW
+                else -> AudioQuality.AUTO
+            }
+        val format =
+            selectBestAudioFormat(
+                resolvedFormats.filter { it.url?.let(::isAllowedMediaUrl) == true },
+                audioQuality,
+            ) ?: return null
+        val url = format.url ?: return null
+        val headers =
+            linkedMapOf(
+                "User-Agent" to YouTubeClient.USER_AGENT_WEB,
+                "Accept" to "*/*",
+                "Accept-Language" to innerTube.locale.acceptLanguageHeader(),
+                "Referer" to "https://www.youtube.com/",
+                "Origin" to "https://www.youtube.com",
+            )
+        if (includeLoginCookies) {
+            innerTube.sessionSnapshot().cookie?.takeIf(String::isNotBlank)?.let { headers["Cookie"] = it }
+        }
+
+        val stream =
+            VyonExStream(
+                videoId = videoId,
+                url = url,
+                kbps = format.bitrate / 1_000,
+                mimeType = format.mimeType,
+                loudnessDb = response.playerConfig?.audioConfig?.loudnessDb ?: format.loudnessDb,
+                clientName = "WEB",
+                profileId = WATCH_PAGE_PROFILE,
+                headers = headers,
+            )
+        stateLock.withLock {
+            if (minted.size >= MAX_REMEMBERED) minted.clear()
+            minted[stream.url] = stream
+        }
+        host.log(VyonExLogLevel.INFO, "VyonEx watch-page fallback selected audio itag=${format.itag}", videoId)
+        return stream
+    }
+
     fun headersFor(url: String): Map<String, String>? = stateLock.withLock { minted[url]?.headers }
 
     fun onRefused(url: String): String? {
@@ -208,6 +303,7 @@ internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
         const val EXCLUDE_MS = 10 * 60 * 1000L
         const val MAX_REMEMBERED = 64
         const val WARM_DELAY_MS = 2_000L
+        const val WATCH_PAGE_PROFILE = "WEB_WATCH_PAGE"
     }
 }
 // bxane

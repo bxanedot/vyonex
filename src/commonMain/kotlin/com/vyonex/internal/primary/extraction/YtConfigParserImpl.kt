@@ -8,6 +8,7 @@ import com.vyonex.internal.primary.InnerTubeLogger
 import com.vyonex.internal.primary.cipher.RemotePlayerConfigStore
 import com.vyonex.internal.primary.cipher.getTextWithoutRedirects
 import com.vyonex.internal.primary.d
+import com.vyonex.internal.primary.models.response.PlayerResponse
 import com.vyonex.internal.primary.models.YouTubeClient
 import com.vyonex.internal.primary.w
 import io.ktor.client.HttpClient
@@ -21,6 +22,11 @@ import io.ktor.http.isSuccess
 import io.ktor.http.takeFrom
 import kotlinx.coroutines.CancellationException
 
+internal data class YoutubeWatchPage(
+    val playerUrl: String?,
+    val playerResponse: PlayerResponse,
+)
+
 public class YtConfigParserImpl(
     private val httpClient: HttpClient,
     private val innerTube: InnerTube,
@@ -30,10 +36,18 @@ public class YtConfigParserImpl(
     override suspend fun fetchConfig(videoId: String, useLoginCookies: Boolean): PlayerConfig {
         require(SAFE_VIDEO_ID.matches(videoId)) { "Invalid video ID" }
         return fetchPage(
-            "https://www.youtube.com/watch?v=$videoId&bpctr=9999999999&has_verified=1",
+            watchPageUrl(videoId),
             "watch",
             useLoginCookies,
         )
+    }
+
+    internal suspend fun fetchWatchPage(videoId: String, useLoginCookies: Boolean): YoutubeWatchPage? {
+        require(SAFE_VIDEO_ID.matches(videoId)) { "Invalid video ID" }
+        val html = fetchHtml(watchPageUrl(videoId), useLoginCookies)
+        val response = YoutubeWatchPlayerResponseParser.parse(html) ?: return null
+        if (response.videoDetails?.videoId != videoId) return null
+        return YoutubeWatchPage(extractPlayerUrl(html), response)
     }
 
     override suspend fun fetchEmbeddedConfig(videoId: String, useLoginCookies: Boolean): PlayerConfig {
@@ -52,6 +66,33 @@ public class YtConfigParserImpl(
         useLoginCookies: Boolean,
         referer: String? = null,
     ): PlayerConfig {
+        val html = fetchHtml(pageUrl, useLoginCookies, referer)
+
+        val playerUrl = extractPlayerUrl(html) ?: fetchIframePlayerUrl()
+            ?: error("Unable to parse YouTube player JavaScript URL")
+        val signatureTimestamp =
+            extractSignatureTimestamp(html)
+                ?: remotePlayerConfigStore?.getSignatureTimestamp(playerUrl)
+                ?: fetchPlayerSignatureTimestamp(playerUrl)
+        val visitorData = extractVisitorData(html)
+        val encryptedHostFlags = extractEncryptedHostFlags(html).takeIf { pageKind == "embed" }
+
+        logger.d(
+            TAG,
+            "fetchConfig parsed page=$pageKind htmlSize=${html.length} " +
+                "hasSts=${signatureTimestamp != null} hasVisitorData=${visitorData != null} " +
+                "hasEncryptedHostFlags=${encryptedHostFlags != null}",
+        )
+        return PlayerConfig(
+            playerUrl = playerUrl,
+            signatureTimestamp = signatureTimestamp,
+            visitorData = visitorData,
+            clientVersion = extractClientVersion(html),
+            encryptedHostFlags = encryptedHostFlags,
+        )
+    }
+
+    private suspend fun fetchHtml(pageUrl: String, useLoginCookies: Boolean, referer: String? = null): String {
         val cookie =
             innerTube.cookie?.takeIf { useLoginCookies }
                 ?.split(';')
@@ -84,30 +125,11 @@ public class YtConfigParserImpl(
                 logger.w(TAG, "authenticated config page unavailable; retrying without cookies", details = errorType(error))
                 fetchHtml(null)
             }
-
-        val playerUrl = extractPlayerUrl(html) ?: fetchIframePlayerUrl()
-            ?: error("Unable to parse YouTube player JavaScript URL")
-        val signatureTimestamp =
-            extractSignatureTimestamp(html)
-                ?: remotePlayerConfigStore?.getSignatureTimestamp(playerUrl)
-                ?: fetchPlayerSignatureTimestamp(playerUrl)
-        val visitorData = extractVisitorData(html)
-        val encryptedHostFlags = extractEncryptedHostFlags(html).takeIf { pageKind == "embed" }
-
-        logger.d(
-            TAG,
-            "fetchConfig parsed page=$pageKind htmlSize=${html.length} " +
-                "hasSts=${signatureTimestamp != null} hasVisitorData=${visitorData != null} " +
-                "hasEncryptedHostFlags=${encryptedHostFlags != null}",
-        )
-        return PlayerConfig(
-            playerUrl = playerUrl,
-            signatureTimestamp = signatureTimestamp,
-            visitorData = visitorData,
-            clientVersion = extractClientVersion(html),
-            encryptedHostFlags = encryptedHostFlags,
-        )
+        return html
     }
+
+    private fun watchPageUrl(videoId: String): String =
+        "https://www.youtube.com/watch?v=$videoId&bpctr=9999999999&has_verified=1"
 
     private suspend fun fetchPlayerSignatureTimestamp(playerUrl: String): Int? =
         try {
