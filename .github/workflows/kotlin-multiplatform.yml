@@ -26,3 +26,5 @@ jobs:
           java-version: '27'
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew jvmTest iosSimulatorArm64Test linkDebugFrameworkIosArm64 linkDebugFrameworkIosSimulatorArm64 linkDebugFrameworkIosX64 assembleVyonExDebugXCFramework
+      - name: Type-check the Swift extraction API
+        run: xcrun swiftc -typecheck -target arm64-apple-ios15.0-simulator -F build/XCFrameworks/debug/VyonEx.xcframework/ios-arm64_x86_64-simulator ci/VyonExApiCheck.swift
