@@ -3,6 +3,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.soundcloud;
 
+import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.StreamingService;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
@@ -20,6 +21,7 @@ import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStr
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudSuggestionExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudSearchQueryHandlerFactory;
 import com.vyonex.internal.fallback.stream.AudioStream;
+import com.vyonex.internal.fallback.stream.DeliveryMethod;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -149,11 +151,13 @@ class SoundcloudServiceExtractionTest {
     }
 
     @Test
-    void resolvesProgressiveAudioStreamsFromTheApi() throws Exception {
+    void resolvesProgressiveAndHlsAudioStreamsFromTheApi() throws Exception {
         final String trackUrl = "https://soundcloud.com/a/song";
         final String resolveUrl = "https://api-v2.soundcloud.com/resolve?url="
                 + "https%3A%2F%2Fsoundcloud.com%2Fa%2Fsong&client_id=" + CLIENT_ID;
         final String transcode = "https://api-v2.soundcloud.com/media/track/42/stream"
+                + "?client_id=" + CLIENT_ID;
+        final String hlsTranscode = "https://api-v2.soundcloud.com/media/track/42/hls"
                 + "?client_id=" + CLIENT_ID;
         final StubDownloader downloader = new StubDownloader(Map.of(
                 HOME, "<script src=\"" + SCRIPT + "\"></script>",
@@ -167,10 +171,14 @@ class SoundcloudServiceExtractionTest {
                          "artwork_url":"https://images.example/song.jpg",
                          "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
                            "avatar_url":"https://images.example/alice.jpg","verified":true},
-                         "media":{"transcodings":[{"url":"https://api-v2.soundcloud.com/media/track/42/stream",
-                           "preset":"mp3_0_0","format":{"protocol":"progressive"}}]}}
+                         "media":{"transcodings":[
+                           {"url":"https://api-v2.soundcloud.com/media/track/42/stream",
+                            "preset":"mp3_0_0","format":{"protocol":"progressive"}},
+                           {"url":"https://api-v2.soundcloud.com/media/track/42/hls",
+                            "preset":"opus_0_0","format":{"protocol":"hls"}}]}}
                         """,
-                transcode, "{\"url\":\"https://audio.example/song.mp3\"}"));
+                transcode, "{\"url\":\"https://audio.example/song.mp3\"}",
+                hlsTranscode, "{\"url\":\"https://audio.example/song.opus\"}"));
         final Downloader previous = VyonEx.getDownloader();
         try {
             VyonEx.init(downloader);
@@ -193,8 +201,13 @@ class SoundcloudServiceExtractionTest {
             assertEquals("ambient", extractor.getCategory());
             assertEquals("cc-by", extractor.getLicence());
             assertEquals(List.of("ambient", "chill beats"), extractor.getTags());
-            assertEquals(1, streams.size());
+            assertEquals(2, streams.size());
             assertEquals("https://audio.example/song.mp3", streams.get(0).getContent());
+            assertEquals(128, streams.get(0).getAverageBitrate());
+            assertEquals("https://audio.example/song.opus", streams.get(1).getContent());
+            assertEquals(MediaFormat.OPUS, streams.get(1).getFormat());
+            assertEquals(64, streams.get(1).getAverageBitrate());
+            assertEquals(DeliveryMethod.HLS, streams.get(1).getDeliveryMethod());
         } finally {
             VyonEx.init(previous);
         }
