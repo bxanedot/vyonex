@@ -8,12 +8,14 @@ import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.channel.ChannelExtractor
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs
 import com.vyonex.internal.fallback.downloader.Downloader
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
+import com.vyonex.internal.fallback.services.peertube.PeertubeChannelPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubeChannelPageParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory
-import com.vyonex.internal.json.JsonObject
 import java.io.IOException
 
 public class PeertubeChannelExtractor @Throws(ParsingException::class) constructor(
@@ -62,22 +64,24 @@ public class PeertubeChannelExtractor @Throws(ParsingException::class) construct
 
     @Throws(IOException::class, ExtractionException::class)
     override fun onFetchPage(downloader: Downloader) {
-        val channel = PeertubeParsingHelper.readApiObject(
+        val response = PeertubeParsingHelper.readApiBody(
             downloader.get("$baseUrl$API_ENDPOINT${getId()}"), "channel",
         )
-        PeertubeParsingHelper.validate(channel)
-        apiId = channel["id"].toString()
-        displayName = channel.getString("displayName")
-        description = channel.getString("description")
-        subscriberCount = channel.getLong("followersCount")
-        val owner: JsonObject = channel.getObject("ownerAccount")
-        ownerName = owner.getString("name")
-        ownerUrl = owner.getString("url")
-        avatars = PeertubeParsingHelper
-            .getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, channel)
-        banners = PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject(baseUrl, channel)
-        ownerAvatars = PeertubeParsingHelper
-            .getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, owner)
+        val channel = try {
+            PeertubeChannelPageParser.parse(response)
+        } catch (error: PeertubeChannelPageParseException) {
+            throw ParsingException("Invalid PeerTube channel response", error)
+        }
+        channel.error?.let { throw ContentNotAvailableException(it) }
+        apiId = channel.id
+        displayName = channel.displayName
+        description = channel.description
+        subscriberCount = channel.followerCount
+        ownerName = channel.ownerName
+        ownerUrl = channel.ownerUrl
+        avatars = PeertubeParsingHelper.toImages(channel.avatars, baseUrl)
+        banners = PeertubeParsingHelper.toImages(channel.banners, baseUrl)
+        ownerAvatars = PeertubeParsingHelper.toImages(channel.ownerAvatars, baseUrl)
     }
 
     @Throws(ParsingException::class)
