@@ -9,6 +9,10 @@ import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.linkhandler.LinkHandler
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveConferencePayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadDecoder
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadParseException
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoomPayload
 import com.vyonex.internal.fallback.stream.AudioStream
 import com.vyonex.internal.fallback.stream.DeliveryMethod
 import com.vyonex.internal.fallback.stream.Description
@@ -16,7 +20,6 @@ import com.vyonex.internal.fallback.stream.Stream
 import com.vyonex.internal.fallback.stream.StreamExtractor
 import com.vyonex.internal.fallback.stream.StreamType
 import com.vyonex.internal.fallback.stream.VideoStream
-import com.vyonex.internal.json.JsonObject
 import java.util.Collections
 
 public class MediaCCCLiveStreamExtractor(
@@ -27,15 +30,18 @@ public class MediaCCCLiveStreamExtractor(
 
     override fun onFetchPage(downloader: Downloader) {
         val target = id
-        for (conference in MediaCCCParsingHelper.getLiveStreams(
-            downloader,
-            extractorLocalization,
-        ).streamAsJsonObjects().toList()) {
-            val conferenceSlug = conference.getString("slug")
-            for (section in conference.getArray("groups").streamAsJsonObjects().toList()) {
-                for (source in section.getArray("rooms").streamAsJsonObjects().toList()) {
-                    if ("$conferenceSlug/${source.getString("slug")}" != target) continue
-                    room = readRoom(conference, section, source)
+        val body = MediaCCCParsingHelper.fetchLiveStreamsBody(downloader, extractorLocalization)
+        val conferences = try {
+            MediaCCCLivePayloadDecoder.decode(body)
+        } catch (error: MediaCCCLivePayloadParseException) {
+            throw ExtractionException("Could not parse live stream data.", error)
+        }
+        for (conference in conferences) {
+            val conferenceSlug = conference.slug ?: continue
+            for (section in conference.groups.orEmpty()) {
+                for (source in section.rooms.orEmpty()) {
+                    if ("$conferenceSlug/${source.slug}" != target) continue
+                    room = readRoom(conference, section.group, source)
                     return
                 }
             }
@@ -135,32 +141,55 @@ public class MediaCCCLiveStreamExtractor(
 
     private data class MediaSource(val id: String, val url: String?)
 
-    private fun readRoom(conference: JsonObject, section: JsonObject, source: JsonObject): LiveRoom {
-        val streams = source.getArray("streams").streamAsJsonObjects().toList().map { stream ->
-            val size = stream.getArray("videoSize")
+    private fun readRoom(
+        conference: MediaCCCLiveConferencePayload,
+        group: String?,
+        source: MediaCCCLiveRoomPayload,
+    ): LiveRoom {
+        val streams = source.streams.orEmpty().map { stream ->
             val formats = linkedMapOf<String, MediaSource>()
-            for (entry in stream.getObject("urls").entries) {
-                val format = entry.value as? JsonObject ?: continue
-                formats[entry.key] = MediaSource(
-                    format.getString("tech", Stream.ID_UNKNOWN),
-                    format.getString("url"),
-                )
+            for (entry in stream.sources()) {
+                formats[entry.format] = MediaSource(entry.tech ?: Stream.ID_UNKNOWN, entry.url)
             }
             LiveStream(
-                stream.getString("type", ""),
-                size.getInt(0),
-                size.getInt(1),
+                stream.type.orEmpty(),
+                stream.videoSize?.getOrNull(0) ?: 0,
+                stream.videoSize?.getOrNull(1) ?: 0,
                 Collections.unmodifiableMap(formats),
             )
         }
         return LiveRoom(
-            source.getString("display"),
-            conference.getString("conference"),
-            conference.getString("slug"),
-            conference.getString("description"),
-            section.getString("group", ""),
-            MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem(source),
+            source.display,
+            conference.conference,
+            conference.slug,
+            conference.description,
+            group.orEmpty(),
+            thumbnails(source),
             streams,
         )
     }
+
+    private fun thumbnails(source: MediaCCCLiveRoomPayload): List<Image> =
+        Collections.unmodifiableList(buildList {
+            source.thumb?.takeIf(String::isNotEmpty)?.let { url ->
+                add(
+                    Image(
+                        url,
+                        Image.HEIGHT_UNKNOWN,
+                        Image.WIDTH_UNKNOWN,
+                        Image.ResolutionLevel.MEDIUM,
+                    ),
+                )
+            }
+            source.poster?.takeIf(String::isNotEmpty)?.let { url ->
+                add(
+                    Image(
+                        url,
+                        Image.HEIGHT_UNKNOWN,
+                        Image.WIDTH_UNKNOWN,
+                        Image.ResolutionLevel.HIGH,
+                    ),
+                )
+            }
+        })
 }
