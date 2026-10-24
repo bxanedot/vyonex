@@ -6,8 +6,6 @@ package com.vyonex.internal.fallback.services.peertube.linkHandler
 import com.vyonex.internal.fallback.ServiceList
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandlerFactory
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 public class PeertubeSearchQueryHandlerFactory private constructor() : SearchQueryHandlerFactory() {
     @Throws(ParsingException::class)
@@ -29,7 +27,7 @@ public class PeertubeSearchQueryHandlerFactory private constructor() : SearchQue
             PLAYLISTS -> SEARCH_ENDPOINT_PLAYLISTS
             else -> SEARCH_ENDPOINT_PLAYLISTS
         }
-        return "$baseUrl$endpoint?search=${URLEncoder.encode(query, StandardCharsets.UTF_8)}"
+        return "$baseUrl$endpoint?search=${PeertubeUrl.encodeSearchQuery(query)}"
     }
 
     override fun getAvailableContentFilter(): Array<String> =

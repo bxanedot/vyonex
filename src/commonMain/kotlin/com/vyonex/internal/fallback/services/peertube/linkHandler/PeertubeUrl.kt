@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.peertube.linkHandler
 
 import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 
 internal object PeertubeUrl {
     internal data class Parsed(val path: String, val query: String) {
@@ -74,6 +75,10 @@ internal object PeertubeUrl {
         "playlists" -> "/video-playlists"
         else -> null
     }
+
+    // Preserve the form encoder's handling of '~' and '*'.
+    fun encodeSearchQuery(query: String): String =
+        query.encodeURLParameter(spaceToPlus = true).replace("~", "%7E").replace("%2A", "*")
 
     fun accepts(value: String?): Boolean = parse(value) != null
 }

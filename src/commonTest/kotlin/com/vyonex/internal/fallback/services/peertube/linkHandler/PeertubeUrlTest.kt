@@ -90,4 +90,11 @@ class PeertubeUrlTest {
         assertEquals("/video-playlists", PeertubeUrl.channelTabSuffix("playlists"))
         assertNull(PeertubeUrl.channelTabSuffix("unsupported"))
     }
+
+    @Test
+    fun encodesSearchTermsForQueryParameters() {
+        assertEquals("art+%26+caf%C3%A9", PeertubeUrl.encodeSearchQuery("art & café"))
+        assertEquals("a%7E%21*%27%28%29+%2B%26", PeertubeUrl.encodeSearchQuery("a~!*'() +&"))
+        assertEquals("", PeertubeUrl.encodeSearchQuery(""))
+    }
 }
