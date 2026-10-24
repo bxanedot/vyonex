@@ -25,6 +25,10 @@ internal object SoundcloudSearchUrl {
     fun resolveUrl(url: String, clientId: String): String =
         "${API_V2_BASE_URL}resolve?url=${FormUrlEncoder.encode(url)}&client_id=$clientId"
 
+    fun widgetResolveUrl(url: String, clientId: String): String =
+        "https://api-widget.soundcloud.com/resolve?url=${FormUrlEncoder.encode(url)}" +
+            "&format=json&client_id=$clientId"
+
     fun withClientId(nextUrl: String, clientId: String): String {
         if (nextUrl.isBlank() || nextUrl.contains("client_id=")) return nextUrl
         return "$nextUrl${if (nextUrl.contains('?')) '&' else '?'}client_id=$clientId"
