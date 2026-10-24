@@ -77,6 +77,17 @@ class MediaCCCEventPayloadTest {
         )
         assertEquals("Found talk", search.events.single().title)
         assertEquals(emptyList(), MediaCCCListingPayloadDecoder.decodeConference("{}").events)
+
+        val recent = MediaCCCListingPayloadDecoder.decodeRecentEvents(
+            """{"events":[{"title":"Recent talk","frontend_link":"https://media.ccc.de/v/recent",
+                "date":"2026-02-01T12:00:00.000UTC","duration":600,"view_count":17,
+                "poster_url":"https://cdn.example/poster.jpg"}]}""",
+        ).events.single()
+        assertEquals("https://media.ccc.de/v/recent", recent.frontendLink)
+        assertEquals("2026-02-01T12:00:00.000UTC", recent.date)
+        assertEquals(600L, recent.duration)
+        assertEquals(17L, recent.viewCount)
+        assertEquals("https://cdn.example/poster.jpg", recent.posterUrl)
     }
 
     @Test

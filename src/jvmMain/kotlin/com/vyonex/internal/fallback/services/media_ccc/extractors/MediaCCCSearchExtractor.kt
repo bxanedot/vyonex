@@ -17,7 +17,6 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler
 import com.vyonex.internal.fallback.search.SearchExtractor
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor
-import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventSearchPayload
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferencesListLinkHandlerFactory

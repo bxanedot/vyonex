@@ -6,6 +6,7 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MediaCCCKioskTest {
     @Test
@@ -76,6 +78,22 @@ class MediaCCCKioskTest {
         assertEquals("Older", items.get(1).getName());
         assertEquals("No date", items.get(2).getName());
         assertEquals("https://api.media.ccc.de/public/events/recent", downloader.requestedUrl);
+    }
+
+    @Test
+    void recentKioskWrapsMalformedListingAsExtractionFailure() throws Exception {
+        final ListLinkHandler link = MediaCCCRecentListLinkHandlerFactory.getInstance()
+                .fromUrl("https://media.ccc.de/recent");
+        final StubDownloader downloader = new StubDownloader("not-json");
+        VyonEx.init(downloader);
+        final MediaCCCRecentKiosk kiosk = new MediaCCCRecentKiosk(
+                new MediaCCCService(8), link, MediaCCCRecentKiosk.KIOSK_ID);
+
+        final ExtractionException error = assertThrows(
+                ExtractionException.class, () -> kiosk.onFetchPage(downloader));
+
+        assertEquals("Could not parse API response from https://api.media.ccc.de/public/events/recent",
+                error.getMessage());
     }
 
     @Test
