@@ -14,7 +14,9 @@ import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.ContentCountry;
@@ -78,6 +80,25 @@ class PeertubeProfilesAndListsTest {
                 account.getTabs().get(1).getUrl());
         assertEquals(BASE + "/alice.png", account.getAvatars().get(0).getUrl());
         assertEquals(BASE + "/account-banner.jpg", account.getBanners().get(0).getUrl());
+    }
+
+    @Test
+    void accountPreservesUnavailableAndMalformedResponseErrors() throws Exception {
+        final String accountUrl = BASE + "/api/v1/accounts/alice@tube.example";
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ListLinkHandler link = service.getChannelLHFactory()
+                .fromUrl(BASE + "/a/alice@tube.example");
+
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, "{\"error\":\"Account unavailable\"}")));
+        final ChannelExtractor unavailable = service.getChannelExtractor(link);
+        final ContentNotAvailableException unavailableError = assertThrows(
+                ContentNotAvailableException.class, unavailable::fetchPage);
+        assertEquals("Account unavailable", unavailableError.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, "not-json")));
+        final ChannelExtractor malformed = service.getChannelExtractor(link);
+        final ParsingException parseError = assertThrows(ParsingException.class, malformed::fetchPage);
+        assertEquals("Invalid PeerTube account response", parseError.getMessage());
     }
 
     @Test

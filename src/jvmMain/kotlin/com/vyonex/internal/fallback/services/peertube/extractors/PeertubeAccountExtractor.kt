@@ -9,9 +9,12 @@ import com.vyonex.internal.fallback.channel.ChannelExtractor
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs
 import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.downloader.Response
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
+import com.vyonex.internal.fallback.services.peertube.PeertubeAccountPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubeAccountPageParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory
 import com.vyonex.internal.json.JsonArray
@@ -75,17 +78,21 @@ public class PeertubeAccountExtractor @Throws(ParsingException::class) construct
 
     @Throws(IOException::class, ExtractionException::class)
     override fun onFetchPage(downloader: Downloader) {
-        val account = PeertubeParsingHelper.readApiObject(
+        val response = PeertubeParsingHelper.readApiBody(
             downloader.get("$baseUrl$API${getId()}"), "account",
         )
-        PeertubeParsingHelper.validate(account)
-        apiId = account["id"].toString()
-        displayName = account.getString("displayName")
-        description = account.getString("description")
-        accountFollowers = account.getLong("followersCount")
-        avatars = PeertubeParsingHelper
-            .getAvatarsFromOwnerAccountOrVideoChannelObject(baseUrl, account)
-        banners = PeertubeParsingHelper.getBannersFromAccountOrVideoChannelObject(baseUrl, account)
+        val account = try {
+            PeertubeAccountPageParser.parse(response)
+        } catch (error: PeertubeAccountPageParseException) {
+            throw ParsingException("Invalid PeerTube account response", error)
+        }
+        account.error?.let { throw ContentNotAvailableException(it) }
+        apiId = account.id
+        displayName = account.displayName
+        description = account.description
+        accountFollowers = account.followerCount
+        avatars = PeertubeParsingHelper.toImages(account.avatars, baseUrl)
+        banners = PeertubeParsingHelper.toImages(account.banners, baseUrl)
     }
 
     @Throws(ParsingException::class)
