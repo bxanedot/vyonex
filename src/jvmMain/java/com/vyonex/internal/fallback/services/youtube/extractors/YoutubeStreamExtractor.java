@@ -64,6 +64,8 @@ import com.vyonex.internal.fallback.services.youtube.ItagItem;
 import com.vyonex.internal.fallback.services.youtube.PoTokenProvider;
 import com.vyonex.internal.fallback.services.youtube.PoTokenResult;
 import com.vyonex.internal.fallback.services.youtube.YoutubeMetaInfoHelper;
+import com.vyonex.internal.fallback.services.youtube.YoutubePlayabilityFailure;
+import com.vyonex.internal.fallback.services.youtube.YoutubePlayabilityStatusParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.services.youtube.YoutubeStreamHelper;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory;
@@ -825,44 +827,25 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     static void checkPlayabilityStatus(@Nonnull final JsonObject playabilityStatus)
             throws ParsingException {
         final String status = playabilityStatus.getString("status");
-        if (status == null || status.equalsIgnoreCase("ok")) return;
         final String reason = playabilityStatus.getString("reason");
-        final String normalizedStatus = status.toLowerCase(Locale.ROOT);
-        final String normalizedReason = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
-
-        if (normalizedStatus.equals("login_required")) {
-            if (normalizedReason.contains("inappropriate for some users")) {
-                throw new AgeRestrictedContentException(
-                        "This age-restricted video cannot be watched anonymously");
-            }
-            if (normalizedReason.contains("private")) {
-                throw new PrivateContentException("This video is private");
-            }
-            if (normalizedReason.contains("a bot")) {
-                throw new SignInConfirmNotBotException(
-                        "YouTube access was blocked: " + status + ": \"" + reason + "\"");
-            }
-        } else if (normalizedStatus.equals("unplayable") || normalizedStatus.equals("error")) {
-            if (normalizedReason.contains("music premium")) {
-                throw new YoutubeMusicPremiumContentException();
-            }
-            if (normalizedReason.contains("payment")) {
-                throw new PaidContentException("This video is a paid video");
-            }
-            if (normalizedReason.contains("members")) {
-                throw new PaidContentException("This video is only available for members of "
-                        + "the channel of this video");
-            }
-            if (normalizedReason.contains("country")) {
-                throw new GeographicRestrictionException(
-                        "This video is not available in client's country.");
-            }
-            if (normalizedReason.contains("closed") || normalizedReason.contains("terminated")) {
-                throw new AccountTerminatedException(reason);
-            }
+        final YoutubePlayabilityFailure failure =
+                YoutubePlayabilityStatusParser.INSTANCE.classify(status, reason);
+        if (failure == null) return;
+        switch (failure) {
+            case AGE_RESTRICTED -> throw new AgeRestrictedContentException(
+                    "This age-restricted video cannot be watched anonymously");
+            case PRIVATE -> throw new PrivateContentException("This video is private");
+            case BOT_CONFIRMATION -> throw new SignInConfirmNotBotException(
+                    "YouTube access was blocked: " + status + ": \"" + reason + "\"");
+            case MUSIC_PREMIUM -> throw new YoutubeMusicPremiumContentException();
+            case PAID -> throw new PaidContentException("This video is a paid video");
+            case MEMBERS_ONLY -> throw new PaidContentException("This video is only available for members of "
+                    + "the channel of this video");
+            case COUNTRY_RESTRICTED -> throw new GeographicRestrictionException(
+                    "This video is not available in client's country.");
+            case ACCOUNT_TERMINATED -> throw new AccountTerminatedException(reason);
+            default -> throw new ContentNotAvailableException("Got error " + status + ": \"" + reason + "\"");
         }
-
-        throw new ContentNotAvailableException("Got error " + status + ": \"" + reason + "\"");
     }
 
     private void fetchAndroidClient(@Nonnull final Localization localization,
