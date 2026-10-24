@@ -40,5 +40,17 @@ internal object PeertubeUrl {
         }
     }
 
+    fun playlistId(url: Parsed): String? {
+        val path = url.segments
+        return when {
+            path.size == 3 && path[0] == "w" && path[1] == "p" -> path[2]
+            path.size == 4 && path[0] == "videos" && path[1] == "watch" &&
+                path[2] == "playlist" -> path[3]
+            path.size == 4 && path[0] == "api" && path[1] == "v1" &&
+                path[2] == "video-playlists" -> path[3]
+            else -> null
+        }
+    }
+
     fun accepts(value: String?): Boolean = parse(value) != null
 }
