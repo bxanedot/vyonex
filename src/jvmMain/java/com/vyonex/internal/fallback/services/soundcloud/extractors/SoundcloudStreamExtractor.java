@@ -20,6 +20,8 @@ import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioCandidate
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioFormat;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTagParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamUrlParseException;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamUrlParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackPayload;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackPayloadParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscoding;
@@ -32,8 +34,6 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 import com.vyonex.internal.json.JsonWriter;
 
 import java.io.IOException;
@@ -174,10 +174,10 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
                     + response.responseCode());
         }
         try {
-            final String url = JsonParser.object().from(response.responseBody()).getString("url");
+            final String url = SoundcloudStreamUrlParser.INSTANCE.parse(response.responseBody());
             if (url == null || url.isBlank()) throw new ParsingException("Stream response has no URL");
             return url;
-        } catch (final JsonParserException e) {
+        } catch (final SoundcloudStreamUrlParseException e) {
             throw new ParsingException("Invalid SoundCloud stream URL response", e);
         }
     }
