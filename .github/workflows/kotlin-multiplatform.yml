@@ -1,0 +1,28 @@
+name: Kotlin Multiplatform
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  jvm:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '27'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: .\gradlew.bat jvmTest jvmJar
+
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '27'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew jvmTest iosSimulatorArm64Test linkDebugFrameworkIosArm64 linkDebugFrameworkIosSimulatorArm64 linkDebugFrameworkIosX64 assembleVyonExDebugXCFramework
