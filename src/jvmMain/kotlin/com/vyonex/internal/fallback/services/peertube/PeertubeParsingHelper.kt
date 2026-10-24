@@ -21,6 +21,7 @@ import com.vyonex.internal.json.JsonArray
 import com.vyonex.internal.json.JsonObject
 import com.vyonex.internal.json.JsonParser
 import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.json.JsonWriter
 import java.net.URI
 import java.util.Collections
 
@@ -131,12 +132,9 @@ public class PeertubeParsingHelper private constructor() {
             baseUrl: String,
             thumbnailPath: String?,
             previewPath: String?,
-        ): List<Image> {
-            val images = ArrayList<Image>(2)
-            addThumbnail(images, baseUrl, thumbnailPath, ResolutionLevel.LOW)
-            addThumbnail(images, baseUrl, previewPath, ResolutionLevel.MEDIUM)
-            return Collections.unmodifiableList(images)
-        }
+        ): List<Image> = toImages(
+            PeertubeImageParser.thumbnails(thumbnailPath, previewPath), baseUrl,
+        )
 
         @Suppress("UNCHECKED_CAST")
         private fun commit(collector: InfoItemsCollector<*, *>, extractor: InfoItemExtractor) {
@@ -148,40 +146,24 @@ public class PeertubeParsingHelper private constructor() {
             item: JsonObject,
             listKey: String,
             fallbackKey: String,
-        ): List<Image> {
-            val values = item.getArray(listKey)
-            val images = ArrayList<Image>(if (values.isEmpty()) 1 else values.size)
-            if (values.isEmpty()) {
-                addProfileImage(images, baseUrl, item.getObject(fallbackKey))
-            } else {
-                values.filterIsInstance<JsonObject>().forEach { addProfileImage(images, baseUrl, it) }
-            }
-            return Collections.unmodifiableList(images)
-        }
+        ): List<Image> = toImages(
+            PeertubeImageParser.profileImages(JsonWriter.string(item), listKey, fallbackKey),
+            baseUrl,
+        )
 
-        private fun addProfileImage(images: MutableList<Image>, baseUrl: String, value: JsonObject) {
-            val path = value.getString("path")
-            if (!path.isNullOrBlank()) {
-                images.add(
-                    Image(
-                        resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
-                        value.getInt("width", Image.WIDTH_UNKNOWN), ResolutionLevel.UNKNOWN,
-                    ),
+        private fun toImages(images: List<PeertubeImageReference>, baseUrl: String): List<Image> =
+            Collections.unmodifiableList(images.map { image ->
+                Image(
+                    resolve(baseUrl, image.path),
+                    Image.HEIGHT_UNKNOWN,
+                    image.width,
+                    when (image.size) {
+                        PeertubeImageSize.LOW -> ResolutionLevel.LOW
+                        PeertubeImageSize.MEDIUM -> ResolutionLevel.MEDIUM
+                        PeertubeImageSize.UNKNOWN -> ResolutionLevel.UNKNOWN
+                    },
                 )
-            }
-        }
-
-        private fun addThumbnail(
-            images: MutableList<Image>,
-            baseUrl: String,
-            path: String?,
-            resolution: ResolutionLevel,
-        ) {
-            if (!path.isNullOrBlank()) {
-                images.add(Image(resolve(baseUrl, path), Image.HEIGHT_UNKNOWN,
-                    Image.WIDTH_UNKNOWN, resolution))
-            }
-        }
+            })
 
         private fun resolve(baseUrl: String, path: String): String = try {
             val base = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
