@@ -12,6 +12,11 @@ class VyonEx(host: VyonExHost) {
 
     suspend fun audioCandidates(videoId: String): List<VyonExAudioCandidate> = primary.audioCandidates(videoId)
 
+    suspend fun bandcampSuggestions(query: String): List<String> = primary.bandcampSuggestions(query)
+
+    suspend fun bandcampTrack(url: String): BandcampTrack = primary.bandcampTrack(url).toPublicTrack()
+
+
     suspend fun extract(
         videoId: String,
         maxKbps: Int,

@@ -81,6 +81,7 @@ internal class PrimaryExtractorBackend(
     }
 
     private val http = platform.httpClient
+    private val bandcamp = BandcampClient(http)
 
     private val logger = InnerTubeLogger { event ->
         val details = if (event.details.isEmpty()) "" else event.details.entries.joinToString(prefix = " [", postfix = "]") {
@@ -265,6 +266,11 @@ internal class PrimaryExtractorBackend(
             )
         }
     }
+
+    internal suspend fun bandcampSuggestions(query: String): List<String> = bandcamp.suggestions(query)
+
+    internal suspend fun bandcampTrack(url: String) = bandcamp.track(url)
+
 
     private suspend fun fetchWatchPageAudioFormats(videoId: String): Pair<YoutubeWatchPage, List<Format>>? {
         applySession()
