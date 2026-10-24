@@ -10,6 +10,7 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.bandcamp.BandcampService;
+import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampChannelLinkHandlerFactory;
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import org.junit.jupiter.api.Test;
 
@@ -149,6 +150,31 @@ class BandcampChannelExtractorTest {
             assertThrows(ParsingException.class, tab::getInitialPage);
             tab.onFetchPage(offline);
             assertTrue(tab.getInitialPage().getItems().isEmpty());
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void channelLinkHandlerReadsBandIdAndProfileUrlFromOfflineResponses() throws Exception {
+        final Downloader previous = VyonEx.getDownloader();
+        final Downloader offline = new Downloader() {
+            @Override public Response execute(final Request request) {
+                if (request.url().endsWith("/band_details")) {
+                    return new Response(200, "OK", Map.of(),
+                            "{\"bandcamp_url\":\"https://artist.bandcamp.com\"}", request.url());
+                }
+                return new Response(200, "OK", Map.of(),
+                        "<div data-band=' {\"id\":10} '></div>", request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            final BandcampChannelLinkHandlerFactory factory = BandcampChannelLinkHandlerFactory.getInstance();
+            final String url = "https://artist.bandcamp.com";
+
+            assertEquals("10", factory.getId(url));
+            assertEquals(url, factory.getUrl("10", List.of(), ""));
         } finally {
             VyonEx.init(previous);
         }
