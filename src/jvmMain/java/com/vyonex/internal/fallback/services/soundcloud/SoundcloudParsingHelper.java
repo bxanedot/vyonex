@@ -38,7 +38,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class SoundcloudParsingHelper {
@@ -63,8 +62,6 @@ public final class SoundcloudParsingHelper {
             new ImageSuffix("t1240x260", 260, 1240, Image.ResolutionLevel.MEDIUM),
             new ImageSuffix("t2480x520", 520, 2480, Image.ResolutionLevel.MEDIUM));
     private static final String SITE = "https://soundcloud.com";
-    private static final Pattern CLIENT_ID = Pattern.compile(
-            "client_id\\s*[:=]\\s*[\\\"']([^\\\"']+)[\\\"']");
     private static final Pattern SHORT_URL = Pattern.compile(
             "https?://on\\.soundcloud\\.com/[A-Za-z0-9]+/?", Pattern.CASE_INSENSITIVE);
     private static volatile String cachedClientId;
@@ -92,8 +89,9 @@ public final class SoundcloudParsingHelper {
                 try {
                     final Response response = downloader.get(scripts.get(i), headers);
                     if (response == null) continue;
-                    final Matcher match = CLIENT_ID.matcher(response.responseBody());
-                    if (match.find()) return cachedClientId = match.group(1);
+                    final String clientId = SoundcloudClientIdParser.INSTANCE
+                            .parse(response.responseBody());
+                    if (clientId != null) return cachedClientId = clientId;
                 } catch (final IOException | ReCaptchaException ignored) {
                     // A later application bundle may still contain the public client key.
                 }
