@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler;
 
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 
-import java.net.URI;
 import java.util.List;
 
 public final class MediaCCCConferencesListLinkHandlerFactory extends ListLinkHandlerFactory {
@@ -20,18 +18,13 @@ public final class MediaCCCConferencesListLinkHandlerFactory extends ListLinkHan
         return URL;
     }
     @Override public boolean onAcceptUrl(final String value) {
-        try {
-            final URI uri = MediaCCCUrl.parse(value);
-            final String path = uri.getPath();
-            final boolean officialScheme = "https".equalsIgnoreCase(uri.getScheme());
-            final boolean mediaHost = MediaCCCUrl.hasHost(uri, "media.ccc.de");
-            final boolean apiHost = MediaCCCUrl.hasHost(uri, "api.media.ccc.de");
-            return officialScheme && uri.getQuery() == null
-                    && ((mediaHost && ("/b/conferences".equals(path)
-                    || "/public/conferences".equals(path)))
-                    || (apiHost && "/public/conferences".equals(path)));
-        } catch (final ParsingException ignored) {
-            return false;
-        }
+        final MediaCCCUrl.Parsed uri = MediaCCCUrl.INSTANCE.parse(value);
+        if (uri == null) return false;
+        final boolean mediaHost = MediaCCCUrl.INSTANCE.hasHost(uri, "media.ccc.de");
+        final boolean apiHost = MediaCCCUrl.INSTANCE.hasHost(uri, "api.media.ccc.de");
+        return "https".equals(uri.getScheme()) && !uri.getHasQuery()
+                && ((mediaHost && ("/b/conferences".equals(uri.getPath())
+                || "/public/conferences".equals(uri.getPath())))
+                || (apiHost && "/public/conferences".equals(uri.getPath())));
     }
 }

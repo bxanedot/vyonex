@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler;
 
-import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory;
 
-import java.net.URI;
 import java.util.List;
 
 public final class MediaCCCRecentListLinkHandlerFactory extends ListLinkHandlerFactory {
@@ -20,14 +18,11 @@ public final class MediaCCCRecentListLinkHandlerFactory extends ListLinkHandlerF
         return URL;
     }
     @Override public boolean onAcceptUrl(final String value) {
-        try {
-            final URI uri = MediaCCCUrl.parse(value);
-            final String path = uri.getPath();
-            final boolean recentPath = "/recent".equals(path) || "/recent/".equals(path);
-            return MediaCCCUrl.hasHost(uri, "media.ccc.de") && recentPath
-                    && uri.getQuery() == null;
-        } catch (final ParsingException ignored) {
-            return false;
-        }
+        final MediaCCCUrl.Parsed uri = MediaCCCUrl.INSTANCE.parse(value);
+        if (uri == null) return false;
+        final String path = uri.getPath();
+        final boolean recentPath = "/recent".equals(path) || "/recent/".equals(path);
+        return MediaCCCUrl.INSTANCE.hasHost(uri, "media.ccc.de") && recentPath
+                && !uri.getHasQuery();
     }
 }
