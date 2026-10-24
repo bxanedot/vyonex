@@ -9,6 +9,7 @@ import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
 import com.vyonex.internal.fallback.localization.DateWrapper
+import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampRadioUrlParser
 import com.vyonex.internal.json.JsonObject
 import com.vyonex.internal.json.JsonParser
 import com.vyonex.internal.json.JsonParserException
@@ -103,17 +104,7 @@ public object BandcampExtractorHelper {
 
     @JvmStatic
     public fun isRadioUrl(url: String?): Boolean {
-        val uri = try {
-            URI(url ?: return false)
-        } catch (_: URISyntaxException) {
-            return false
-        }
-        val query = uri.rawQuery ?: return false
-        val path = uri.path.orEmpty()
-        val scheme = uri.scheme ?: return false
-        return uri.host.equals("bandcamp.com", ignoreCase = true) &&
-            (scheme.equals("http", true) || scheme.equals("https", true)) &&
-            (path.isEmpty() || path == "/") && query.matches(Regex("show=[0-9]+"))
+        return BandcampRadioUrlParser.accepts(url)
     }
 
     @JvmStatic
