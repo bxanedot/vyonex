@@ -16,7 +16,7 @@ public class PeertubePlaylistLinkHandlerFactory private constructor() : ListLink
 
     @Throws(ParsingException::class)
     override fun getId(url: String): String {
-        val path = PeertubeUrl.segments(url)
+        val path = PeertubeUrl.segments(url) ?: throw ParsingException("Invalid PeerTube URL: $url")
         if (path.size == 3 && path[0] == "w" && path[1] == "p") return path[2]
         if (path.size == 4 && path[0] == "videos" && path[1] == "watch"
             && path[2] == "playlist"
