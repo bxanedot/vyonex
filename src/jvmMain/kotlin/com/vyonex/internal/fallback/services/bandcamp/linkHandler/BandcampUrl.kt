@@ -5,7 +5,6 @@ package com.vyonex.internal.fallback.services.bandcamp.linkHandler
 
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampExtractorHelper
-import java.util.Locale
 
 internal object BandcampUrl {
     @JvmStatic
@@ -21,20 +20,11 @@ internal object BandcampUrl {
     @Throws(ParsingException::class)
     fun isArtistPage(url: String): Boolean {
         val parsed = parse(url)
-        if (parsed.host.equals("daily.bandcamp.com", ignoreCase = true)) return false
-        val path = parsed.segments
-        if (path.size > 1 || (path.size == 1 && path[0].lowercase(Locale.ROOT) !in
-                setOf("releases", "music", "album", "track"))
-        ) return false
-        return BandcampExtractorHelper.isArtistDomain(url)
+        return BandcampUrlParser.isArtistPage(parsed) && BandcampExtractorHelper.isArtistDomain(url)
     }
 
     @JvmStatic
     @Throws(ParsingException::class)
-    fun isArtistContent(url: String, kind: String): Boolean {
-        val path = parse(url).path.lowercase(Locale.ROOT)
-        val prefix = "/$kind/"
-        return path.startsWith(prefix) && path.length > prefix.length &&
-            BandcampExtractorHelper.isArtistDomain(url)
-    }
+    fun isArtistContent(url: String, kind: String): Boolean =
+        BandcampUrlParser.isArtistContent(parse(url), kind) && BandcampExtractorHelper.isArtistDomain(url)
 }

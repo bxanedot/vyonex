@@ -34,4 +34,17 @@ internal object BandcampUrlParser {
             Parsed(url.host, url.encodedPath.decodeURLPart(), query)
         }.getOrNull()
     }
+
+    fun isArtistPage(url: Parsed): Boolean {
+        if (url.host.equals("daily.bandcamp.com", ignoreCase = true)) return false
+        val segments = url.segments
+        return segments.size <= 1 && (segments.isEmpty() ||
+            segments[0].lowercase() in setOf("releases", "music", "album", "track"))
+    }
+
+    fun isArtistContent(url: Parsed, kind: String): Boolean {
+        val path = url.path.lowercase()
+        val prefix = "/$kind/"
+        return path.startsWith(prefix) && path.length > prefix.length
+    }
 }
