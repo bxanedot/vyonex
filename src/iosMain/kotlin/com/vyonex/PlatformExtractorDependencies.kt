@@ -7,6 +7,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.Dispatchers
 
 internal actual fun platformExtractorDependencies(host: VyonExHostServices): PlatformExtractorDependencies {
     val iosHost = host as? VyonExHost ?: error("iOS extraction requires VyonExHost")
@@ -22,7 +23,9 @@ internal actual fun platformExtractorDependencies(host: VyonExHostServices): Pla
             }
             expectSuccess = false
         },
+        backgroundDispatcher = Dispatchers.Default,
         tokenProvider = iosHost.tokenProvider,
+        // shortcut: iOS player scripts stay memory-only; add host storage callbacks when persistence is needed.
         readPlayer = { null },
         writePlayer = { _, _ -> },
     )

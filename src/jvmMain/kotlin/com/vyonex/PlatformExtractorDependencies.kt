@@ -7,11 +7,12 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 
 internal actual fun platformExtractorDependencies(host: VyonExHostServices): PlatformExtractorDependencies {
     val jvmHost = host as? VyonExHost ?: error("JVM extraction requires VyonExHost")
-    val playerDir = jvmHost.filesDir?.let { File(it, "vyonex_players").apply { mkdirs() } }
+    fun playerDirectory() = jvmHost.filesDir?.let { File(it, "vyonex_players").apply { mkdirs() } }
     val http = HttpClient(OkHttp) {
         engine { preconfigured = jvmHost.httpClient }
         install(ContentNegotiation) {
@@ -26,10 +27,11 @@ internal actual fun platformExtractorDependencies(host: VyonExHostServices): Pla
     }
     return PlatformExtractorDependencies(
         httpClient = http,
+        backgroundDispatcher = Dispatchers.IO,
         tokenProvider = jvmHost.tokenProvider,
-        readPlayer = { key -> playerDir?.let { File(it, key) }?.takeIf { it.isFile }?.readText() },
+        readPlayer = { key -> playerDirectory()?.let { File(it, key) }?.takeIf { it.isFile }?.readText() },
         writePlayer = { key, value ->
-            val dir = playerDir
+            val dir = playerDirectory()
             if (dir != null) {
                 val file = File(dir, key)
                 if (value == null) {

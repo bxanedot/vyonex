@@ -22,7 +22,6 @@ import com.vyonex.internal.primary.extraction.generateClientPlaybackNonce
 import com.vyonex.internal.primary.models.YouTubeLocale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -123,7 +122,7 @@ internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
         logger = logger,
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + platform.backgroundDispatcher)
 
     suspend fun extract(
         videoId: String,
