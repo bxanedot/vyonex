@@ -112,7 +112,14 @@ class SoundcloudServiceExtractionTest {
                 {"collection":[{"kind":"track","id":42,"title":"Rain","duration":90000,
                  "permalink_url":"https://soundcloud.com/a/rain","created_at":"2026-10-22T12:30:00Z",
                  "user":{"username":"Alice","permalink_url":"https://soundcloud.com/alice",
-                   "avatar_url":"https://images.example/alice.jpg"},"artwork_url":"https://images.example/rain.jpg"}],
+                   "avatar_url":"https://images.example/alice.jpg","verified":true},
+                 "playback_count":8,"artwork_url":"https://images.example/rain.jpg"},
+                 {"kind":"user","username":"Bob","permalink_url":"https://soundcloud.com/bob",
+                  "followers_count":11,"track_count":4,"description":"DJ"},
+                 {"kind":"playlist","title":"Night Mix","permalink_url":"https://soundcloud.com/bob/sets/night",
+                  "track_count":2,"user":{"username":"Bob","permalink_url":"https://soundcloud.com/bob"},
+                  "tracks":[{"user":{"avatar_url":"https://images.example/mix.jpg"}}]},
+                 {"kind":"unknown"},null],
                  "next_href":"https://api-v2.soundcloud.com/search?q=ambient&offset=10"}
                 """;
         final StubDownloader downloader = new StubDownloader(Map.of(
@@ -139,8 +146,17 @@ class SoundcloudServiceExtractionTest {
             extractor.onFetchPage(downloader);
             final var firstPage = extractor.getInitialPage();
 
-            assertEquals(1, firstPage.getItems().size());
+            assertEquals(3, firstPage.getItems().size());
             assertEquals("Rain", firstPage.getItems().get(0).getName());
+            assertEquals("STREAM", firstPage.getItems().get(0).getInfoType().name());
+            assertEquals("https://images.example/rain.jpg",
+                    firstPage.getItems().get(0).getThumbnails().get(0).getUrl());
+            assertEquals("Bob", firstPage.getItems().get(1).getName());
+            assertEquals("CHANNEL", firstPage.getItems().get(1).getInfoType().name());
+            assertEquals("Night Mix", firstPage.getItems().get(2).getName());
+            assertEquals("PLAYLIST", firstPage.getItems().get(2).getInfoType().name());
+            assertEquals("https://images.example/mix.jpg",
+                    firstPage.getItems().get(2).getThumbnails().get(0).getUrl());
             assertEquals("https://api-v2.soundcloud.com/search?q=ambient&offset=10&client_id="
                     + CLIENT_ID, firstPage.getNextPage().getUrl());
             final var secondPage = extractor.getPage(firstPage.getNextPage());

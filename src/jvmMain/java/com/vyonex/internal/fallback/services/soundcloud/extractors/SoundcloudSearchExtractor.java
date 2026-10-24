@@ -15,13 +15,11 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.search.SearchExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchPagePayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchResult;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public final class SoundcloudSearchExtractor extends SearchExtractor {
@@ -37,8 +35,8 @@ public final class SoundcloudSearchExtractor extends SearchExtractor {
 
     @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        final JsonObject results = fetch(downloader, getUrl());
-        if (results.getArray("collection").isEmpty()) {
+        final SoundcloudSearchPagePayload results = fetch(downloader, getUrl());
+        if (results.getCollectionSize() == 0) {
             throw new SearchExtractor.NothingFoundException("No SoundCloud results");
         }
         initialPage = page(results);
@@ -56,33 +54,31 @@ public final class SoundcloudSearchExtractor extends SearchExtractor {
         return page(fetch(getDownloader(), page.getUrl()));
     }
 
-    private JsonObject fetch(final Downloader downloader, final String url)
+    private SoundcloudSearchPagePayload fetch(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
         final Response response = downloader.get(url, getExtractorLocalization());
         if (response.responseCode() >= 400) {
             throw new IOException("SoundCloud search failed with HTTP " + response.responseCode());
         }
         try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
+            return SoundcloudSearchPageParser.INSTANCE.parse(response.responseBody());
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud search response", e);
         }
     }
 
-    private InfoItemsPage<InfoItem> page(final JsonObject data) {
+    private InfoItemsPage<InfoItem> page(final SoundcloudSearchPagePayload data) {
         final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
-        final JsonArray collection = data.getArray("collection");
-        for (final Object value : collection) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject result = (JsonObject) value;
-            switch (result.getString("kind", "")) {
-                case "user" -> items.commit(new SoundcloudChannelInfoItemExtractor(result));
-                case "track" -> items.commit(new SoundcloudStreamInfoItemExtractor(result));
-                case "playlist" -> items.commit(new SoundcloudPlaylistInfoItemExtractor(result));
-                default -> { }
+        for (final SoundcloudSearchResult result : data.getResults()) {
+            if (result instanceof SoundcloudSearchResult.User user) {
+                items.commit(new SoundcloudChannelInfoItemExtractor(user));
+            } else if (result instanceof SoundcloudSearchResult.Track track) {
+                items.commit(new SoundcloudStreamInfoItemExtractor(track));
+            } else if (result instanceof SoundcloudSearchResult.Playlist playlist) {
+                items.commit(new SoundcloudPlaylistInfoItemExtractor(playlist));
             }
         }
-        final String next = SoundcloudParsingHelper.getNextPageUrl(data);
+        final String next = SoundcloudParsingHelper.getNextPageUrl(data.getNextPageUrl());
         return new InfoItemsPage<>(items, next.isBlank() ? null : new Page(next));
     }
 }

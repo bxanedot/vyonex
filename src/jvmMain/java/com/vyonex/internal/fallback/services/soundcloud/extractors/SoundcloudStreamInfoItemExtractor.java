@@ -7,6 +7,8 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchProfile;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchResult;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonObject;
@@ -38,6 +40,20 @@ public class SoundcloudStreamInfoItemExtractor implements StreamInfoItemExtracto
         uploadDate = track.getString("created_at", "");
         viewCount = track.getLong("playback_count");
         artworkUrl = track.getString("artwork_url", uploaderAvatarUrl);
+    }
+
+    public SoundcloudStreamInfoItemExtractor(final SoundcloudSearchResult.Track track) {
+        final SoundcloudSearchProfile user = track.getUser();
+        url = SoundcloudParsingHelper.toHttpsUrl(track.getPermalinkUrl());
+        name = track.getTitle();
+        duration = track.getDurationMillis() / 1000;
+        uploaderName = user.getName();
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getPermalinkUrl());
+        uploaderAvatarUrl = user.getAvatarUrl();
+        uploaderVerified = user.getVerified();
+        uploadDate = track.getCreatedAt();
+        viewCount = track.getPlaybackCount();
+        artworkUrl = track.getArtworkUrl();
     }
 
     @Override public String getUrl() { return url; }
