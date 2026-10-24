@@ -150,8 +150,8 @@ public final class SoundcloudParsingHelper {
         final String normalized = normalizeUserUrl(url);
         final JsonObject response;
         try {
-            final String widgetUrl = "https://api-widget.soundcloud.com/resolve?url="
-                    + encode(normalized) + "&format=json&client_id=" + clientId();
+            final String widgetUrl = SoundcloudSearchUrl.INSTANCE
+                    .widgetResolveUrl(normalized, clientId());
             response = requestObject(VyonEx.getDownloader(), widgetUrl);
         } catch (final ExtractionException e) {
             throw new ParsingException("Unable to resolve SoundCloud URL", e);

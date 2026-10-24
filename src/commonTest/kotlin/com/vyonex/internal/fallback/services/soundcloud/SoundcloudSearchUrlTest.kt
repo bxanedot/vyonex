@@ -50,6 +50,19 @@ class SoundcloudSearchUrlTest {
     }
 
     @Test
+    fun buildsWidgetResolveUrlWithFormEncodedTarget() {
+        assertEquals(
+            "https://api-widget.soundcloud.com/resolve?url=" +
+                "https%3A%2F%2Fsoundcloud.com%2Falice%3Fnext%3Da+b%26kind%3Dchannel" +
+                "&format=json&client_id=offline-key",
+            SoundcloudSearchUrl.widgetResolveUrl(
+                "https://soundcloud.com/alice?next=a b&kind=channel",
+                "offline-key",
+            ),
+        )
+    }
+
+    @Test
     fun addsClientIdToPaginationLinksOnlyWhenMissing() {
         assertEquals(
             "https://api-v2.soundcloud.com/users/1/tracks?client_id=key",
