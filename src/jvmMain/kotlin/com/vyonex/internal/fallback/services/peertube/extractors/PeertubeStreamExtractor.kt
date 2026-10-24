@@ -13,9 +13,8 @@ import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.LinkHandler
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaDelivery
-import com.vyonex.internal.fallback.services.peertube.PeertubeMediaFile
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaMapper
-import com.vyonex.internal.fallback.services.peertube.PeertubeMediaPlaylist
+import com.vyonex.internal.fallback.services.peertube.PeertubeMediaResponseParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory
 import com.vyonex.internal.fallback.stream.AudioStream
@@ -32,6 +31,7 @@ import com.vyonex.internal.fallback.stream.SubtitlesStream
 import com.vyonex.internal.fallback.stream.VideoStream
 import com.vyonex.internal.json.JsonArray
 import com.vyonex.internal.json.JsonObject
+import com.vyonex.internal.json.JsonWriter
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
@@ -260,30 +260,11 @@ public class PeertubeStreamExtractor(
     }
 
     private fun readMedia(): MediaStreams {
-        fun mediaFile(value: Any?): PeertubeMediaFile? {
-            val file = value as? JsonObject ?: return null
-            val resolution = file.getObject("resolution")
-            return PeertubeMediaFile(
-                fileUrl = file.getString("fileUrl"),
-                fileDownloadUrl = file.getString("fileDownloadUrl"),
-                torrentUrl = file.getString("torrentUrl"),
-                resolutionId = resolution.getInt("id", -1),
-                resolutionLabel = resolution.getString("label"),
-                bitrate = file.getInt("bitrate", AudioStream.UNKNOWN_BITRATE),
-                hasAudio = file.getBoolean("hasAudio"),
-            )
-        }
-
+        val payload = PeertubeMediaResponseParser.parse(JsonWriter.string(video))
         val streams = PeertubeMediaMapper.map(
-            files = video.getArray("files").mapNotNull(::mediaFile),
-            playlists = video.getArray("streamingPlaylists").mapNotNull { value ->
-                val playlist = value as? JsonObject ?: return@mapNotNull null
-                PeertubeMediaPlaylist(
-                    playlistUrl = playlist.getString("playlistUrl"),
-                    files = playlist.getArray("files").mapNotNull(::mediaFile),
-                )
-            },
-            isLive = video.getBoolean("isLive"),
+            files = payload.files,
+            playlists = payload.playlists,
+            isLive = payload.isLive,
         )
         return MediaStreams(
             Collections.unmodifiableList(streams.audio.map { candidate ->
