@@ -12,10 +12,10 @@ import com.vyonex.internal.fallback.kiosk.KioskExtractor
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItem
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemsCollector
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampFeaturedPageParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampFeaturedPageParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampFeaturedPagePayload
+import com.vyonex.internal.fallback.services.bandcamp.BandcampFeaturedStoriesMissingException
 import com.vyonex.internal.json.JsonWriter
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -34,17 +34,14 @@ public class BandcampFeaturedExtractor(
             .value("version", 0)
             .end().done()
             .toByteArray(StandardCharsets.UTF_8)
-        val response = try {
-            JsonParser.`object`().from(
-                downloader.postWithContentTypeJson(FEATURED_API_URL, emptyMap(), body)
-                    .responseBody(),
-            )
-        } catch (error: JsonParserException) {
+        val response = downloader.postWithContentTypeJson(FEATURED_API_URL, emptyMap(), body).responseBody()
+        responsePage = try {
+            extract(BandcampFeaturedPageParser.parseInitial(response))
+        } catch (error: BandcampFeaturedStoriesMissingException) {
+            throw ParsingException("Bandcamp featured response has no stories", error)
+        } catch (error: BandcampFeaturedPageParseException) {
             throw ParsingException("Bandcamp featured response is invalid", error)
         }
-        val stories = response.getObject("feed_content")?.getObject("stories")
-            ?.getArray("featured")
-        responsePage = extract(stories)
     }
 
     override fun getName(): String = KIOSK_FEATURED
@@ -55,37 +52,27 @@ public class BandcampFeaturedExtractor(
 
     @Throws(IOException::class, ExtractionException::class)
     override fun getPage(page: Page): InfoItemsPage<PlaylistInfoItem> {
-        val response = try {
-            JsonParser.`object`().from(getDownloader().get(page.url).responseBody())
-        } catch (error: JsonParserException) {
+        val response = getDownloader().get(page.url).responseBody()
+        val pageResult = try {
+            extract(BandcampFeaturedPageParser.parseOlder(response))
+        } catch (error: BandcampFeaturedStoriesMissingException) {
+            throw ParsingException("Bandcamp featured response has no stories", error)
+        } catch (error: BandcampFeaturedPageParseException) {
             throw ParsingException("Bandcamp featured page is invalid", error)
         }
-        val pageResult = extract(response.getObject("stories")?.getArray("featured"))
         responsePage = pageResult
         return pageResult
     }
 
-    @Throws(ParsingException::class)
-    private fun extract(stories: JsonArray?): InfoItemsPage<PlaylistInfoItem> {
-        val data = stories ?: throw ParsingException("Bandcamp featured response has no stories")
+    private fun extract(data: BandcampFeaturedPagePayload): InfoItemsPage<PlaylistInfoItem> {
         val items = PlaylistInfoItemsCollector(serviceId)
-        var last: JsonObject? = null
-        for (value in data) {
-            val story = value as? JsonObject ?: continue
-            last = story
-            if (story.getString("album_title") != null) {
-                items.commit(BandcampPlaylistInfoItemFeaturedExtractor(story))
-            }
+        for (story in data.items) {
+            items.commit(BandcampPlaylistInfoItemFeaturedExtractor(story))
         }
-        return InfoItemsPage(items, last?.let(::nextPage))
+        return InfoItemsPage(items, data.nextStoryGroup?.let(::nextPage))
     }
 
-    private fun nextPage(story: JsonObject): Page? {
-        val type = story.getString("story_type") ?: return null
-        if (!story.isNumber("story_date") || !story.isNumber("ntid")) return null
-        val cursor = "featured:${story.getLong("story_date")}:$type:${story.getLong("ntid")}"
-        return Page("$MORE_FEATURED_API_URL?story_groups=$cursor")
-    }
+    private fun nextPage(storyGroup: String): Page = Page("$MORE_FEATURED_API_URL?story_groups=$storyGroup")
 
     public companion object {
         public const val KIOSK_FEATURED = "Featured"
