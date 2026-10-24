@@ -3,10 +3,13 @@
 // bxane
 package com.vyonex.internal.fallback.services.bandcamp.linkHandler
 
+import com.vyonex.internal.url.FormUrlEncoder
 import io.ktor.http.Url
 import io.ktor.http.decodeURLPart
 
 internal object BandcampUrlParser {
+    internal const val BASE_URL = "https://bandcamp.com"
+
     internal data class Parsed(
         val host: String,
         val path: String,
@@ -47,4 +50,6 @@ internal object BandcampUrlParser {
         val prefix = "/$kind/"
         return path.startsWith(prefix) && path.length > prefix.length
     }
+
+    fun searchUrl(query: String): String = "$BASE_URL/search?q=${FormUrlEncoder.encode(query)}&page=1"
 }

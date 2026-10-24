@@ -8,6 +8,7 @@ import com.vyonex.internal.fallback.VyonEx
 import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
+import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampUrlParser
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampRadioUrlParser
 import com.vyonex.internal.json.JsonObject
@@ -26,7 +27,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 public object BandcampExtractorHelper {
-    public const val BASE_URL = "https://bandcamp.com"
+    public const val BASE_URL = BandcampUrlParser.BASE_URL
     public const val BASE_API_URL = "$BASE_URL/api"
     private const val IMAGE_BASE_URL = "https://f4.bcbits.com/img/"
     private val DATE_FORMAT = DateTimeFormatter.ofPattern(
