@@ -1,13 +1,13 @@
 // bxane
 package com.vyonex.internal.primary.cipher
 
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Test
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class PlayerConfigCipherSolverContractTest {
     @Test
-    fun configuredTransformsDoNotRewriteTrailerTextInsidePlayerStrings() = runBlocking {
+    fun configuredTransformsDoNotRewriteTrailerTextInsidePlayerStrings() = runTest {
         val playerCode =
             """
             const marker = "})(_yt_player);";

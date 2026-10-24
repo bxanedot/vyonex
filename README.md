@@ -30,8 +30,11 @@ dependencies {
 - Kotlin compiler: 2.4.21.
 - JVM and iOS device/simulator targets are configured.
 - The shared stream, audio, session, logging, and config types are in `commonMain`.
-- The extractor and host adapters remain JVM-only while their platform services are migrated; iOS extraction is not ready yet.
+- The primary YouTube extractor and `VyonEx` host/extract API are available to Swift/iOS. iOS uses Ktor Darwin; it currently has no watch-page fallback extractor or persistent prepared-player cache.
+- The JVM facade and fallback behavior remain unchanged.
 - Runtime dependencies are declared by VyonEx.
+
+On iOS, implement `VyonExHost` and `VyonExConfigStore`, construct `VyonEx(host:)`, call `initialize()`, then call the suspend `extract(videoId:maxKbps:skipClients:requireM4a:)` method from Swift with `async`. The iOS facade currently exposes YouTube primary extraction only.
 
 ## Build
 

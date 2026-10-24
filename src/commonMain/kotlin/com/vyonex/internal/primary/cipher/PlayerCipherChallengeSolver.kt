@@ -8,7 +8,6 @@ import com.vyonex.internal.primary.w
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.LinkedHashMap
 
 /** Resolves player signature and throttling transforms using VyonEx-owned parsing. */
 internal class PlayerCipherChallengeSolver(
@@ -34,7 +33,7 @@ internal class PlayerCipherChallengeSolver(
     )
 
     private val preparedMutex = Mutex()
-    private val preparedPlayers = LinkedHashMap<String, PlayerCipherScriptParser.ParsedPlayer>()
+    private val preparedPlayers = LinkedHashMap<String, ParsedPlayerCipherScript>()
     private val playerSolverMutex = Mutex()
     private var playerSolverUrl: String? = null
     private var playerSolver: PlayerCipherUrlSolver? = null
@@ -146,13 +145,9 @@ internal class PlayerCipherChallengeSolver(
         playerCode: String,
         requestOrder: List<Pair<String, List<String>>>,
     ): SolveResult {
-        val parsed = PlayerScriptParser.parse(playerCode)
-        if (parsed.nFunctionCode == null && parsed.sigFunctionCode == null) {
-            return SolveResult(emptyMap(), emptyMap())
-        }
-
-        val parserScript = PlayerScriptParser.generateSolverScript(parsed)
-        if (parserScript.isBlank()) return SolveResult(emptyMap(), emptyMap())
+        val parsed = legacyPlayerCipherFunctions(playerCode)
+        if (!parsed.hasNTransform && !parsed.hasSignatureTransform) return SolveResult(emptyMap(), emptyMap())
+        val parserScript = parsed.solverScript.takeIf(String::isNotBlank) ?: return SolveResult(emptyMap(), emptyMap())
         val isolatedScript =
             """
             (function() {
@@ -204,7 +199,7 @@ internal class PlayerCipherChallengeSolver(
     private suspend fun loadPreparedPlayer(
         playerUrl: String,
         cacheKey: String?,
-    ): PlayerCipherScriptParser.ParsedPlayer? {
+    ): ParsedPlayerCipherScript? {
         preparedMutex.withLock {
             preparedPlayers.remove(playerUrl)?.also {
                 preparedPlayers[playerUrl] = it
@@ -232,7 +227,7 @@ internal class PlayerCipherChallengeSolver(
     private suspend fun persistPreparedPlayer(
         playerUrl: String,
         cacheKey: String?,
-        parsed: PlayerCipherScriptParser.ParsedPlayer,
+        parsed: ParsedPlayerCipherScript,
     ) {
         preparedMutex.withLock { rememberPreparedPlayer(playerUrl, parsed) }
         cacheKey?.let { safeWritePreparedPlayer(it, encodePreparedPlayer(parsed)) }
@@ -253,7 +248,7 @@ internal class PlayerCipherChallengeSolver(
 
     private fun rememberPreparedPlayer(
         playerUrl: String,
-        parsed: PlayerCipherScriptParser.ParsedPlayer,
+        parsed: ParsedPlayerCipherScript,
     ) {
         preparedPlayers.remove(playerUrl)
         preparedPlayers[playerUrl] = parsed
@@ -262,10 +257,10 @@ internal class PlayerCipherChallengeSolver(
         }
     }
 
-    private fun encodePreparedPlayer(parsed: PlayerCipherScriptParser.ParsedPlayer): String =
+    private fun encodePreparedPlayer(parsed: ParsedPlayerCipherScript): String =
         "$CACHE_HEADER${parsed.factoryName}\n${parsed.script}"
 
-    private fun decodePreparedPlayer(encoded: String): PlayerCipherScriptParser.ParsedPlayer? {
+    private fun decodePreparedPlayer(encoded: String): ParsedPlayerCipherScript? {
         if (encoded.length > MAX_PLAYER_JS_LENGTH + CACHE_HEADER.length + 128 || !encoded.startsWith(CACHE_HEADER)) return null
         val nameStart = CACHE_HEADER.length
         val nameEnd = encoded.indexOf('\n', nameStart)
@@ -278,7 +273,7 @@ internal class PlayerCipherChallengeSolver(
         ) {
             return null
         }
-        return PlayerCipherScriptParser.ParsedPlayer(script, name)
+        return ParsedPlayerCipherScript(script, name)
     }
 
     private fun playerScriptCacheKey(playerUrl: String): String? =

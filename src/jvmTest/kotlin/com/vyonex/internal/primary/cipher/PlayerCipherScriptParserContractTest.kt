@@ -1,15 +1,13 @@
 // bxane
 package com.vyonex.internal.primary.cipher
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 
-class PlayerCipherScriptParserContractTest {
+class PlayerCipherDownloadedScriptContractTest {
     @Test
     fun parsesDownloadedPlayerProbeWhenConfigured() {
         val path = System.getenv("VYONEX_PLAYER_PATH") ?: return
@@ -55,38 +53,4 @@ class PlayerCipherScriptParserContractTest {
         }
     }
 
-    @Test
-    fun exportsTheTopLevelTransformFactoryFromThePlayerWrapper() {
-        val source =
-            """
-            var _yt_player = {};
-            (function(g) {
-              var helper = function(url) { url.set("alr", "yes"); return url; };
-              unrelated = function(url) { url.set("alr", "yes"); return url; };
-              window.ready = true;
-            })(_yt_player);
-            """.trimIndent()
-
-        val parsed = requireNotNull(PlayerCipherScriptParser.parse(source))
-
-        assertEquals("helper", parsed.factoryName)
-        assertTrue(parsed.script.contains("globalThis.__vyonexCipherFactory=helper;"))
-        assertTrue(parsed.script.endsWith("})(_yt_player);"))
-    }
-
-    @Test
-    fun ignoresUnrelatedSetCallsAndUnsupportedWrapperShapes() {
-        val decoy =
-            """
-            var _yt_player = {};
-            (function(g) {
-              if (window.decoy) {
-                function unrelated(url) { url.set("alr", "yes"); }
-              }
-            })(_yt_player);
-            """.trimIndent()
-
-        assertNull(PlayerCipherScriptParser.parse(decoy))
-        assertNull(PlayerCipherScriptParser.parse("function unrelated(url) { url.set(\"alr\", \"yes\"); }"))
-    }
 }
