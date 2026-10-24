@@ -10,16 +10,16 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class InnerTubeVisitorDataContractTest {
     @Test
-    fun getsVisitorDataFromTheServiceWorkerResponse() = runBlocking {
+    fun getsVisitorDataFromTheServiceWorkerResponse() = runTest {
         val client = mockClient(workerResponse("worker-token"))
         val innerTube = InnerTube(client)
         try {
@@ -32,7 +32,7 @@ class InnerTubeVisitorDataContractTest {
     }
 
     @Test
-    fun rejectsMalformedServiceWorkerDataAndUsesHomepageValue() = runBlocking {
+    fun rejectsMalformedServiceWorkerDataAndUsesHomepageValue() = runTest {
         val homepage = "<script>{\"visitorData\":\"home-token\"}</script>"
         val client = mockClient(workerResponse("bad\r\nX-Injected: yes"), homepage)
         val innerTube = InnerTube(client)

@@ -10,7 +10,10 @@ import com.vyonex.internal.primary.cipher.DEFAULT_PLAYER_CONFIG_URL
 import com.vyonex.internal.primary.cipher.YouTubeCipherService
 import com.vyonex.internal.primary.extraction.AudioQuality
 import com.vyonex.internal.primary.extraction.ContentHints
+import com.vyonex.internal.primary.extraction.DefaultExtractionCipherService
 import com.vyonex.internal.primary.extraction.InnerTubeExtractor
+import com.vyonex.internal.primary.extraction.PlayerClientDirector
+import com.vyonex.internal.primary.extraction.strategy.ContentAwareFallbackStrategy
 import com.vyonex.internal.primary.extraction.PoTokenResult
 import com.vyonex.internal.primary.extraction.TokenProvider
 import com.vyonex.internal.primary.extraction.TokenProviderCapabilities
@@ -141,7 +144,13 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
     private val cipherService = YouTubeCipherService(http, remoteStore, logger)
     private val extractor = InnerTubeExtractor(
         configParser = YtConfigParserImpl(http, innerTube, remoteStore, logger),
-        cipherService = cipherService,
+        clientDirector = PlayerClientDirector(
+            innerTube = innerTube,
+            fallbackStrategy = ContentAwareFallbackStrategy(),
+            tokenProvider = tokenProvider,
+            logger = logger,
+        ),
+        cipherService = DefaultExtractionCipherService(cipherService),
         innerTube = innerTube,
         tokenProvider = tokenProvider,
         logger = logger,

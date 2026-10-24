@@ -10,15 +10,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentLength
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Test
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 class HttpResponseBodyContractTest {
     @Test
-    fun readsBodyUpToTheLimit() = runBlocking {
+    fun readsBodyUpToTheLimit() = runTest {
         val client = HttpClient(MockEngine { respond(ByteReadChannel("body"), HttpStatusCode.OK) })
         try {
             val response = client.get(TEST_URL)
@@ -29,19 +29,19 @@ class HttpResponseBodyContractTest {
     }
 
     @Test
-    fun rejectsAnUnknownLengthBodyWhenStreamingPastTheLimit() = runBlocking {
+    fun rejectsAnUnknownLengthBodyWhenStreamingPastTheLimit() = runTest {
         val client = HttpClient(MockEngine { respond(ByteReadChannel("too long"), HttpStatusCode.OK) })
         try {
             val response = client.get(TEST_URL)
             assertNull(response.contentLength())
-            assertThrows(IllegalStateException::class.java) { runBlocking { response.bodyAsTextLimited(4) } }
+            assertFailsWithSuspend<IllegalStateException> { response.bodyAsTextLimited(4) }
         } finally {
             client.close()
         }
     }
 
     @Test
-    fun rejectsAnOversizedDeclaredBody() = runBlocking {
+    fun rejectsAnOversizedDeclaredBody() = runTest {
         val client =
             HttpClient(
                 MockEngine {
@@ -55,18 +55,30 @@ class HttpResponseBodyContractTest {
         try {
             val response = client.get(TEST_URL)
             assertEquals(5, response.contentLength())
-            assertThrows(IllegalStateException::class.java) { runBlocking { response.bodyAsTextLimited(4) } }
+            assertFailsWithSuspend<IllegalStateException> { response.bodyAsTextLimited(4) }
         } finally {
             client.close()
         }
     }
 
     @Test
-    fun requiresAPositiveLimit() = runBlocking {
+    fun requiresAPositiveLimit() = runTest {
         val client = HttpClient(MockEngine { respond(ByteReadChannel(""), HttpStatusCode.OK) })
         try {
             val response = client.get(TEST_URL)
-            assertThrows(IllegalArgumentException::class.java) { runBlocking { response.bodyAsTextLimited(0) } }
+            assertFailsWithSuspend<IllegalArgumentException> { response.bodyAsTextLimited(0) }
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun measuresTheLimitInUtf8Bytes() = runTest {
+        val client = HttpClient(MockEngine { respond(ByteReadChannel("é"), HttpStatusCode.OK) })
+        try {
+            val response = client.get(TEST_URL)
+            assertEquals("é", response.bodyAsTextLimited(2))
+            assertFailsWithSuspend<IllegalStateException> { response.bodyAsTextLimited(1) }
         } finally {
             client.close()
         }
@@ -75,4 +87,14 @@ class HttpResponseBodyContractTest {
     private companion object {
         const val TEST_URL = "https://example.test/"
     }
+}
+
+private suspend inline fun <reified T : Throwable> assertFailsWithSuspend(crossinline block: suspend () -> Unit) {
+    var failure: Throwable? = null
+    try {
+        block()
+    } catch (error: Throwable) {
+        failure = error
+    }
+    assertIs<T>(failure)
 }

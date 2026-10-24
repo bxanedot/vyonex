@@ -4,10 +4,10 @@
 package com.vyonex.internal.primary.sabr
 
 import com.vyonex.internal.primary.models.response.PlayerResponse
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertThrows
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class SabrBootstrapFactoryContractTest {
     @Test
@@ -64,7 +64,7 @@ class SabrBootstrapFactoryContractTest {
             "https://r1.googlevideo.com/other",
             "https://user@r1.googlevideo.com/videoplayback",
             "https://r1.googlevideo.com:444/videoplayback",
-        ).forEach { url -> assertThrows(SabrProtocolException::class.java) { requireAllowedSabrUrl(url) } }
+        ).forEach { url -> assertFailsWith<SabrProtocolException> { requireAllowedSabrUrl(url) } }
         assertEquals("https://www.youtube.com", sabrRequestOrigin("WEB"))
         assertEquals("https://music.youtube.com", sabrRequestOrigin("WEB_REMIX"))
         assertNull(sabrRequestOrigin("ANDROID"))
@@ -75,10 +75,10 @@ class SabrBootstrapFactoryContractTest {
         val response = response(listOf(video(137, 360, 400_000, "4321")))
         val audioWithoutIdentity = PlayerResponse.StreamingData.Format(itag = 140, mimeType = "audio/mp4", approxDurationMs = "1")
 
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             response.toSabrBootstrap(1, "1", audioWithoutIdentity)
         }
-        assertThrows(SabrProtocolException::class.java) {
+        assertFailsWith<SabrProtocolException> {
             response(
                 listOf(video(137, 360, 400_000, "4321")),
                 configuration = "A".repeat(100_000),
@@ -97,7 +97,7 @@ class SabrBootstrapFactoryContractTest {
 
         assertEquals(20_000, response.toSabrBootstrap(1, "1", audio).durationMs)
         val overflow = response.copy(videoDetails = response.videoDetails?.copy(lengthSeconds = "9223372036854776"))
-        assertThrows(IllegalStateException::class.java) { overflow.toSabrBootstrap(1, "1", audio) }
+        assertFailsWith<IllegalStateException> { overflow.toSabrBootstrap(1, "1", audio) }
     }
 
     private fun response(formats: List<PlayerResponse.StreamingData.Format>, configuration: String = "YWJj") =

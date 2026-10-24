@@ -17,3 +17,5 @@ data class YouTubeLocale(
         return if (preferred == language) language else "$preferred,$language;q=0.9"
     }
 }
+
+internal expect fun defaultYouTubeLocale(): YouTubeLocale
