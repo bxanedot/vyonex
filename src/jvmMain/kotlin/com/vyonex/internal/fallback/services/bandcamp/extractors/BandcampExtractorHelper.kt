@@ -16,9 +16,6 @@ import com.vyonex.internal.fallback.services.bandcamp.BandcampItemUrlParser
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampUrlParser
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampRadioUrlParser
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
 import com.vyonex.internal.json.JsonWriter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -56,20 +53,6 @@ public object BandcampExtractorHelper {
             throw ParsingException("Could not resolve Bandcamp item URL", error)
         } catch (error: BandcampItemUrlParseException) {
             throw ParsingException("Could not resolve Bandcamp item URL", error)
-        }
-    }
-
-    @JvmStatic
-    @Throws(ParsingException::class)
-    public fun getArtistDetails(id: String): JsonObject = getArtistDetails(currentDownloader(), id)
-
-    @JvmStatic
-    @Throws(ParsingException::class)
-    public fun getArtistDetails(downloader: Downloader, id: String): JsonObject {
-        try {
-            return JsonParser.`object`().from(getArtistDetailsSource(downloader, id))
-        } catch (error: JsonParserException) {
-            throw ParsingException("Could not load Bandcamp artist details", error)
         }
     }
 
@@ -134,16 +117,6 @@ public object BandcampExtractorHelper {
             throw ParsingException("Could not parse Bandcamp date: $textDate", error)
         } catch (error: NullPointerException) {
             throw ParsingException("Could not parse Bandcamp date: $textDate", error)
-        }
-    }
-
-    @JvmStatic
-    @Throws(ParsingException::class)
-    public fun getJsonAttribute(html: String, attribute: String): JsonObject {
-        return try {
-            JsonParser.`object`().from(getJsonAttributeText(html, attribute))
-        } catch (error: JsonParserException) {
-            throw ParsingException("Page contains invalid $attribute data", error)
         }
     }
 
