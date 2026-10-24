@@ -3,11 +3,7 @@ package com.vyonex.internal.primary.extraction
 
 import com.vyonex.internal.primary.InnerTube
 import com.vyonex.internal.primary.InnerTubeLogger
-import com.vyonex.internal.primary.cipher.YouTubeCipherService
 import com.vyonex.internal.primary.d
-import com.vyonex.internal.primary.extraction.strategy.ClientFallbackStrategy
-import com.vyonex.internal.primary.extraction.strategy.ClientHealthMonitor
-import com.vyonex.internal.primary.extraction.strategy.ContentAwareFallbackStrategy
 import com.vyonex.internal.primary.extraction.strategy.PlaybackClientCatalog
 import com.vyonex.internal.primary.i
 import com.vyonex.internal.primary.models.response.PlayerResponse
@@ -42,30 +38,6 @@ class InnerTubeExtractor internal constructor(
     private val tvBearerProviderTimeoutMs: Long = TV_BEARER_PROVIDER_TIMEOUT_MS,
     private val now: () -> Instant = { Clock.System.now() },
 ) : StreamExtractor {
-    constructor(
-        configParser: YtConfigParser,
-        cipherService: YouTubeCipherService,
-        innerTube: InnerTube,
-        fallbackStrategy: ClientFallbackStrategy = ContentAwareFallbackStrategy(),
-        tokenProvider: TokenProvider? = null,
-        clientHealthMonitor: ClientHealthMonitor = ClientHealthMonitor.NONE,
-        logger: InnerTubeLogger = InnerTubeLogger.NONE,
-    ) : this(
-        configParser = configParser,
-        clientDirector =
-            PlayerClientDirector(
-                innerTube = innerTube,
-                fallbackStrategy = fallbackStrategy,
-                tokenProvider = tokenProvider ?: UnavailableTokenProvider,
-                clientHealthMonitor = clientHealthMonitor,
-                logger = logger,
-            ),
-        cipherService = DefaultExtractionCipherService(cipherService),
-        innerTube = innerTube,
-        tokenProvider = tokenProvider ?: UnavailableTokenProvider,
-        logger = logger,
-    )
-
     private companion object {
         private const val TAG = "InnerTubeExtractor"
         private const val DEFAULT_BOUNDED_RANGE_CHUNK_BYTES = 1_048_576L

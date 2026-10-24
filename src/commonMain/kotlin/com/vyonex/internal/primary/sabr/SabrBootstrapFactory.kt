@@ -60,7 +60,7 @@ fun PlayerResponse.toSabrBootstrap(
     val durationMs =
         audioFormat.approxDurationMs?.toLongOrNull()
             ?: videoDetails?.lengthSeconds?.toLongOrNull()?.let { seconds ->
-                runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
+                if (seconds !in Long.MIN_VALUE / 1_000L..Long.MAX_VALUE / 1_000L) null else seconds * 1_000L
             }
             ?: error("Player response has no duration")
     require(durationMs > 0) { "Player response has an invalid duration" }

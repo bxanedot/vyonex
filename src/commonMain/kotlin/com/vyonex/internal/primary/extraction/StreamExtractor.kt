@@ -1,8 +1,6 @@
 // bxane
 package com.vyonex.internal.primary.extraction
 
-import com.vyonex.internal.primary.extraction.AudioQuality
-
 public interface StreamExtractor {
     suspend fun prewarm()
 
