@@ -27,6 +27,7 @@ import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
 import com.vyonex.internal.fallback.localization.Localization;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.search.SearchExtractor;
+import com.vyonex.internal.fallback.services.youtube.YoutubeContinuationTokenParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeMetaInfoHelper;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonBuilder;
@@ -191,8 +192,7 @@ public class YoutubeSearchExtractor extends SearchExtractor {
     @Nullable
     private Page nextPage(final JsonObject continuation) {
         if (continuation.isEmpty()) return null;
-        final String token = continuation.getObject("continuationEndpoint")
-                .getObject("continuationCommand").getString("token");
+        final String token = YoutubeContinuationTokenParser.INSTANCE.parse(JsonWriter.string(continuation));
         if (isNullOrEmpty(token)) return null;
         return new Page(YOUTUBEI_V1_URL + "search?" + DISABLE_PRETTY_PRINT_PARAMETER, token);
     }
