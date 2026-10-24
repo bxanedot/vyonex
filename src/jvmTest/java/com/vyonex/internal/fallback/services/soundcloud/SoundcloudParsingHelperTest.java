@@ -142,6 +142,38 @@ class SoundcloudParsingHelperTest {
         }
     }
 
+    @Test
+    void mapsTrackAndChartPagesFromOfflineApiResponses() throws Exception {
+        final String tracksUrl = "https://api-v2.soundcloud.com/users/7/tracks?client_id=offline-key";
+        final String chartsUrl = "https://api-v2.soundcloud.com/charts?client_id=offline-key";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                tracksUrl, """
+                        {"collection":[{"id":42,"title":"Rain","duration":90000,
+                          "permalink_url":"https://soundcloud.com/a/rain",
+                          "user":{"username":"Alice"}}],"next_href":null}
+                        """,
+                chartsUrl, """
+                        {"collection":[{"track":{"id":7,"title":"Wind",
+                          "permalink_url":"https://soundcloud.com/a/wind"}}]}
+                        """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final StreamInfoItemsCollector tracks = new StreamInfoItemsCollector(31);
+            final StreamInfoItemsCollector charts = new StreamInfoItemsCollector(31);
+
+            assertEquals("", SoundcloudParsingHelper.getStreamsFromApi(tracks, tracksUrl));
+            assertEquals("", SoundcloudParsingHelper.getStreamsFromApi(charts, chartsUrl, true));
+            assertEquals(List.of("Rain"), tracks.getItems().stream()
+                    .map(item -> item.getName()).toList());
+            assertEquals(List.of("Wind"), charts.getItems().stream()
+                    .map(item -> item.getName()).toList());
+            assertEquals(List.of(tracksUrl, chartsUrl), downloader.requestedUrls);
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
     private static final class StubDownloader extends Downloader {
         private final Map<String, String> bodies;
         private final List<String> requestedUrls = new ArrayList<>();

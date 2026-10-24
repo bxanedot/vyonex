@@ -17,6 +17,8 @@ import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudCha
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudLikesInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPagePayload;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPageParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPagePayload;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
@@ -214,14 +216,17 @@ public final class SoundcloudParsingHelper {
     public static String getStreamsFromApi(final StreamInfoItemsCollector collector,
                                            final String apiUrl, final boolean charts)
             throws IOException, ReCaptchaException, ParsingException {
-        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
-        for (final Object value : response.getArray("collection")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject item = (JsonObject) value;
-            collector.commit(new SoundcloudStreamInfoItemExtractor(
-                    charts ? item.getObject("track") : item));
+        final SoundcloudStreamsPagePayload response;
+        try {
+            response = SoundcloudStreamsPageParser.INSTANCE.parse(
+                    requestBody(VyonEx.getDownloader(), apiUrl), charts);
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
         }
-        return getNextPageUrl(response);
+        for (final var track : response.getTracks()) {
+            collector.commit(new SoundcloudStreamInfoItemExtractor(track));
+        }
+        return getNextPageUrl(response.getNextPageUrl());
     }
 
     public static String getInfoItemsFromApi(final MultiInfoItemsCollector collector,
