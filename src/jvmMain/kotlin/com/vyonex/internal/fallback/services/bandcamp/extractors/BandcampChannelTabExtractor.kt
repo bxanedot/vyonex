@@ -13,6 +13,7 @@ import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
+import com.vyonex.internal.fallback.services.bandcamp.BandcampDiscographyItem
 import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampDiscographStreamInfoItemExtractor
 import com.vyonex.internal.json.JsonArray
 import com.vyonex.internal.json.JsonObject
@@ -31,14 +32,13 @@ public class BandcampChannelTabExtractor(
         else -> throw IllegalArgumentException("Unsupported Bandcamp channel tab")
     }
 
-    private var items: List<JsonObject>? = null
+    private var items: List<BandcampDiscographyItem>? = null
 
     @Throws(ParsingException::class)
     override fun onFetchPage(downloader: Downloader) {
         if (items == null) {
-            val discography = BandcampExtractorHelper.getArtistDetails(downloader, id)
-                .getArray("discography")
-            items = selectItems(discography, itemType)
+            val artist = BandcampExtractorHelper.getArtistDetailsPayload(downloader, id)
+            items = selectItems(artist.discography, itemType)
         }
     }
 
@@ -64,13 +64,33 @@ public class BandcampChannelTabExtractor(
             service: StreamingService,
             linkHandler: ListLinkHandler,
             discography: JsonArray,
+        ): BandcampChannelTabExtractor = fromDiscographyPayload(
+            service,
+            linkHandler,
+            discography.filterIsInstance<JsonObject>().map(::discographyItem),
+        )
+
+        internal fun fromDiscographyPayload(
+            service: StreamingService,
+            linkHandler: ListLinkHandler,
+            discography: List<BandcampDiscographyItem>,
         ): BandcampChannelTabExtractor = BandcampChannelTabExtractor(service, linkHandler).apply {
             items = selectItems(discography, itemType)
         }
 
-        private fun selectItems(discography: JsonArray?, type: String): List<JsonObject> =
-            discography?.filterIsInstance<JsonObject>()
-                ?.filter { it.getString("item_type") == type }
-                .orEmpty()
+        private fun selectItems(
+            discography: List<BandcampDiscographyItem>,
+            type: String,
+        ): List<BandcampDiscographyItem> =
+            discography.filter { it.type == type }
+
+        private fun discographyItem(item: JsonObject): BandcampDiscographyItem = BandcampDiscographyItem(
+            type = item.getString("item_type"),
+            title = item.getString("title"),
+            artist = item.getString("band_name", ""),
+            artistId = item.getLong("band_id"),
+            itemId = item.getLong("item_id"),
+            artId = item.getLong("art_id"),
+        )
     }
 }

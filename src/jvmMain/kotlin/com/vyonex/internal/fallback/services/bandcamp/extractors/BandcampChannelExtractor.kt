@@ -13,8 +13,8 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.linkhandler.ReadyChannelTabListLinkHandler
+import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsPayload
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampChannelTabLinkHandlerFactory
-import com.vyonex.internal.json.JsonObject
 import org.jsoup.Jsoup
 import java.io.IOException
 
@@ -22,28 +22,28 @@ public class BandcampChannelExtractor(
     service: StreamingService,
     linkHandler: ListLinkHandler,
 ) : ChannelExtractor(service, linkHandler) {
-    private var artist: JsonObject? = null
+    private var artist: BandcampArtistDetailsPayload? = null
     private var downloader: Downloader? = null
 
     @Throws(IOException::class, ExtractionException::class)
     override fun onFetchPage(downloader: Downloader) {
-        artist = BandcampExtractorHelper.getArtistDetails(downloader, id)
+        artist = BandcampExtractorHelper.getArtistDetailsPayload(downloader, id)
         this.downloader = downloader
     }
 
     @Throws(ParsingException::class)
-    override fun getName(): String = details().getString("name")
+    override fun getName(): String = details().name
         ?.takeIf(String::isNotBlank)
         ?: throw ParsingException("Artist has no name")
 
-    override fun getDescription(): String = artist?.getString("bio", "") ?: ""
+    override fun getDescription(): String = artist?.bio ?: ""
 
     override fun getAvatars(): List<Image> =
-        BandcampExtractorHelper.getImagesFromImageId(artist?.getLong("bio_image_id") ?: 0, false)
+        BandcampExtractorHelper.getImagesFromImageId(artist?.bioImageId ?: 0, false)
 
     @Throws(ParsingException::class)
     override fun getBanners(): List<Image> {
-        val artistUrl = artist?.getString("bandcamp_url")
+        val artistUrl = artist?.url
             ?.takeIf(String::isNotBlank)
             ?: return emptyList()
         val pageDownloader = downloader ?: return emptyList()
@@ -64,18 +64,16 @@ public class BandcampChannelExtractor(
 
     @Throws(ParsingException::class)
     override fun getTabs(): List<ListLinkHandler> {
-        val discography = artist?.getArray("discography") ?: return emptyList()
-        val types = discography.filterIsInstance<JsonObject>()
-            .mapNotNull { item ->
-                when (item.getString("item_type")) {
-                    "track" -> ChannelTabs.TRACKS
-                    "album" -> ChannelTabs.ALBUMS
-                    else -> null
-                }
+        val discography = artist?.discography ?: return emptyList()
+        val types = discography.mapNotNull { item ->
+            when (item.type) {
+                "track" -> ChannelTabs.TRACKS
+                "album" -> ChannelTabs.ALBUMS
+                else -> null
             }
-            .distinct()
+        }.distinct()
         val builder = ReadyChannelTabListLinkHandler.ChannelTabExtractorBuilder { tabService, handler ->
-            BandcampChannelTabExtractor.fromDiscography(tabService, handler, discography)
+            BandcampChannelTabExtractor.fromDiscographyPayload(tabService, handler, discography)
         }
         return types.map { type ->
             ReadyChannelTabListLinkHandler(
@@ -100,6 +98,6 @@ public class BandcampChannelExtractor(
     override fun isVerified(): Boolean = false
 
     @Throws(ParsingException::class)
-    private fun details(): JsonObject = artist
+    private fun details(): BandcampArtistDetailsPayload = artist
         ?: throw ParsingException("Artist details have not been fetched")
 }

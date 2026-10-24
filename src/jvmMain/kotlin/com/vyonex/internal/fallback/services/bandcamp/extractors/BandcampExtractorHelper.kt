@@ -8,6 +8,9 @@ import com.vyonex.internal.fallback.VyonEx
 import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsPayload
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampUrlParser
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampRadioUrlParser
@@ -61,21 +64,32 @@ public object BandcampExtractorHelper {
     @JvmStatic
     @Throws(ParsingException::class)
     public fun getArtistDetails(downloader: Downloader, id: String): JsonObject {
+        try {
+            return JsonParser.`object`().from(getArtistDetailsSource(downloader, id))
+        } catch (error: JsonParserException) {
+            throw ParsingException("Could not load Bandcamp artist details", error)
+        }
+    }
+
+    internal fun getArtistDetailsPayload(downloader: Downloader, id: String): BandcampArtistDetailsPayload =
+        try {
+            BandcampArtistDetailsParser.parse(getArtistDetailsSource(downloader, id))
+        } catch (error: BandcampArtistDetailsParseException) {
+            throw ParsingException("Could not load Bandcamp artist details", error)
+        }
+
+    internal fun getArtistDetailsPayload(id: String): BandcampArtistDetailsPayload =
+        getArtistDetailsPayload(currentDownloader(), id)
+
+    private fun getArtistDetailsSource(downloader: Downloader, id: String): String {
         val payload = JsonWriter.string().`object`().value("band_id", id).end().done()
             .toByteArray(StandardCharsets.UTF_8)
-        try {
-            return JsonParser.`object`().from(
-                downloader.postWithContentTypeJson(
-                    "$BASE_API_URL/mobile/22/band_details",
-                    emptyMap(),
-                    payload,
-                ).responseBody(),
-            )
+        return try {
+            downloader.postWithContentTypeJson("$BASE_API_URL/mobile/22/band_details", emptyMap(), payload)
+                .responseBody()
         } catch (error: IOException) {
             throw ParsingException("Could not load Bandcamp artist details", error)
         } catch (error: ReCaptchaException) {
-            throw ParsingException("Could not load Bandcamp artist details", error)
-        } catch (error: JsonParserException) {
             throw ParsingException("Could not load Bandcamp artist details", error)
         }
     }
