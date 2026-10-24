@@ -16,6 +16,7 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeChannelHelper;
+import com.vyonex.internal.fallback.services.youtube.YoutubeContinuationTokenParser;
 import com.vyonex.internal.fallback.services.youtube.linkHandler.YoutubeChannelTabLinkHandlerFactory;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
@@ -347,8 +348,7 @@ public class YoutubeChannelTabExtractor extends ChannelTabExtractor {
     private Page nextPage(@Nullable final JsonObject renderer, final List<String> channelData)
             throws IOException, ExtractionException {
         if (renderer == null) return null;
-        final String token = renderer.getObject("continuationEndpoint")
-                .getObject("continuationCommand").getString("token");
+        final String token = YoutubeContinuationTokenParser.INSTANCE.parse(JsonWriter.string(renderer));
         if (!has(token)) return null;
         final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(getExtractorLocalization(),
                         getExtractorContentCountry()).value("continuation", token).done())

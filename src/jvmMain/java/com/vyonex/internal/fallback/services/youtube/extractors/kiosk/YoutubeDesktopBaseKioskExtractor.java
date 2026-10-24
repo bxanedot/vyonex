@@ -17,6 +17,7 @@ import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeChannelHelper;
+import com.vyonex.internal.fallback.services.youtube.YoutubeContinuationTokenParser;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.youtube.extractors.YoutubeStreamInfoItemLockupExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
@@ -193,9 +194,8 @@ public class YoutubeDesktopBaseKioskExtractor extends KioskExtractor<StreamInfoI
         if (entries.isEmpty()) return null;
         final JsonObject last = entries.getObject(entries.size() - 1);
         if (!last.has("continuationItemRenderer")) return null;
-        final String token = last.getObject("continuationItemRenderer")
-                .getObject("continuationEndpoint").getObject("continuationCommand")
-                .getString("token");
+        final String token = YoutubeContinuationTokenParser.INSTANCE.parse(
+                JsonWriter.string(last.getObject("continuationItemRenderer")));
         if (token == null || token.isBlank()) return null;
 
         final JsonObject client = new JsonObject();
