@@ -38,6 +38,7 @@ kotlin {
             implementation("dev.whyoleg.cryptography:cryptography-core:0.6.0")
             implementation("dev.whyoleg.cryptography:cryptography-provider-optimal:0.6.0")
             api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+            implementation("io.github.dokar3:quickjs-kt:1.0.14")
         }
 
         commonTest.dependencies {
@@ -51,7 +52,6 @@ kotlin {
             api("io.ktor:ktor-client-okhttp:3.5.2")
             api("io.ktor:ktor-client-content-negotiation:3.5.2")
             api("io.ktor:ktor-serialization-kotlinx-json:3.5.2")
-            implementation("io.github.dokar3:quickjs-kt:1.0.14")
             implementation("org.jsoup:jsoup:1.22.2")
             implementation("com.google.code.findbugs:jsr305:3.0.2")
             implementation("com.google.protobuf:protobuf-javalite:4.35.0")

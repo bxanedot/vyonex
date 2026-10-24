@@ -9,20 +9,20 @@ Ship VyonEx as one Kotlin Multiplatform Gradle module that remains usable from J
 - The repository now uses Kotlin Multiplatform 2.4.21, Gradle 9.8.2, and a JDK 27 toolchain; JVM bytecode targets Java 26.
 - Public adapters currently expose JVM-only `java.io.File` and OkHttp engine types.
 - The source tree contains 213 Java files and 124 Kotlin files. The fallback extractor relies on JVM-only Java APIs and engines, while parts of the primary YouTube path are already Kotlin and use Ktor.
-- Common code cannot import Java sources, Rhino, QuickJS-JVM, ICU4J, or the Ktor OkHttp engine. Those implementations need platform-specific boundaries or replacements before they can move to `commonMain`.
+- Common code cannot import Java sources, Rhino, ICU4J, or the Ktor OkHttp engine. The existing QuickJS-KT dependency supports Kotlin/Native, so its runtime can be shared from `commonMain`; Rhino-dependent parsing still needs a platform boundary or replacement.
 - This checkout runs on Windows. Kotlin/Native configures iOS targets here, but building and linking iOS frameworks requires a macOS host with Apple tooling.
 - Kotlin's published compatibility table lists Gradle through 9.7.0 for plugin 2.4.21; this project uses Gradle 9.8.2 to run on JDK 27. JVM verification passes locally, and macOS CI must verify native builds.
 - Preserve Git history, Maven coordinates, service URLs, the GPL license, and upstream notices until each derived source/data slice has its tested replacement.
 
 ## Approaches considered
 
-1. **One KMP module with shared models and platform adapters (recommended).** Keep the existing JVM surface on `jvmMain`, move portable contracts and extraction logic into `commonMain`, and use Darwin/JavaScriptCore implementations for iOS-only capabilities. Publish JVM and iOS variants from the existing `vyonex` artifact. This keeps one dependency and avoids rewriting platform-specific code into a lowest-common-denominator implementation.
+1. **One KMP module with shared models and platform adapters (recommended).** Keep the existing JVM surface on `jvmMain`, move portable contracts and extraction logic into `commonMain`, and use Ktor Darwin for iOS HTTP while sharing the KMP QuickJS runtime. Publish JVM and iOS variants from the existing `vyonex` artifact. This keeps one dependency and avoids rewriting platform-specific code into a lowest-common-denominator implementation.
 2. **Separate JVM and iOS implementations.** Add an iOS facade alongside the current library and duplicate extraction orchestration. This is quicker initially but drifts and makes feature parity harder to verify.
 3. **A new iOS-only artifact.** Leave the JVM project untouched and publish another dependency. This conflicts with the single-project and single-dependency goal.
 
 ## Chosen design
 
-Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; add common APIs in compatible increments and use platform adapters for filesystem, HTTP, and JavaScript runtimes. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. Use an iOS JavaScriptCore adapter for script-backed playback, leaving the existing JVM runtime adapters in `jvmMain` until replacements pass. The first migration slice currently shares only the value/config types; the extraction facade remains JVM-only.
+Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; add common APIs in compatible increments and use platform adapters for filesystem and HTTP. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. The QuickJS-KT runtime now lives in `commonMain`; Rhino-dependent parsing and the public extraction facade still need tested KMP ports before iOS extraction is complete.
 
 Move shared value types first, then the YouTube primary path and its platform services, then non-YouTube services, YouTube fallback, and bundled assets. The JVM target remains functional throughout the migration. A source or attribution notice is retired only after its replacement passes offline compatibility tests on the targets it serves.
 
