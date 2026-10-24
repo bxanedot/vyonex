@@ -14,6 +14,7 @@ import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.localization.Localization
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventParseException
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCRecordingMapper
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCStreamLinkHandlerFactory
 import com.vyonex.internal.fallback.stream.AudioStream
@@ -30,6 +31,7 @@ public class MediaCCCStreamExtractor(
     linkHandler: LinkHandler,
 ) : StreamExtractor(service, linkHandler) {
     private lateinit var event: MediaCCCEventPayload
+    private val recordings get() = MediaCCCRecordingMapper.map(event.recordings)
     private lateinit var conferenceId: String
     private var conferenceLogo: String? = null
 
@@ -55,13 +57,11 @@ public class MediaCCCStreamExtractor(
 
     @Throws(ExtractionException::class)
     override fun getAudioStreams(): List<AudioStream> = buildList {
-        for (recording in event.recordings.orEmpty()) {
-            val mimeType = recording.mimeType.orEmpty()
-            if (!mimeType.startsWith("audio")) continue
+        for (recording in recordings.audio) {
             val stream = AudioStream.Builder()
                 .setId(recording.filename ?: Stream.ID_UNKNOWN)
-                .setContent(recording.recordingUrl.orEmpty(), true)
-                .setMediaFormat(audioFormat(mimeType))
+                .setContent(recording.url.orEmpty(), true)
+                .setMediaFormat(recording.formatSuffix?.let(MediaFormat::getFromSuffix))
                 .setAverageBitrate(AudioStream.UNKNOWN_BITRATE)
             val language = recording.language
             if (language != null && '-' !in language) {
@@ -73,28 +73,14 @@ public class MediaCCCStreamExtractor(
         }
     }
 
-    private fun audioFormat(mimeType: String): MediaFormat? = when {
-        mimeType.endsWith("opus") -> MediaFormat.OPUS
-        mimeType.endsWith("mpeg") -> MediaFormat.MP3
-        mimeType.endsWith("ogg") -> MediaFormat.OGG
-        else -> null
-    }
-
     override fun getVideoStreams(): List<VideoStream> = buildList {
-        for (recording in event.recordings.orEmpty()) {
-            val mimeType = recording.mimeType.orEmpty()
-            if (!mimeType.startsWith("video")) continue
-            val format = when {
-                mimeType.endsWith("webm") -> MediaFormat.WEBM
-                mimeType.endsWith("mp4") -> MediaFormat.MPEG_4
-                else -> null
-            }
+        for (recording in recordings.video) {
             add(
                 VideoStream.Builder()
                     .setId(recording.filename ?: Stream.ID_UNKNOWN)
-                    .setContent(recording.recordingUrl.orEmpty(), true)
+                    .setContent(recording.url.orEmpty(), true)
                     .setIsVideoOnly(false)
-                    .setMediaFormat(format)
+                    .setMediaFormat(recording.formatSuffix?.let(MediaFormat::getFromSuffix))
                     .setResolution("${recording.height ?: 0}p")
                     .build(),
             )
