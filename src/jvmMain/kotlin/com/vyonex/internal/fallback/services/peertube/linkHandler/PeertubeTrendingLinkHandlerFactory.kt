@@ -24,13 +24,13 @@ public class PeertubeTrendingLinkHandlerFactory private constructor() : ListLink
 
     @Throws(ParsingException::class)
     override fun getId(value: String): String {
-        val url = PeertubeUrl.parse(value)
-        val path = url.rawPath.orEmpty()
+        val url = PeertubeUrl.parse(value) ?: throw ParsingException("Invalid PeerTube URL: $value")
+        val path = url.path
         aliasFor(path)?.let { return it }
         if (!path.endsWith("/api/v1/videos")) {
             throw ParsingException("URL does not identify a PeerTube kiosk")
         }
-        val query = parseQuery(url.rawQuery)
+        val query = parseQuery(url.query)
         return when (query) {
             mapOf("sort" to "-trending") -> KIOSK_TRENDING
             mapOf("sort" to "-likes") -> KIOSK_MOST_LIKED

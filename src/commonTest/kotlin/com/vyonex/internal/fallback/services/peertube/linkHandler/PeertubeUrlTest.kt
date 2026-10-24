@@ -1,0 +1,36 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
+// bxane
+package com.vyonex.internal.fallback.services.peertube.linkHandler
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class PeertubeUrlTest {
+    @Test
+    fun parsesHttpUrlsWithoutDecodingRouteSegments() {
+        assertEquals(
+            PeertubeUrl.Parsed("/videos/watch/a%2Fb", "start=1&filter=x%26y"),
+            PeertubeUrl.parse("https://tube.example/videos/watch/a%2Fb?start=1&filter=x%26y"),
+        )
+        assertEquals(
+            listOf("videos", "watch", "a%2Fb"),
+            PeertubeUrl.segments("http://tube.example/videos/watch/a%2Fb"),
+        )
+    }
+
+    @Test
+    fun acceptsOnlyAbsoluteHttpUrlsWithoutCredentialsOrMalformedEscapes() {
+        assertTrue(PeertubeUrl.accepts("https://tube.example/w/video-id"))
+        assertNull(PeertubeUrl.parse("tube.example/w/video-id"))
+        assertNull(PeertubeUrl.parse("ftp://tube.example/w/video-id"))
+        assertNull(PeertubeUrl.parse("https://user@tube.example/w/video-id"))
+        assertNull(PeertubeUrl.parse("https://tube.example/w/%"))
+        assertNull(PeertubeUrl.parse("https://tube.example/a b"))
+        assertNull(PeertubeUrl.parse("https://tube.example\\w/video-id"))
+        assertFalse(PeertubeUrl.accepts("https:///w/video-id"))
+    }
+}
