@@ -14,6 +14,7 @@ import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.ContentCountry;
 import com.vyonex.internal.fallback.localization.Localization;
@@ -106,6 +107,23 @@ class PeertubeCommentsExtractorTest {
         assertNull(nested.getNextPage());
         assertEquals(List.of(commentsUrl + "?start=0&count=12", threadUrl),
                 downloader.requestedUrls);
+    }
+
+    @Test
+    void wrapsMalformedCommentResponseAsParsingFailure() throws Exception {
+        final String commentsUrl = "https://tube.example/api/v1/videos/video-1/comment-threads";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                commentsUrl + "?start=0&count=12", "not-json"));
+        VyonEx.init(downloader);
+        final PeertubeService service = new PeertubeService(3,
+                new PeertubeInstance("https://tube.example", "Offline"));
+        final CommentsExtractor extractor = service.getCommentsExtractor(service.getCommentsLHFactory()
+                .fromUrl("https://tube.example/videos/watch/video-1"));
+
+        final ParsingException error = org.junit.jupiter.api.Assertions.assertThrows(
+                ParsingException.class, extractor::getInitialPage);
+
+        assertEquals("Invalid PeerTube comment data response", error.getMessage());
     }
 
     private static final class StubDownloader extends Downloader {

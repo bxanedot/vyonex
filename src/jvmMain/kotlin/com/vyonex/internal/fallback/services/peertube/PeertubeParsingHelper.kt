@@ -22,6 +22,7 @@ import com.vyonex.internal.json.JsonObject
 import com.vyonex.internal.json.JsonParser
 import com.vyonex.internal.json.JsonParserException
 import com.vyonex.internal.json.JsonWriter
+import kotlinx.serialization.json.JsonObject as JsonTreeObject
 import java.net.URI
 import java.util.Collections
 
@@ -41,6 +42,17 @@ public class PeertubeParsingHelper private constructor() {
         @JvmStatic
         @Throws(ExtractionException::class)
         public fun readApiObject(response: Response?, resource: String): JsonObject {
+            val body = readApiBody(response, resource)
+            return try {
+                JsonParser.`object`().from(body)
+            } catch (error: JsonParserException) {
+                throw ParsingException("Invalid PeerTube $resource response", error)
+            }
+        }
+
+        @JvmStatic
+        @Throws(ExtractionException::class)
+        public fun readApiBody(response: Response?, resource: String): String {
             if (response == null) throw ExtractionException("PeerTube returned no $resource")
             val status = response.responseCode()
             if (status !in 200..299) {
@@ -48,11 +60,7 @@ public class PeertubeParsingHelper private constructor() {
             }
             val body = response.responseBody()
             if (body.isBlank()) throw ExtractionException("PeerTube returned no $resource")
-            return try {
-                JsonParser.`object`().from(body)
-            } catch (error: JsonParserException) {
-                throw ParsingException("Invalid PeerTube $resource response", error)
-            }
+            return body
         }
 
         @JvmStatic
@@ -112,6 +120,13 @@ public class PeertubeParsingHelper private constructor() {
             baseUrl: String,
             item: JsonObject,
         ): List<Image> = profileImages(baseUrl, item, "avatars", "avatar")
+
+        internal fun getAvatarsFromOwnerAccountOrVideoChannelObject(
+            baseUrl: String,
+            item: JsonTreeObject,
+        ): List<Image> = toImages(
+            PeertubeImageParser.profileImages(item, "avatars", "avatar"), baseUrl,
+        )
 
         @JvmStatic
         public fun getBannersFromAccountOrVideoChannelObject(

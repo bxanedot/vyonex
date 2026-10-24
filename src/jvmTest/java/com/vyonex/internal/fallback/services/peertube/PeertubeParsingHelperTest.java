@@ -62,6 +62,10 @@ class PeertubeParsingHelperTest {
 
     @Test
     void parsesOnlySuccessfulNonemptyJsonResponses() throws Exception {
+        final Response response = new Response(200, "OK", Map.of(), "not-json", null);
+        assertEquals("not-json", PeertubeParsingHelper.readApiBody(response, "comment data"));
+        assertThrows(ParsingException.class,
+                () -> PeertubeParsingHelper.readApiObject(response, "search response"));
         assertEquals("ok", PeertubeParsingHelper.readApiObject(
                 new Response(200, "OK", Map.of(), "{\"status\":\"ok\"}", null),
                 "search response").getString("status"));
