@@ -27,6 +27,11 @@ class PlatformExtractorDependenciesTest {
         assertEquals("player-script", dependencies.readPlayer("player.js"))
     }
 
+    @Test
+    fun legacyFallbackInitializationRemainsAvailableWithoutANewPipeBackend() {
+        VyonEx(TestHost()).initializeFallback()
+    }
+
     private class TestHost : VyonExHost {
         override suspend fun session() = VyonExSession(null, null, "US", "en")
         override val configStore = object : VyonExConfigStore {
