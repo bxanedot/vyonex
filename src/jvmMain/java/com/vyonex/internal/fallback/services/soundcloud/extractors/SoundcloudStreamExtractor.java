@@ -19,6 +19,7 @@ import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioCandidate;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioFormat;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTagParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscoding;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscodingMapper;
 import com.vyonex.internal.fallback.stream.AudioStream;
@@ -213,26 +214,6 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
     @Override public List<String> getTags() { return parseTags(tagList); }
 
     static List<String> parseTags(final String input) {
-        if (input == null || input.isBlank()) return List.of();
-        final List<String> tags = new ArrayList<>();
-        final StringBuilder tag = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < input.length(); i++) {
-            final char c = input.charAt(i);
-            if (c == '\\' && i + 1 < input.length()
-                    && (input.charAt(i + 1) == '"' || input.charAt(i + 1) == '\\')) {
-                tag.append(input.charAt(++i));
-                continue;
-            }
-            if (c == '"') {
-                quoted = !quoted;
-            } else if (Character.isWhitespace(c) && !quoted) {
-                if (!tag.isEmpty()) { tags.add(tag.toString()); tag.setLength(0); }
-            } else {
-                tag.append(c);
-            }
-        }
-        if (!tag.isEmpty()) tags.add(tag.toString());
-        return List.copyOf(tags);
+        return List.copyOf(SoundcloudTagParser.INSTANCE.parse(input));
     }
 }
