@@ -7,6 +7,7 @@ import com.vyonex.internal.fallback.MediaFormat;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.stream.AudioTrackType;
 import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -115,23 +116,19 @@ public class ItagItem implements Serializable {
     public static ItagItem fromStreamFormat(final JsonObject format,
                                            @Nonnull final ItagType type)
             throws ParsingException {
-        final int id = format.getInt("itag");
-        final String mime = format.getString("mimeType", "").split(";", 2)[0].trim();
-        final MediaFormat mediaFormat = MediaFormat.getFromMimeType(mime);
-        if (mediaFormat == null) throw new ParsingException("Unsupported stream MIME type: " + mime);
+        final YoutubeFormatMetadata metadata = YoutubeFormatMetadataParser.INSTANCE.parse(
+                JsonWriter.string(format), type == ItagType.AUDIO);
+        final MediaFormat mediaFormat = MediaFormat.getFromMimeType(metadata.getMimeType());
+        if (mediaFormat == null) {
+            throw new ParsingException("Unsupported stream MIME type: " + metadata.getMimeType());
+        }
 
         if (type == ItagType.AUDIO) {
-            return new ItagItem(id, type, mediaFormat,
-                    format.getInt("averageBitrate", AVERAGE_BITRATE_UNKNOWN));
+            return new ItagItem(metadata.getId(), type, mediaFormat,
+                    metadata.getAverageBitrate());
         }
-
-        String resolution = format.getString("qualityLabel", "");
-        if (resolution.isBlank()) {
-            final int streamHeight = format.getInt("height", 0);
-            if (streamHeight > 0) resolution = streamHeight + "p";
-        }
-        return new ItagItem(id, type, mediaFormat, resolution,
-                format.getInt("fps", FPS_NOT_APPLICABLE_OR_UNKNOWN));
+        return new ItagItem(metadata.getId(), type, mediaFormat, metadata.getResolution(),
+                metadata.getFps());
     }
 
     @Nullable public MediaFormat getMediaFormat() { return mediaFormat; }
