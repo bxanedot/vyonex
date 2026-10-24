@@ -124,14 +124,17 @@ public object BandcampExtractorHelper {
     @JvmStatic
     @Throws(ParsingException::class)
     public fun getJsonAttribute(html: String, attribute: String): JsonObject {
-        val element = Jsoup.parse(html).getElementsByAttribute(attribute).firstOrNull()
-            ?: throw ParsingException("Page is missing $attribute data")
         return try {
-            JsonParser.`object`().from(element.attr(attribute))
+            JsonParser.`object`().from(getJsonAttributeText(html, attribute))
         } catch (error: JsonParserException) {
             throw ParsingException("Page contains invalid $attribute data", error)
         }
     }
+
+    @Throws(ParsingException::class)
+    internal fun getJsonAttributeText(html: String, attribute: String): String =
+        Jsoup.parse(html).getElementsByAttribute(attribute).firstOrNull()?.attr(attribute)
+            ?: throw ParsingException("Page is missing $attribute data")
 
     @JvmStatic
     public fun getImagesFromSearchResult(searchResult: Element): List<Image> =

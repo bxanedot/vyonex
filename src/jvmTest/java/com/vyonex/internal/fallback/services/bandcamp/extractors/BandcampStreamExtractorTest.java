@@ -92,6 +92,7 @@ class BandcampStreamExtractorTest {
     void distinguishesMissingAlbumTrackAndPaidTrackResponses() {
         assertThrows(ParsingException.class,
                 () -> fetch("{\"trackinfo\":[]}"));
+        assertThrows(ParsingException.class, () -> fetch("not json"));
         assertThrows(ExtractionException.class,
                 () -> fetch("{\"trackinfo\":[{},{}]}"));
         assertThrows(PaidContentException.class,
