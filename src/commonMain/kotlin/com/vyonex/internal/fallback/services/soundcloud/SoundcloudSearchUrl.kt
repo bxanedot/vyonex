@@ -21,4 +21,9 @@ internal object SoundcloudSearchUrl {
     fun suggestionsUrl(query: String, clientId: String): String =
         "${API_V2_BASE_URL}search/queries?q=${FormUrlEncoder.encode(query)}" +
             "&client_id=$clientId&limit=10"
+
+    fun withClientId(nextUrl: String, clientId: String): String {
+        if (nextUrl.isBlank() || nextUrl.contains("client_id=")) return nextUrl
+        return "$nextUrl${if (nextUrl.contains('?')) '&' else '?'}client_id=$clientId"
+    }
 }

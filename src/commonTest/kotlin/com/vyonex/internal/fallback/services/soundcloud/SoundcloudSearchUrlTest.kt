@@ -35,4 +35,22 @@ class SoundcloudSearchUrlTest {
             SoundcloudSearchUrl.suggestionsUrl("ambient & café", "offline-key"),
         )
     }
+
+    @Test
+    fun addsClientIdToPaginationLinksOnlyWhenMissing() {
+        assertEquals(
+            "https://api-v2.soundcloud.com/users/1/tracks?client_id=key",
+            SoundcloudSearchUrl.withClientId(
+                "https://api-v2.soundcloud.com/users/1/tracks", "key",
+            ),
+        )
+        assertEquals(
+            "https://api-v2.soundcloud.com/users/1/tracks?offset=10&client_id=key",
+            SoundcloudSearchUrl.withClientId(
+                "https://api-v2.soundcloud.com/users/1/tracks?offset=10", "key",
+            ),
+        )
+        val existing = "https://api-v2.soundcloud.com/users/1/tracks?client_id=existing"
+        assertEquals(existing, SoundcloudSearchUrl.withClientId(existing, "new"))
+    }
 }

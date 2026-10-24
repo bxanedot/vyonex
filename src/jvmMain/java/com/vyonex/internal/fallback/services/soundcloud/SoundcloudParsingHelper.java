@@ -308,7 +308,7 @@ public final class SoundcloudParsingHelper {
         if (next == null || next.isBlank()) return "";
         if (next.contains("client_id=")) return next;
         try {
-            return next + (next.contains("?") ? "&" : "?") + "client_id=" + clientId();
+            return SoundcloudSearchUrl.INSTANCE.withClientId(next, clientId());
         } catch (final Exception e) {
             return "";
         }
