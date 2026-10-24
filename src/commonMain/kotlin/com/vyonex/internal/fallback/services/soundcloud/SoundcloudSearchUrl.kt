@@ -6,13 +6,19 @@ package com.vyonex.internal.fallback.services.soundcloud
 import com.vyonex.internal.url.FormUrlEncoder
 
 internal object SoundcloudSearchUrl {
+    private const val API_V2_BASE_URL = "https://api-v2.soundcloud.com/"
+
     fun build(query: String, filters: List<String>, clientId: String, limit: Int): String {
         val selected = filters.firstOrNull()
         val suffix = when (selected) {
             "tracks", "users", "playlists" -> "/$selected"
             else -> ""
         }
-        return "https://api-v2.soundcloud.com/search$suffix?q=${FormUrlEncoder.encode(query)}" +
+        return "${API_V2_BASE_URL}search$suffix?q=${FormUrlEncoder.encode(query)}" +
             "&client_id=$clientId&limit=$limit&offset=0"
     }
+
+    fun suggestionsUrl(query: String, clientId: String): String =
+        "${API_V2_BASE_URL}search/queries?q=${FormUrlEncoder.encode(query)}" +
+            "&client_id=$clientId&limit=10"
 }

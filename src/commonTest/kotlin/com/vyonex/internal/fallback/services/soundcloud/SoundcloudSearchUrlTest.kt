@@ -26,4 +26,13 @@ class SoundcloudSearchUrlTest {
             )
         }
     }
+
+    @Test
+    fun buildsSuggestionUrlWithTheSameFormEncoding() {
+        assertEquals(
+            "https://api-v2.soundcloud.com/search/queries?q=ambient+%26+caf%C3%A9" +
+                "&client_id=offline-key&limit=10",
+            SoundcloudSearchUrl.suggestionsUrl("ambient & café", "offline-key"),
+        )
+    }
 }
