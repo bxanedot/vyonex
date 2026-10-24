@@ -5,16 +5,16 @@ package com.vyonex.internal.fallback.services.bandcamp.extractors
 
 import com.vyonex.internal.fallback.Image
 import com.vyonex.internal.fallback.comments.CommentsInfoItemExtractor
+import com.vyonex.internal.fallback.services.bandcamp.BandcampReviewPayload
 import com.vyonex.internal.fallback.stream.Description
-import com.vyonex.internal.json.JsonObject
 
-public class BandcampCommentsInfoItemExtractor(
-    review: JsonObject,
+internal class BandcampCommentsInfoItemExtractor(
+    review: BandcampReviewPayload,
     private val url: String?,
 ) : CommentsInfoItemExtractor {
-    private val text = review.getString("why", "")
-    private val uploaderName = review.getString("name", "")
-    private val avatarId = review.getLong("image_id")
+    private val text = review.text
+    private val uploaderName = review.uploaderName
+    private val avatarId = review.avatarId
 
     override fun getName(): String = getCommentText().content
 
