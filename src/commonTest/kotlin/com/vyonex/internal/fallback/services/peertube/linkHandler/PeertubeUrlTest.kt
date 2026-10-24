@@ -82,4 +82,12 @@ class PeertubeUrlTest {
             PeertubeUrl.parse("https://tube.example/api/v1/accounts"),
         )))
     }
+
+    @Test
+    fun mapsChannelTabsToTheirRouteSuffixes() {
+        assertEquals("/videos", PeertubeUrl.channelTabSuffix("videos"))
+        assertEquals("/video-channels", PeertubeUrl.channelTabSuffix("channels"))
+        assertEquals("/video-playlists", PeertubeUrl.channelTabSuffix("playlists"))
+        assertNull(PeertubeUrl.channelTabSuffix("unsupported"))
+    }
 }

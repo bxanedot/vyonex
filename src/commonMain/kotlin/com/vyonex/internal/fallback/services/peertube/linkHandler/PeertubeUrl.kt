@@ -68,5 +68,12 @@ internal object PeertubeUrl {
         return if (path.size > 2 && path[0] == "api" && path[1] == "v1") path.drop(2) else path
     }
 
+    fun channelTabSuffix(tab: String): String? = when (tab) {
+        "videos" -> "/videos"
+        "channels" -> "/video-channels"
+        "playlists" -> "/video-playlists"
+        else -> null
+    }
+
     fun accepts(value: String?): Boolean = parse(value) != null
 }
