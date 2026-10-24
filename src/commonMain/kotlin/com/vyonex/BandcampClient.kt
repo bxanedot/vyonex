@@ -38,9 +38,13 @@ internal class BandcampClient(private val httpClient: HttpClient) {
             throw IllegalStateException("Bandcamp track page failed with HTTP ${response.status.value}")
         }
         val page = BandcampTrackPageParser.parse(requireNotNull(response.body))
-        if (page.trackCount != 1 || !page.hasFile || page.audioUrl.isNullOrBlank()) {
+        if (page.trackCount != 1 || !page.hasFile) {
             throw IllegalStateException("Bandcamp track is unavailable")
         }
+        val audioUrl = page.audioUrl?.let { runCatching { Url(it) }.getOrNull() }
+        if (audioUrl == null || audioUrl.protocol.name != "https" || audioUrl.port != 443 ||
+            audioUrl.user != null || audioUrl.password != null
+        ) throw IllegalStateException("Bandcamp track returned an invalid audio URL")
         return page
     }
 

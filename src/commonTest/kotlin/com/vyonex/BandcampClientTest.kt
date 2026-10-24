@@ -111,6 +111,27 @@ class BandcampClientTest {
     }
 
     @Test
+    fun rejectsNonHttpsAndCredentialBearingAudioUrls() = runTest {
+        val client = HttpClient(MockEngine { request ->
+            val audioUrl = if (request.url.encodedPath.endsWith("file")) "file:///private/song.mp3" else "https://user:pass@audio.example/song.mp3"
+            respond(
+                ByteReadChannel("""{"trackinfo":[{"file":{"mp3-128":"$audioUrl"}}]}"""),
+                HttpStatusCode.OK,
+            )
+        })
+        try {
+            assertFailsWith<IllegalStateException> {
+                BandcampClient(client).track("https://artist.bandcamp.com/track/file")
+            }
+            assertFailsWith<IllegalStateException> {
+                BandcampClient(client).track("https://artist.bandcamp.com/track/credentials")
+            }
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
     fun postsAutocompleteRequestAndParsesSuggestions() = runTest {
         var requestSeen = false
         val client = HttpClient(MockEngine { request ->
