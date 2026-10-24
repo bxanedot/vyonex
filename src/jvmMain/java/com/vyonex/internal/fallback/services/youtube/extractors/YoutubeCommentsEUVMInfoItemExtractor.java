@@ -9,12 +9,14 @@ import com.vyonex.internal.fallback.comments.CommentsInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.localization.TimeAgoParser;
+import com.vyonex.internal.fallback.services.youtube.YoutubeContinuationTokenParser;
 import com.vyonex.internal.fallback.services.youtube.YoutubeDescriptionHelper;
 import com.vyonex.internal.fallback.services.youtube.YoutubeParsingHelper;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.utils.Utils;
 import com.vyonex.internal.json.JsonArray;
 import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.json.JsonWriter;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -154,9 +156,8 @@ class YoutubeCommentsEUVMInfoItemExtractor implements CommentsInfoItemExtractor 
     public Page getReplies() throws ParsingException {
         if (replies == null) return null;
         for (final JsonObject content : replies.getArray("contents").streamAsJsonObjects().toList()) {
-            final String token = content.getObject("continuationItemRenderer")
-                    .getObject("continuationEndpoint").getObject("continuationCommand")
-                    .getString("token");
+            final String token = YoutubeContinuationTokenParser.INSTANCE.parse(
+                    JsonWriter.string(content.getObject("continuationItemRenderer")));
             if (token != null && !token.isBlank()) return new Page(videoUrl, token);
         }
         throw new ParsingException("Comment replies continuation is missing");
