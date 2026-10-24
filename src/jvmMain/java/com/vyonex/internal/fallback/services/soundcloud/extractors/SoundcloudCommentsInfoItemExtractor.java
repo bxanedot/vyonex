@@ -7,13 +7,13 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.comments.CommentsInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudCommentInfoItem;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
 import com.vyonex.internal.fallback.stream.Description;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.Objects;
 
 public final class SoundcloudCommentsInfoItemExtractor implements CommentsInfoItemExtractor {
     @Nullable private final String commentId;
@@ -27,17 +27,18 @@ public final class SoundcloudCommentsInfoItemExtractor implements CommentsInfoIt
     private final String name;
     private final String url;
 
-    public SoundcloudCommentsInfoItemExtractor(final JsonObject comment, final String url) {
-        final JsonObject user = comment.getObject("user");
-        commentId = Objects.toString(comment.get("id"), null);
-        text = comment.getString("body", "");
-        uploaderName = user.getString("username", "");
-        avatarUrl = user.getString("avatar_url");
-        uploaderVerified = user.getBoolean("verified");
-        streamPosition = comment.getInt("timestamp") / 1000;
-        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
-        textualUploadDate = comment.getString("created_at", "");
-        name = user.getString("permalink", "");
+    public SoundcloudCommentsInfoItemExtractor(final SoundcloudCommentInfoItem comment,
+                                               final String url) {
+        final SoundcloudProfileInfoItem user = comment.getUser();
+        commentId = comment.getId();
+        text = comment.getBody();
+        uploaderName = user.getName();
+        avatarUrl = user.getAvatarUrl();
+        uploaderVerified = user.getVerified();
+        streamPosition = (int) comment.getTimestampMillis() / 1000;
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getPermalinkUrl());
+        textualUploadDate = comment.getCreatedAt();
+        name = comment.getName();
         this.url = url;
     }
 

@@ -69,14 +69,17 @@ class SoundcloudMappingTest {
         assertEquals(1, playlist.getStreamCount());
         assertEquals("https://images.example/song.jpg", playlist.getThumbnails().get(0).getUrl());
 
-        final var commentJson = JsonParser.object().from("""
-                {"id":9,"body":"Nice","timestamp":4200,"created_at":"2026-10-22T12:30:00Z",
-                 "user":{"username":"Alice","permalink":"alice",
-                   "permalink_url":"http://soundcloud.com/alice",
-                   "avatar_url":"https://images.example/alice.jpg","verified":true}}
-                """);
+        final SoundcloudCommentInfoItem commentPayload = SoundcloudCommentsPageParser.INSTANCE
+                .parse("""
+                        {"collection":[{"id":9,"body":"Nice","timestamp":4200,
+                         "created_at":"2026-10-22T12:30:00Z","user":{"username":"Alice",
+                           "permalink":"alice","permalink_url":"http://soundcloud.com/alice",
+                           "avatar_url":"https://images.example/alice.jpg","verified":true}}]}
+                        """)
+                .getComments().get(0);
         final SoundcloudCommentsInfoItemExtractor comment =
-                new SoundcloudCommentsInfoItemExtractor(commentJson, "https://soundcloud.com/comment/9");
+                new SoundcloudCommentsInfoItemExtractor(commentPayload,
+                        "https://soundcloud.com/comment/9");
         assertEquals("9", comment.getCommentId());
         assertEquals("Nice", comment.getCommentText().getContent());
         assertEquals("Alice", comment.getUploaderName());

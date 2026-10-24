@@ -261,7 +261,9 @@ class SoundcloudServiceExtractionTest {
                 SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
                 commentsUrl, """
                 {"collection":[{"id":5,"body":"Great","timestamp":3500,
-                 "created_at":"2026-10-22T12:30:00Z","user":{"username":"Alice"}}],
+                 "created_at":"2026-10-22T12:30:00Z","user":{"username":"Alice",
+                 "permalink":"alice","permalink_url":"http://soundcloud.com/alice",
+                 "avatar_url":"http://images.example/alice.jpg","verified":true}}],
                  "next_href":"https://api-v2.soundcloud.com/tracks/42/comments?offset=10"}
                 """, nextCommentsUrl, """
                 {"collection":[{"id":6,"body":"Thanks","timestamp":4000,
@@ -278,6 +280,11 @@ class SoundcloudServiceExtractionTest {
             assertEquals(1, page.getItems().size());
             assertEquals("5", page.getItems().get(0).getCommentId());
             assertEquals("Great", page.getItems().get(0).getCommentText().getContent());
+            assertEquals("alice", page.getItems().get(0).getName());
+            assertEquals("https://soundcloud.com/alice", page.getItems().get(0).getUploaderUrl());
+            assertEquals("https://images.example/alice.jpg",
+                    page.getItems().get(0).getUploaderAvatars().get(0).getUrl());
+            assertEquals(3, page.getItems().get(0).getStreamPosition());
             assertEquals(nextCommentsUrl, page.getNextPage().getUrl());
             final var nextPage = extractor.getPage(page.getNextPage());
             assertEquals("6", nextPage.getItems().get(0).getCommentId());

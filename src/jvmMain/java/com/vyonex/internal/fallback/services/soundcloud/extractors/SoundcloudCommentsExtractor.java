@@ -14,9 +14,9 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudCommentsPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudCommentsPagePayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudCommentInfoItem;
 
 import java.io.IOException;
 
@@ -47,19 +47,17 @@ public final class SoundcloudCommentsExtractor extends CommentsExtractor {
             throw new IOException("SoundCloud comments request failed with HTTP "
                     + response.responseCode());
         }
-        final JsonObject data;
+        final SoundcloudCommentsPagePayload data;
         try {
-            data = JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
+            data = SoundcloudCommentsPageParser.INSTANCE.parse(response.responseBody());
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud comments response", e);
         }
         final CommentsInfoItemsCollector items = new CommentsInfoItemsCollector(getServiceId());
-        for (final Object value : data.getArray("collection")) {
-            if (value instanceof JsonObject) {
-                items.commit(new SoundcloudCommentsInfoItemExtractor((JsonObject) value, getUrl()));
-            }
+        for (final SoundcloudCommentInfoItem comment : data.getComments()) {
+            items.commit(new SoundcloudCommentsInfoItemExtractor(comment, getUrl()));
         }
-        final String next = SoundcloudParsingHelper.getNextPageUrl(data);
+        final String next = SoundcloudParsingHelper.getNextPageUrl(data.getNextPageUrl());
         return new InfoItemsPage<>(items, next.isBlank() ? null : new Page(next));
     }
 }
