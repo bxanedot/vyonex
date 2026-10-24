@@ -4,11 +4,11 @@ package com.vyonex.internal.primary
 import com.vyonex.internal.primary.models.YouTubeLocale
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class InnerTubeSessionContractTest {
     @Test

@@ -3,7 +3,7 @@ package com.vyonex.internal.primary.models
 
 import java.util.Locale
 
-internal fun defaultYouTubeLocale(): YouTubeLocale = systemYouTubeLocale(Locale.getDefault())
+internal actual fun defaultYouTubeLocale(): YouTubeLocale = systemYouTubeLocale(Locale.getDefault())
 
 internal fun systemYouTubeLocale(locale: Locale): YouTubeLocale =
     YouTubeLocale(
