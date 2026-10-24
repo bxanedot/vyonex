@@ -8,7 +8,6 @@ import com.vyonex.internal.primary.w
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.LinkedHashMap
 
 /** Resolves player signature and throttling transforms using VyonEx-owned parsing. */
 internal class PlayerCipherChallengeSolver(
@@ -146,13 +145,8 @@ internal class PlayerCipherChallengeSolver(
         playerCode: String,
         requestOrder: List<Pair<String, List<String>>>,
     ): SolveResult {
-        val parsed = PlayerScriptParser.parse(playerCode)
-        if (parsed.nFunctionCode == null && parsed.sigFunctionCode == null) {
-            return SolveResult(emptyMap(), emptyMap())
-        }
-
-        val parserScript = PlayerScriptParser.generateSolverScript(parsed)
-        if (parserScript.isBlank()) return SolveResult(emptyMap(), emptyMap())
+        val parserScript = legacyPlayerCipherSolverScript(playerCode)?.takeIf(String::isNotBlank)
+            ?: return SolveResult(emptyMap(), emptyMap())
         val isolatedScript =
             """
             (function() {
