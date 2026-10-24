@@ -27,7 +27,18 @@ public object MediaCCCParsingHelper {
     public fun getLiveStreams(
         downloader: Downloader,
         localization: Localization,
-    ): JsonArray {
+    ): JsonArray = try {
+        JsonParser.array().from(fetchLiveStreamsBody(downloader, localization))
+    } catch (error: JsonParserException) {
+        throw ExtractionException("Could not parse live stream data.", error)
+    }
+
+    @JvmStatic
+    @Throws(ExtractionException::class)
+    public fun fetchLiveStreamsBody(
+        downloader: Downloader,
+        localization: Localization,
+    ): String {
         try {
             val response = downloader.get(LIVE_STREAMS_URL, localization)
                 ?: throw ExtractionException("No live stream response received")
@@ -36,13 +47,11 @@ public object MediaCCCParsingHelper {
                     "Live stream request failed with HTTP ${response.responseCode()}",
                 )
             }
-            return JsonParser.array().from(response.responseBody())
+            return response.responseBody()
         } catch (error: IOException) {
             throw ExtractionException("Could not fetch live stream data.", error)
         } catch (error: ReCaptchaException) {
             throw ExtractionException("Could not fetch live stream data.", error)
-        } catch (error: JsonParserException) {
-            throw ExtractionException("Could not parse live stream data.", error)
         }
     }
 
