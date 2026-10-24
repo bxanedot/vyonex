@@ -63,6 +63,17 @@ class SoundcloudSearchUrlTest {
     }
 
     @Test
+    fun buildsEmbedPlayerUrlWithFormEncodedApiUrl() {
+        assertEquals(
+            "https://w.soundcloud.com/player/?url=" +
+                "https%3A%2F%2Fapi.soundcloud.com%2Ftracks%2F42%3Fsecret_token%3Dx+y",
+            SoundcloudSearchUrl.embedPlayerUrl(
+                "https://api.soundcloud.com/tracks/42?secret_token=x y",
+            ),
+        )
+    }
+
+    @Test
     fun addsClientIdToPaginationLinksOnlyWhenMissing() {
         assertEquals(
             "https://api-v2.soundcloud.com/users/1/tracks?client_id=key",

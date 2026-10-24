@@ -28,8 +28,6 @@ import org.jsoup.nodes.Element;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -123,7 +121,7 @@ public final class SoundcloudParsingHelper {
     public static String resolveUrlWithEmbedPlayer(final String apiUrl)
             throws IOException, ReCaptchaException {
         final Response response = VyonEx.getDownloader().get(
-                "https://w.soundcloud.com/player/?url=" + encode(apiUrl));
+                SoundcloudSearchUrl.INSTANCE.embedPlayerUrl(apiUrl));
         if (response == null) throw new IOException("SoundCloud embed returned no response");
         final Element canonical = Jsoup.parse(response.responseBody())
                 .selectFirst("link[rel=canonical]");
@@ -330,10 +328,6 @@ public final class SoundcloudParsingHelper {
         } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud page URL", e);
         }
-    }
-
-    private static String encode(final String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private static String https(final String value) {
