@@ -12,10 +12,9 @@ import com.vyonex.internal.fallback.kiosk.KioskExtractor
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.stream.StreamInfoItem
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioPageParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioPageParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioResultsMissingException
 import java.io.IOException
 
 public class BandcampRadioExtractor(
@@ -32,15 +31,14 @@ public class BandcampRadioExtractor(
         if (response.responseCode() >= 400) {
             throw IOException("Bandcamp radio request failed with HTTP ${response.responseCode()}")
         }
-        val payload = try {
-            JsonParser.`object`().from(response.responseBody())
-        } catch (error: JsonParserException) {
+        val parsed = try {
+            BandcampRadioPageParser.parse(response.responseBody())
+        } catch (error: BandcampRadioPageParseException) {
             throw ParsingException("Bandcamp radio response is invalid", error)
+        } catch (error: BandcampRadioResultsMissingException) {
+            throw ParsingException("Bandcamp radio has no results", error)
         }
-        val results = payload.get("results") as? JsonArray
-            ?: throw ParsingException("Bandcamp radio has no results")
-        shows = results.filterIsInstance<JsonObject>()
-            .map(::BandcampRadioInfoItemExtractor)
+        shows = parsed.map(::BandcampRadioInfoItemExtractor)
     }
 
     override fun getName(): String = KIOSK_RADIO
