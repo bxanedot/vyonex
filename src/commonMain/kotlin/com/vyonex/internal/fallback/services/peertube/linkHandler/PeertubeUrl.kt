@@ -3,8 +3,8 @@
 // bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler
 
+import com.vyonex.internal.url.FormUrlEncoder
 import io.ktor.http.Url
-import io.ktor.http.encodeURLParameter
 
 internal object PeertubeUrl {
     internal data class Parsed(val path: String, val query: String) {
@@ -76,9 +76,7 @@ internal object PeertubeUrl {
         else -> null
     }
 
-    // Preserve the form encoder's handling of '~' and '*'.
-    fun encodeSearchQuery(query: String): String =
-        query.encodeURLParameter(spaceToPlus = true).replace("~", "%7E").replace("%2A", "*")
+    fun encodeSearchQuery(query: String): String = FormUrlEncoder.encode(query)
 
     fun searchEndpoint(filter: String?): String = when (filter ?: "videos") {
         "videos", "sepia_videos" -> "/api/v1/search/videos"

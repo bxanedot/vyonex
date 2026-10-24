@@ -7,10 +7,9 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandlerFactory;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.url.FormUrlEncoder;
 
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public final class SoundcloudSearchQueryHandlerFactory extends SearchQueryHandlerFactory {
@@ -30,7 +29,7 @@ public final class SoundcloudSearchQueryHandlerFactory extends SearchQueryHandle
                                    final String sortFilter) throws ParsingException {
         final String endpoint = endpointFor(contentFilter);
         try {
-            return endpoint + "?q=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
+            return endpoint + "?q=" + FormUrlEncoder.INSTANCE.encode(query)
                     + "&client_id=" + SoundcloudParsingHelper.clientId()
                     + "&limit=" + ITEMS_PER_PAGE + "&offset=0";
         } catch (final IOException | ExtractionException e) {
