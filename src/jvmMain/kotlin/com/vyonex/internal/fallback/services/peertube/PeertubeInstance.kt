@@ -33,8 +33,12 @@ public class PeertubeInstance(
         }
 
         try {
-            val config = PeertubeParsingHelper.readApiObject(response, "instance configuration")
-            val discoveredName = config.getObject("instance").getString("name")
+            val body = PeertubeParsingHelper.readApiBody(response, "instance configuration")
+            val discoveredName = try {
+                PeertubeInstanceConfigParser.parse(body)
+            } catch (error: PeertubeInstanceConfigParseException) {
+                throw ParsingException("Invalid PeerTube instance configuration response", error)
+            }
             if (discoveredName.isNullOrBlank()) {
                 throw ParsingException("PeerTube configuration has no instance name")
             }
