@@ -71,11 +71,11 @@ public final class SoundcloudSearchExtractor extends SearchExtractor {
         final MultiInfoItemsCollector items = new MultiInfoItemsCollector(getServiceId());
         for (final SoundcloudSearchResult result : data.getResults()) {
             if (result instanceof SoundcloudSearchResult.User user) {
-                items.commit(new SoundcloudChannelInfoItemExtractor(user));
+                items.commit(new SoundcloudChannelInfoItemExtractor(user.getItem()));
             } else if (result instanceof SoundcloudSearchResult.Track track) {
-                items.commit(new SoundcloudStreamInfoItemExtractor(track));
+                items.commit(new SoundcloudStreamInfoItemExtractor(track.getItem()));
             } else if (result instanceof SoundcloudSearchResult.Playlist playlist) {
-                items.commit(new SoundcloudPlaylistInfoItemExtractor(playlist));
+                items.commit(new SoundcloudPlaylistInfoItemExtractor(playlist.getItem()));
             }
         }
         final String next = SoundcloudParsingHelper.getNextPageUrl(data.getNextPageUrl());

@@ -6,7 +6,7 @@ package com.vyonex.internal.fallback.services.soundcloud.extractors;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
-import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchResult;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nullable;
@@ -31,15 +31,14 @@ public final class SoundcloudChannelInfoItemExtractor implements ChannelInfoItem
         description = user.getString("description", "");
     }
 
-    public SoundcloudChannelInfoItemExtractor(final SoundcloudSearchResult.User user) {
-        final var profile = user.getProfile();
-        name = profile.getName();
-        url = SoundcloudParsingHelper.toHttpsUrl(profile.getPermalinkUrl());
-        avatarUrl = profile.getAvatarUrl();
-        followers = profile.getFollowers();
-        tracks = profile.getTracks();
-        verified = profile.getVerified();
-        description = profile.getDescription();
+    public SoundcloudChannelInfoItemExtractor(final SoundcloudProfileInfoItem user) {
+        name = user.getName();
+        url = SoundcloudParsingHelper.toHttpsUrl(user.getPermalinkUrl());
+        avatarUrl = user.getAvatarUrl();
+        followers = user.getFollowers();
+        tracks = user.getTrackCount();
+        verified = user.getVerified();
+        description = user.getDescription();
     }
 
     @Override public String getName() { return name; }

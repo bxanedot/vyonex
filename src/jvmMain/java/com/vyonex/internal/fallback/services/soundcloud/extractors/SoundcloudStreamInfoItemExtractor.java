@@ -7,8 +7,8 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
-import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchProfile;
-import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchResult;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.json.JsonObject;
@@ -42,8 +42,8 @@ public class SoundcloudStreamInfoItemExtractor implements StreamInfoItemExtracto
         artworkUrl = track.getString("artwork_url", uploaderAvatarUrl);
     }
 
-    public SoundcloudStreamInfoItemExtractor(final SoundcloudSearchResult.Track track) {
-        final SoundcloudSearchProfile user = track.getUser();
+    public SoundcloudStreamInfoItemExtractor(final SoundcloudTrackInfoItem track) {
+        final SoundcloudProfileInfoItem user = track.getUser();
         url = SoundcloudParsingHelper.toHttpsUrl(track.getPermalinkUrl());
         name = track.getTitle();
         duration = track.getDurationMillis() / 1000;
