@@ -18,6 +18,7 @@ import com.vyonex.internal.fallback.services.peertube.PeertubeMediaDelivery
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaMapper
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaResponseParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
+import com.vyonex.internal.fallback.services.peertube.PeertubeStoryboardResponseParser
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory
 import com.vyonex.internal.fallback.stream.AudioStream
 import com.vyonex.internal.fallback.stream.ContentAvailability
@@ -199,34 +200,20 @@ public class PeertubeStreamExtractor(
 
     @Throws(ExtractionException::class)
     override fun getFrames(): List<Frameset> = try {
-        val entries = optionalResponse("/storyboards", "storyboards")?.getArray("storyboards")
-            ?: return emptyList()
-        val frames = ArrayList<Frameset>(entries.size)
-        for (value in entries) {
-            val storyboard = value as? JsonObject ?: continue
-            val width = storyboard.getInt("spriteWidth")
-            val height = storyboard.getInt("spriteHeight")
-            val totalWidth = storyboard.getInt("totalWidth")
-            val totalHeight = storyboard.getInt("totalHeight")
-            val duration = storyboard.getInt("spriteDuration")
-            val image = storyboard.getString("fileUrl")
-                ?.takeIf(String::isNotBlank)
-                ?: storyboard.getString("storyboardPath")?.takeIf(String::isNotBlank)
-            if (image == null || width <= 0 || height <= 0 || duration <= 0
-                || totalWidth < width || totalHeight < height
-            ) continue
-            val columns = totalWidth / width
-            val rows = totalHeight / height
-            val count = try {
-                Math.multiplyExact(columns, rows)
-            } catch (_: ArithmeticException) {
-                continue
-            }
-            frames.add(
-                Frameset(listOf(resolve(image)), width, height, count, duration, columns, rows),
-            )
-        }
-        Collections.unmodifiableList(frames)
+        val response = optionalResponse("/storyboards", "storyboards") ?: return emptyList()
+        Collections.unmodifiableList(
+            PeertubeStoryboardResponseParser.parse(JsonWriter.string(response)).map { item ->
+                Frameset(
+                    listOf(resolve(item.imagePath)),
+                    item.frameWidth,
+                    item.frameHeight,
+                    item.totalCount,
+                    item.durationPerFrame,
+                    item.framesPerPageX,
+                    item.framesPerPageY,
+                )
+            },
+        )
     } catch (error: IOException) {
         throw ExtractionException("Could not load PeerTube storyboards", error)
     }
