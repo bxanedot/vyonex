@@ -8,10 +8,8 @@ import com.vyonex.internal.fallback.VyonEx
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampSuggestionParser
 import com.vyonex.internal.fallback.suggestion.SuggestionExtractor
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
 import com.vyonex.internal.json.JsonWriter
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -30,22 +28,11 @@ public class BandcampSuggestionExtractor(service: StreamingService) : Suggestion
             .toByteArray(StandardCharsets.UTF_8)
 
         val response = try {
-            JsonParser.`object`().from(
-                downloader.postWithContentTypeJson(AUTOCOMPLETE_URL, emptyMap(), body)
-                    .responseBody(),
-            )
-        } catch (_: JsonParserException) {
-            return emptyList()
+            downloader.postWithContentTypeJson(AUTOCOMPLETE_URL, emptyMap(), body).responseBody()
         } catch (error: ReCaptchaException) {
             throw ParsingException("Bandcamp blocked autocomplete", error)
         }
-        val results = response.getObject("auto")?.getArray("results") ?: return emptyList()
-        val names = LinkedHashSet<String>()
-        for (item in results) {
-            val name = (item as? JsonObject)?.getString("name", "") ?: continue
-            if (name.isNotBlank()) names.add(name)
-        }
-        return names.toList()
+        return BandcampSuggestionParser.parse(response)
     }
 
     private companion object {
