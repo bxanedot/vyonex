@@ -21,12 +21,7 @@ public class PeertubeSearchQueryHandlerFactory private constructor() : SearchQue
         sortFilter: String,
         baseUrl: String,
     ): String {
-        val endpoint = when (filters.firstOrNull() ?: VIDEOS) {
-            VIDEOS, SEPIA_VIDEOS -> SEARCH_ENDPOINT_VIDEOS
-            CHANNELS -> SEARCH_ENDPOINT_CHANNELS
-            PLAYLISTS -> SEARCH_ENDPOINT_PLAYLISTS
-            else -> SEARCH_ENDPOINT_PLAYLISTS
-        }
+        val endpoint = PeertubeUrl.searchEndpoint(filters.firstOrNull())
         return "$baseUrl$endpoint?search=${PeertubeUrl.encodeSearchQuery(query)}"
     }
 

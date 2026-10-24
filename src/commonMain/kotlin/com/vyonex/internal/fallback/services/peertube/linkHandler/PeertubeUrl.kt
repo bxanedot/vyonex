@@ -80,5 +80,12 @@ internal object PeertubeUrl {
     fun encodeSearchQuery(query: String): String =
         query.encodeURLParameter(spaceToPlus = true).replace("~", "%7E").replace("%2A", "*")
 
+    fun searchEndpoint(filter: String?): String = when (filter ?: "videos") {
+        "videos", "sepia_videos" -> "/api/v1/search/videos"
+        "channels" -> "/api/v1/search/video-channels"
+        "playlists" -> "/api/v1/search/video-playlists"
+        else -> "/api/v1/search/video-playlists"
+    }
+
     fun accepts(value: String?): Boolean = parse(value) != null
 }
