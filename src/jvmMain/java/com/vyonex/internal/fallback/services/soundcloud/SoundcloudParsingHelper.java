@@ -302,7 +302,10 @@ public final class SoundcloudParsingHelper {
     }
 
     public static String getNextPageUrl(final JsonObject response) {
-        final String next = response.getString("next_href");
+        return getNextPageUrl(response.getString("next_href"));
+    }
+
+    public static String getNextPageUrl(final String next) {
         if (next == null || next.isBlank()) return "";
         if (next.contains("client_id=")) return next;
         try {
