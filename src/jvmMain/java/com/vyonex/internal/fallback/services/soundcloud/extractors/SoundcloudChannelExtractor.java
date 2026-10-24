@@ -12,11 +12,11 @@ import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudChannelPayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudChannelPayloadParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudChannelTabLinkHandlerFactory;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,21 +45,16 @@ public final class SoundcloudChannelExtractor extends ChannelExtractor {
             throw new IOException("SoundCloud user request failed with HTTP " + response.responseCode());
         }
         try {
-            final JsonObject user = JsonParser.object().from(response.responseBody());
-            name = user.getString("username", "");
-            avatarUrl = user.getString("avatar_url");
-            subscriberCount = user.getLong("followers_count");
-            description = user.getString("description", "");
-            verified = user.getBoolean("verified");
-            final List<String> visuals = new ArrayList<>();
-            for (final Object item : user.getObject("visuals").getArray("visuals")) {
-                if (item instanceof JsonObject) {
-                    final String visualUrl = ((JsonObject) item).getString("visual_url");
-                    if (visualUrl != null) visuals.add(visualUrl);
-                }
-            }
-            visualUrls = List.copyOf(visuals);
-        } catch (final JsonParserException e) {
+            final SoundcloudChannelPayload payload = SoundcloudChannelPayloadParser.INSTANCE
+                    .parse(response.responseBody());
+            final SoundcloudProfileInfoItem profile = payload.getProfile();
+            name = profile.getName();
+            avatarUrl = profile.getAvatarUrl();
+            subscriberCount = profile.getFollowers();
+            description = profile.getDescription();
+            verified = profile.getVerified();
+            visualUrls = payload.getVisualUrls();
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud user response", e);
         }
     }
