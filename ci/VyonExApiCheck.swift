@@ -6,6 +6,7 @@ func checkVyonExExtraction(host: VyonExHost) {
     extractor.initialize()
     extractor.initializeFallback()
     extractor.audioCandidates(videoId: "dQw4w9WgXcQ") { _, _ in }
+    extractor.bandcampSuggestions(query: "ambient") { _, _ in }
     extractor.extract(
         videoId: "dQw4w9WgXcQ",
         maxKbps: 128,

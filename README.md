@@ -30,6 +30,7 @@ dependencies {
 - Kotlin compiler: 2.4.21.
 - JVM and iOS device/simulator targets are configured.
 - The shared stream, audio, session, logging, and config types are in `commonMain`.
+- `VyonEx.bandcampSuggestions(query:)` exposes cross-platform autocomplete suggestions over the host's existing Ktor transport; Bandcamp search, track, playlist, and radio extraction remain on the JVM fallback path.
 - YouTube primary and watch-page fallback extraction, plus progressive audio candidates, are available to Swift/iOS through `VyonEx`. iOS uses Ktor Darwin and keeps prepared-player scripts in memory.
 - The JVM facade keeps `initializeFallback()` and `audioCandidates(videoId)`; candidate URLs now use the shared watch-page parser.
 - Runtime dependencies are declared by VyonEx.

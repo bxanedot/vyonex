@@ -16,6 +16,7 @@ class VyonExJvmApiTest {
             "init",
             "initializeFallback",
             "audioCandidates",
+            "bandcampSuggestions",
             "extract",
             "headersFor",
             "onRefused",
@@ -61,6 +62,7 @@ class VyonExJvmApiTest {
         extractor.init()
         extractor.initializeFallback()
         extractor.audioCandidates("video")
+        extractor.bandcampSuggestions("ambient")
         extractor.extract("video", 128, emptySet(), false)
         extractor.headersFor("https://media.example/audio")
         extractor.onRefused("https://media.example/audio")

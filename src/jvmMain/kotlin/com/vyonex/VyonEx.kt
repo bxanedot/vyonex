@@ -14,6 +14,9 @@ class VyonEx(host: VyonExHost) {
     suspend fun audioCandidates(videoId: String): List<VyonExAudioCandidate> =
         primary.audioCandidates(videoId)
 
+    /** Returns Bandcamp autocomplete suggestions without exposing transport implementation types. */
+    suspend fun bandcampSuggestions(query: String): List<String> = primary.bandcampSuggestions(query)
+
     suspend fun extract(
         videoId: String,
         maxKbps: Int,
