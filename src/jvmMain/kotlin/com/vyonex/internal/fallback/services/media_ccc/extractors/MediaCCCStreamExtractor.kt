@@ -14,6 +14,8 @@ import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.localization.Localization
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventParseException
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCRecordingMapper
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCStreamLinkHandlerFactory
@@ -139,7 +141,13 @@ public class MediaCCCStreamExtractor(
 
     private fun readConferenceLogo(downloader: Downloader, conferenceId: String): String? {
         val url = MediaCCCConferenceLinkHandlerFactory.CONFERENCE_API_ENDPOINT + conferenceId
-        return MediaCCCParsingHelper.fetchJsonObject(downloader, url, null).getString("logo_url")
+        return try {
+            MediaCCCListingPayloadDecoder.decodeConference(
+                MediaCCCParsingHelper.fetchJsonBody(downloader, url, null),
+            ).logoUrl
+        } catch (error: MediaCCCListingParseException) {
+            throw ExtractionException("Could not parse API response from $url", error)
+        }
     }
 
     override fun getName(): String = event.title.orEmpty()
