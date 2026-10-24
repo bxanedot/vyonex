@@ -9,6 +9,7 @@ class VyonExIosApiTest {
     fun primaryFacadeCanBeConstructedWithoutJvmTransportTypes() {
         val extractor = VyonEx(TestHost())
 
+        extractor.initializeFallback()
         assertNull(extractor.headersFor("https://audio.invalid/stream"))
         assertNull(extractor.onRefused("https://audio.invalid/stream"))
     }
