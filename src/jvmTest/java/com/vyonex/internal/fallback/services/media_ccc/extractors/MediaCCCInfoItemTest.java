@@ -6,13 +6,18 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveConferencePayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoomPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveStreamPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveTalkPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveTalksPayload;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload;
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCConferenceSummaryPayload;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -81,14 +86,14 @@ class MediaCCCInfoItemTest {
                 MediaCCCEventPayload.Companion.decode("{\"date\":\"not-a-date\"}"));
         assertThrows(ParsingException.class, invalidDate::getUploadDate);
 
-        final JsonObject conference = JsonParser.object().from(
-                "{\"conference\":\"Chaos\",\"slug\":\"chaos-2026\"}");
-        final JsonObject videoRoom = JsonParser.object().from("""
-                {"talks":{"current":{"title":"Now live"}},
-                 "link":"https://streaming.media.ccc.de/chaos-2026/hall-1",
-                 "display":"Hall 1","thumb":"thumb.jpg","poster":"poster.jpg",
-                 "streams":[{"type":"audio"},{"type":"video"}]}
-                """);
+        final MediaCCCLiveConferencePayload conference = new MediaCCCLiveConferencePayload(
+                "Chaos", "chaos-2026", null, true, null);
+        final MediaCCCLiveRoomPayload videoRoom = new MediaCCCLiveRoomPayload(
+                null, "Hall 1", "https://streaming.media.ccc.de/chaos-2026/hall-1",
+                "thumb.jpg", "poster.jpg", new MediaCCCLiveTalksPayload(
+                        new MediaCCCLiveTalkPayload("Now live"), null),
+                List.of(new MediaCCCLiveStreamPayload("audio", null, null),
+                        new MediaCCCLiveStreamPayload("video", null, null)));
         final MediaCCCLiveStreamKioskExtractor live =
                 new MediaCCCLiveStreamKioskExtractor(conference, "Stage", videoRoom);
 
@@ -99,8 +104,9 @@ class MediaCCCInfoItemTest {
         assertEquals(StreamType.LIVE_STREAM, live.getStreamType());
         assertNull(live.getUploadDate());
 
-        final JsonObject audioRoom = JsonParser.object().from(
-                "{\"streams\":[{\"type\":\"audio\"}]}");
+        final MediaCCCLiveRoomPayload audioRoom = new MediaCCCLiveRoomPayload(
+                null, null, null, null, null, null,
+                List.of(new MediaCCCLiveStreamPayload("audio", null, null)));
         assertEquals(StreamType.AUDIO_LIVE_STREAM,
                 new MediaCCCLiveStreamKioskExtractor(conference, "Stage", audioRoom).getStreamType());
     }

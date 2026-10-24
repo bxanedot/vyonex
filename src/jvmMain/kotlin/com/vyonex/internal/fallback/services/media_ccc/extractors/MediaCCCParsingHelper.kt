@@ -9,10 +9,9 @@ import com.vyonex.internal.fallback.downloader.Response
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
 import com.vyonex.internal.fallback.localization.Localization
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveConferencePayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadDecoder
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadParseException
 import java.io.IOException
 import java.util.Collections
 
@@ -24,12 +23,12 @@ public object MediaCCCParsingHelper {
 
     @JvmStatic
     @Throws(ExtractionException::class)
-    public fun getLiveStreams(
+    internal fun getLiveStreams(
         downloader: Downloader,
         localization: Localization,
-    ): JsonArray = try {
-        JsonParser.array().from(fetchLiveStreamsBody(downloader, localization))
-    } catch (error: JsonParserException) {
+    ): List<MediaCCCLiveConferencePayload> = try {
+        MediaCCCLivePayloadDecoder.decode(fetchLiveStreamsBody(downloader, localization))
+    } catch (error: MediaCCCLivePayloadParseException) {
         throw ExtractionException("Could not parse live stream data.", error)
     }
 
@@ -53,18 +52,6 @@ public object MediaCCCParsingHelper {
         } catch (error: ReCaptchaException) {
             throw ExtractionException("Could not fetch live stream data.", error)
         }
-    }
-
-    @JvmStatic
-    @Throws(IOException::class, ExtractionException::class)
-    public fun fetchJsonObject(
-        downloader: Downloader,
-        url: String,
-        localization: Localization?,
-    ): JsonObject = try {
-        JsonParser.`object`().from(fetchJsonBody(downloader, url, localization))
-    } catch (error: JsonParserException) {
-        throw ExtractionException("Could not parse API response from $url", error)
     }
 
     @JvmStatic
@@ -97,20 +84,8 @@ public object MediaCCCParsingHelper {
         }
 
     @JvmStatic
-    public fun getThumbnailsFromStreamItem(item: JsonObject): List<Image> =
-        thumbnails(item, "thumb_url", "poster_url")
-
-    @JvmStatic
     public fun getThumbnailsFromStreamItem(thumbUrl: String?, posterUrl: String?): List<Image> =
         thumbnails(thumbUrl, posterUrl)
-
-    @JvmStatic
-    public fun getThumbnailsFromLiveStreamItem(item: JsonObject): List<Image> =
-        thumbnails(item, "thumb", "poster")
-
-    private fun thumbnails(item: JsonObject, previewKey: String, posterKey: String): List<Image> {
-        return thumbnails(item.getString(previewKey), item.getString(posterKey))
-    }
 
     private fun thumbnails(thumbUrl: String?, posterUrl: String?): List<Image> {
         val images = mutableListOf<Image>()

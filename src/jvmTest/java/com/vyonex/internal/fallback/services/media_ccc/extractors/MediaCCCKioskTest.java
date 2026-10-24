@@ -134,6 +134,21 @@ class MediaCCCKioskTest {
         assertEquals("Chaos - Hall A - Room B", items.get(1).getUploaderName());
     }
 
+    @Test
+    void liveKioskWrapsMalformedPayloadsAsExtractionFailures() throws Exception {
+        final var link = MediaCCCLiveListLinkHandlerFactory.getInstance()
+                .fromUrl("https://media.ccc.de/live");
+        final StubDownloader downloader = new StubDownloader("not-json");
+        VyonEx.init(downloader);
+        final MediaCCCLiveStreamKiosk kiosk = new MediaCCCLiveStreamKiosk(
+                new MediaCCCService(8), link, MediaCCCLiveStreamKiosk.KIOSK_ID);
+
+        final ExtractionException error = assertThrows(
+                ExtractionException.class, () -> kiosk.onFetchPage(downloader));
+
+        assertEquals("Could not parse live stream data.", error.getMessage());
+    }
+
     private static final class StubDownloader extends Downloader {
         private final String body;
         private String requestedUrl;

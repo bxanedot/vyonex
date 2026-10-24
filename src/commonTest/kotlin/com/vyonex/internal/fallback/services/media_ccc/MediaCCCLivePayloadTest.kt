@@ -12,6 +12,7 @@ class MediaCCCLivePayloadTest {
     fun decodesRoomsTalksAndMultipleDeliveryFormats() {
         val conference = MediaCCCLivePayloadDecoder.decode(
             """[{"conference":"Chaos","slug":"chaos-2026","description":"Annual event",
+                "isCurrentlyStreaming":true,
                 "groups":[{"group":"Hall A","rooms":[{"slug":"a","display":"Room A",
                   "link":"https://streaming.media.ccc.de/chaos-2026/a",
                   "talks":{"current":{"title":"Live now"}},
@@ -25,6 +26,7 @@ class MediaCCCLivePayloadTest {
         val stream = room?.streams?.single()
 
         assertEquals("chaos-2026", conference.slug)
+        assertEquals(true, conference.isCurrentlyStreaming)
         assertEquals("Live now", room?.talks?.current?.title)
         assertEquals(listOf(1920, 1080), stream?.videoSize)
         assertEquals(
