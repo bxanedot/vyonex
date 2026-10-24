@@ -7,8 +7,8 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
-import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchProfile;
-import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchResult;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistInfoItem;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
 import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nullable;
@@ -36,8 +36,8 @@ public final class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoIt
         artworkUrl = artworkUrl(playlist, avatarUrl);
     }
 
-    public SoundcloudPlaylistInfoItemExtractor(final SoundcloudSearchResult.Playlist playlist) {
-        final SoundcloudSearchProfile user = playlist.getUser();
+    public SoundcloudPlaylistInfoItemExtractor(final SoundcloudPlaylistInfoItem playlist) {
+        final SoundcloudProfileInfoItem user = playlist.getUser();
         title = playlist.getTitle();
         url = SoundcloudParsingHelper.toHttpsUrl(playlist.getPermalinkUrl());
         uploaderName = user.getName();

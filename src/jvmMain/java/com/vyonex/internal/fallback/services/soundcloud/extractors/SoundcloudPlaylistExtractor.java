@@ -14,21 +14,21 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.playlist.PlaylistExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistInfoItem;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistPayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistPayloadParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistTrackBatchParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackInfoItem;
 import com.vyonex.internal.fallback.stream.Description;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 public final class SoundcloudPlaylistExtractor extends PlaylistExtractor {
     private static final int IDS_PER_REQUEST = 15;
@@ -55,27 +55,22 @@ public final class SoundcloudPlaylistExtractor extends PlaylistExtractor {
                     + response.responseCode());
         }
         try {
-            final JsonObject playlist = JsonParser.object().from(response.responseBody());
+            final SoundcloudPlaylistPayload payload = SoundcloudPlaylistPayloadParser.INSTANCE
+                    .parse(response.responseBody());
+            final SoundcloudPlaylistInfoItem playlist = payload.getPlaylist();
             playlistInfo = new SoundcloudPlaylistInfoItemExtractor(playlist);
-            avatarUrl = SoundcloudParsingHelper.getAvatarUrl(playlist);
-            final String descriptionText = playlist.getString("description", "");
+            avatarUrl = SoundcloudParsingHelper.toHttpsUrl(playlist.getUser().getAvatarUrl());
+            final String descriptionText = payload.getDescription();
             description = descriptionText.isBlank() ? Description.EMPTY_DESCRIPTION
                     : new Description(descriptionText, Description.PLAIN_TEXT);
 
             final List<StreamInfoItemExtractor> tracks = new ArrayList<>();
-            final List<String> unresolvedIds = new ArrayList<>();
-            for (final Object value : playlist.getArray("tracks")) {
-                if (!(value instanceof JsonObject)) continue;
-                final JsonObject track = (JsonObject) value;
-                if (track.getString("title") != null) {
-                    tracks.add(new SoundcloudStreamInfoItemExtractor(track));
-                } else if (track.get("id") != null) {
-                    unresolvedIds.add(track.get("id").toString());
-                }
+            for (final SoundcloudTrackInfoItem track : payload.getInitialTracks()) {
+                tracks.add(new SoundcloudStreamInfoItemExtractor(track));
             }
             initialTracks = List.copyOf(tracks);
-            unresolvedTrackIds = List.copyOf(unresolvedIds);
-        } catch (final JsonParserException e) {
+            unresolvedTrackIds = List.copyOf(payload.getUnresolvedTrackIds());
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud playlist response", e);
         }
     }
@@ -120,22 +115,19 @@ public final class SoundcloudPlaylistExtractor extends PlaylistExtractor {
         if (response.responseCode() >= 400) {
             throw new IOException("SoundCloud track lookup failed with HTTP " + response.responseCode());
         }
-        final JsonArray tracks;
+
+        final List<SoundcloudTrackInfoItem> tracks;
         try {
-            tracks = JsonParser.array().from(response.responseBody());
-        } catch (final JsonParserException e) {
+            tracks = SoundcloudPlaylistTrackBatchParser.INSTANCE.parse(response.responseBody());
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud track lookup response", e);
         }
-        final Map<String, JsonObject> byId = new HashMap<>();
-        for (final Object value : tracks) {
-            if (value instanceof JsonObject) {
-                final JsonObject track = (JsonObject) value;
-                byId.put(Objects.toString(track.get("id"), ""), track);
-            }
-        }
+        final Map<String, SoundcloudTrackInfoItem> byId = new HashMap<>();
+        for (final SoundcloudTrackInfoItem track : tracks) byId.put(track.getId(), track);
+
         final StreamInfoItemsCollector items = new StreamInfoItemsCollector(getServiceId());
         for (final String id : currentIds) {
-            final JsonObject track = byId.get(id);
+            final SoundcloudTrackInfoItem track = byId.get(id);
             if (track == null) throw new ParsingException("SoundCloud omitted requested track " + id);
             items.commit(new SoundcloudStreamInfoItemExtractor(track));
         }

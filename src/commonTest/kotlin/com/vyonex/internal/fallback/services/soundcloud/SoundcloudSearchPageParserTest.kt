@@ -26,29 +26,29 @@ class SoundcloudSearchPageParserTest {
         assertEquals(5, page.collectionSize)
         assertEquals(
             SoundcloudSearchResult.Track(
-                "https://soundcloud.com/a/rain",
-                "Rain",
-                92_000,
-                SoundcloudSearchProfile(
-                    "Alice", "https://soundcloud.com/alice", "https://img.example/alice.jpg",
-                    true, 0, 0, "",
+                SoundcloudTrackInfoItem(
+                    "", "https://soundcloud.com/a/rain", "Rain", 92_000,
+                    SoundcloudProfileInfoItem(
+                        "Alice", "https://soundcloud.com/alice", "https://img.example/alice.jpg",
+                        true, 0, 0, "",
+                    ),
+                    "2026-10-24T00:00:00Z", 7, "https://img.example/alice.jpg",
                 ),
-                "2026-10-24T00:00:00Z",
-                7,
-                "https://img.example/alice.jpg",
             ),
             page.results[0],
         )
         assertEquals(
             SoundcloudSearchResult.User(
-                SoundcloudSearchProfile("Bob", "", null, false, 8, 3, ""),
+                SoundcloudProfileInfoItem("Bob", "", null, false, 8, 3, ""),
             ),
             page.results[1],
         )
         assertEquals(
             SoundcloudSearchResult.Playlist(
-                "Mix", "", SoundcloudSearchProfile("", "", null, false, 0, 0, ""),
-                2, "https://img.example/playlist.jpg",
+                SoundcloudPlaylistInfoItem(
+                    "Mix", "", SoundcloudProfileInfoItem("", "", null, false, 0, 0, ""),
+                    2, "https://img.example/playlist.jpg",
+                ),
             ),
             page.results[2],
         )
