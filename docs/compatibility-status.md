@@ -2,7 +2,7 @@
 
 ## Public API compatibility matrix
 
-The stable entry points are the six `com.vyonex` types named below. The host interface is platform-specific; value and storage contracts are shared.
+The stable entry points include the `com.vyonex` types named below. The host interface is platform-specific; value and storage contracts are shared.
 
 | API | JVM | iOS / Swift | Contract |
 | --- | --- | --- | --- |
@@ -10,6 +10,7 @@ The stable entry points are the six `com.vyonex` types named below. The host int
 | `VyonExHost` | Available | Available | Both inherit session, config, time and logging services. JVM additionally receives a token provider, files directory and OkHttp client; iOS receives its token provider and uses Darwin transport. |
 | `VyonExStream` | Shared | Shared | Video ID, URL, bitrate, MIME type, loudness, client/profile identifiers and request headers. |
 | `VyonExAudioCandidate` | Shared | Shared | URL, bitrate, MIME type and normalized audio format. |
+| `BandcampTrack` | Shared | Shared | Track page metadata and direct audio URL returned by `bandcampTrack(url:)`. |
 | `VyonExAudioFormat` | Shared | Shared | `M4A`, `WEBM_OPUS`, `OTHER`. |
 | `VyonExConfigStore` | Shared | Shared | Enable flag and string/long persistence; `VyonExSession` and `VyonExLogLevel` are companion shared values. |
 
