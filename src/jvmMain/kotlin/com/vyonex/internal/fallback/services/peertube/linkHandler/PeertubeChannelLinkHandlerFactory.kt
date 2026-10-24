@@ -10,16 +10,9 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandlerFactory
 public class PeertubeChannelLinkHandlerFactory private constructor() : ListLinkHandlerFactory() {
     @Throws(ParsingException::class)
     override fun getId(url: String): String {
-        val path = PeertubeUrl.segments(url) ?: throw ParsingException("Invalid PeerTube URL: $url")
-        val apiRoute = path.size > 2 && path[0] == "api" && path[1] == "v1"
-        val start = if (apiRoute) 2 else 0
-        if (path.size <= start + 1) throw ParsingException("URL has no channel ID")
-        val type = when (path[start]) {
-            "accounts", "a" -> "accounts"
-            "video-channels", "c" -> "video-channels"
-            else -> throw ParsingException("URL does not identify a PeerTube channel")
-        }
-        return "$type/${path[start + 1]}"
+        val parsed = PeertubeUrl.parse(url) ?: throw ParsingException("Invalid PeerTube URL: $url")
+        if (PeertubeUrl.channelSegments(parsed).size <= 1) throw ParsingException("URL has no channel ID")
+        return PeertubeUrl.channelId(parsed) ?: throw ParsingException("URL does not identify a PeerTube channel")
     }
 
     override fun getUrl(id: String, filters: List<String>, sort: String): String =

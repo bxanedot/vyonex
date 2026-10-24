@@ -64,4 +64,22 @@ class PeertubeUrlTest {
             PeertubeUrl.parse("https://tube.example/videos/watch/video-id"),
         )))
     }
+
+    @Test
+    fun canonicalizesChannelAliasesAndApiRoutes() {
+        listOf(
+            "/accounts/alice/videos" to "accounts/alice",
+            "/a/alice/videos" to "accounts/alice",
+            "/video-channels/creator/video-playlists" to "video-channels/creator",
+            "/c/creator/video-playlists" to "video-channels/creator",
+            "/api/v1/accounts/alice" to "accounts/alice",
+        ).forEach { (path, id) ->
+            assertEquals(id, PeertubeUrl.channelId(
+                requireNotNull(PeertubeUrl.parse("https://tube.example$path")),
+            ))
+        }
+        assertNull(PeertubeUrl.channelId(requireNotNull(
+            PeertubeUrl.parse("https://tube.example/api/v1/accounts"),
+        )))
+    }
 }

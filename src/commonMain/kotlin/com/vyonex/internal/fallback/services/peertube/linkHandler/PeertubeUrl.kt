@@ -52,5 +52,21 @@ internal object PeertubeUrl {
         }
     }
 
+    fun channelId(url: Parsed): String? {
+        val path = channelSegments(url)
+        if (path.size <= 1) return null
+        val type = when (path[0]) {
+            "accounts", "a" -> "accounts"
+            "video-channels", "c" -> "video-channels"
+            else -> return null
+        }
+        return "$type/${path[1]}"
+    }
+
+    fun channelSegments(url: Parsed): List<String> {
+        val path = url.segments
+        return if (path.size > 2 && path[0] == "api" && path[1] == "v1") path.drop(2) else path
+    }
+
     fun accepts(value: String?): Boolean = parse(value) != null
 }
