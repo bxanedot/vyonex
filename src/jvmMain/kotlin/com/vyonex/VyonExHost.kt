@@ -6,12 +6,12 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 /** Services and platform state supplied by the consuming application. */
-interface VyonExHost {
+interface VyonExHost : VyonExHostServices {
     /** Current YouTube identity. Implementations may fetch visitor data. */
-    suspend fun session(): VyonExSession
+    override suspend fun session(): VyonExSession
 
     /** Player-config storage; a disabled store keeps extraction available without persistence. */
-    val configStore: VyonExConfigStore
+    override val configStore: VyonExConfigStore
 
     /** Optional platform PoToken minting implementation. */
     val tokenProvider: TokenProvider?
@@ -22,9 +22,9 @@ interface VyonExHost {
     /** Shared app transport. VyonEx configures its own Ktor client over this OkHttp client. */
     val httpClient: OkHttpClient
 
-    fun nowMs(): Long
+    override fun nowMs(): Long
 
-    fun log(level: VyonExLogLevel, message: String, trackId: String? = null)
+    override fun log(level: VyonExLogLevel, message: String, trackId: String?)
 }
 
 // bxane
