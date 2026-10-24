@@ -89,11 +89,13 @@ class SoundcloudMappingTest {
     }
 
     @Test
-    void acceptsServiceRoutesAndExposesStableTabAndSearchFilters() {
+    void acceptsServiceRoutesAndExposesStableTabAndSearchFilters() throws Exception {
         assertTrue(SoundcloudChannelLinkHandlerFactory.getInstance()
                 .onAcceptUrl("https://soundcloud.com/alice/sets"));
         assertTrue(SoundcloudStreamLinkHandlerFactory.getInstance()
                 .onAcceptUrl("https://api-v2.soundcloud.com/tracks/42"));
+        assertEquals("42", SoundcloudStreamLinkHandlerFactory.getInstance()
+                .getId("https://api-v2.soundcloud.com/tracks/42"));
         assertTrue(SoundcloudPlaylistLinkHandlerFactory.getInstance()
                 .onAcceptUrl("https://soundcloud.com/alice/sets/mix"));
         assertTrue(SoundcloudChartsLinkHandlerFactory.getInstance()

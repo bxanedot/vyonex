@@ -9,21 +9,10 @@ import com.vyonex.internal.fallback.linkhandler.LinkHandlerFactory;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 
 import java.io.IOException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class SoundcloudStreamLinkHandlerFactory extends LinkHandlerFactory {
     private static final SoundcloudStreamLinkHandlerFactory INSTANCE =
             new SoundcloudStreamLinkHandlerFactory();
-    private static final Pattern PAGE_URL = Pattern.compile(
-            "^https?://(?:(?:www|m)\\.)?soundcloud\\.com/[a-z0-9_-]+/"
-                    + "(?!tracks/?$|albums/?$|sets/?$|reposts/?$|followers/?$|following/?$)"
-                    + "[a-z0-9_-]+/?(?:[?#].*)?$|^https?://on\\.soundcloud\\.com/[a-z0-9]+/?$",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern API_URL = Pattern.compile(
-            "^https?://api-v2\\.soundcloud\\.com/(?:tracks|albums|sets)/([^/?#]+)(?:[/?#].*)?$",
-            Pattern.CASE_INSENSITIVE);
-
     private SoundcloudStreamLinkHandlerFactory() { }
 
     public static SoundcloudStreamLinkHandlerFactory getInstance() { return INSTANCE; }
@@ -38,9 +27,11 @@ public final class SoundcloudStreamLinkHandlerFactory extends LinkHandlerFactory
     }
 
     @Override public String getId(final String url) throws ParsingException {
-        final Matcher api = API_URL.matcher(url);
-        if (api.matches()) return api.group(1);
-        if (!PAGE_URL.matcher(url).matches()) throw new ParsingException("Invalid SoundCloud track URL");
+        final String apiId = SoundcloudTrackUrlParser.INSTANCE.apiTrackId(url);
+        if (apiId != null) return apiId;
+        if (!SoundcloudTrackUrlParser.INSTANCE.acceptsPage(url)) {
+            throw new ParsingException("Invalid SoundCloud track URL");
+        }
         try {
             return SoundcloudParsingHelper.resolveIdWithWidgetApi(url);
         } catch (final IOException e) {
@@ -49,6 +40,7 @@ public final class SoundcloudStreamLinkHandlerFactory extends LinkHandlerFactory
     }
 
     @Override public boolean onAcceptUrl(final String url) {
-        return PAGE_URL.matcher(url).matches() || API_URL.matcher(url).matches();
+        return SoundcloudTrackUrlParser.INSTANCE.acceptsPage(url)
+                || SoundcloudTrackUrlParser.INSTANCE.apiTrackId(url) != null;
     }
 }
