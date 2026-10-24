@@ -20,11 +20,6 @@ import com.vyonex.internal.primary.extraction.TokenProviderCapabilities
 import com.vyonex.internal.primary.extraction.YtConfigParserImpl
 import com.vyonex.internal.primary.extraction.generateClientPlaybackNonce
 import com.vyonex.internal.primary.models.YouTubeLocale
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,82 +27,54 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /** Primary client selection and cipher resolution. */
-internal class PrimaryExtractorBackend(private val host: VyonExHost) {
-    private var playerDir: File? = null
+internal class PrimaryExtractorBackend(private val host: VyonExHostServices) {
+    private val stateLock = PlatformStateLock()
     private var warmup: Job? = null
+    private val platform = platformExtractorDependencies(host)
+    private val minted = mutableMapOf<String, VyonExStream>()
+    private val excluded = mutableMapOf<String, MutableMap<String, Long>>()
 
     fun init() {
-        playerDir = host.filesDir?.let { File(it, "vyonex_players").apply { mkdirs() } }
         scope.launch {
-            cipherService.setPreprocessedPlayerCache(::readPlayer, ::writePlayer)
+            cipherService.setPreprocessedPlayerCache(platform.readPlayer, platform.writePlayer)
             warm(WARM_DELAY_MS)
         }
     }
 
     /** Pays the cold player-script, player-config, and PoToken costs before a track needs them. */
     private fun warm(delayMs: Long) {
-        warmup?.cancel()
-        warmup = scope.launch {
-            delay(delayMs)
-            val start = host.nowMs()
-            runCatching {
-                applySession()
-                extractor.prewarm()
-            }.onFailure { if (it is CancellationException) throw it }
-                .onFailure { host.log(VyonExLogLevel.WARN, "VyonEx warm-up failed: ${it.message}") }
-                .onSuccess { host.log(VyonExLogLevel.INFO, "VyonEx warmed in ${host.nowMs() - start}ms") }
+        stateLock.withLock {
+            warmup?.cancel()
+            warmup = scope.launch {
+                delay(delayMs)
+                val start = host.nowMs()
+                runCatching {
+                    applySession()
+                    extractor.prewarm()
+                }.onFailure { if (it is CancellationException) throw it }
+                    .onFailure { host.log(VyonExLogLevel.WARN, "VyonEx warm-up failed: ${it.message}") }
+                    .onSuccess { host.log(VyonExLogLevel.INFO, "VyonEx warmed in ${host.nowMs() - start}ms") }
+            }
         }
-    }
-
-    private fun readPlayer(key: String): String? =
-        playerDir?.let { File(it, key) }?.takeIf { it.isFile }?.readText()
-
-    private fun writePlayer(key: String, value: String?) {
-        val dir = playerDir ?: return
-        val file = File(dir, key)
-        if (value == null) {
-            file.delete()
-            return
-        }
-        val tmp = File(dir, "$key.tmp")
-        tmp.writeText(value)
-        tmp.renameTo(file)
-        // Players rotate every few days; only the newest are worth their megabytes.
-        dir.listFiles()?.filter { !it.name.endsWith(".tmp") }?.sortedByDescending { it.lastModified() }
-            ?.drop(KEPT_PLAYERS)?.forEach { it.delete() }
     }
 
     /** Forward the host's optional PoToken provider without changing its capabilities. */
     private val tokenProvider = object : TokenProvider {
         override val capabilities: TokenProviderCapabilities
-            get() = host.tokenProvider?.capabilities
+            get() = platform.tokenProvider?.capabilities
                 ?: TokenProviderCapabilities(providers = emptySet(), usesWebView = false)
 
         override suspend fun getPoToken(videoId: String, visitorData: String, cookie: String?): PoTokenResult? =
-            host.tokenProvider?.getPoToken(videoId, visitorData, cookie)
+            platform.tokenProvider?.getPoToken(videoId, visitorData, cookie)
 
         override suspend fun close() {
-            host.tokenProvider?.close()
+            platform.tokenProvider?.close()
         }
     }
 
-    private val http = HttpClient(OkHttp) {
-        engine { preconfigured = host.httpClient }
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true })
-        }
-        install(HttpTimeout) {
-            requestTimeoutMillis = 30_000
-            connectTimeoutMillis = 15_000
-            socketTimeoutMillis = 20_000
-        }
-        expectSuccess = false
-    }
+    private val http = platform.httpClient
 
     private val logger = InnerTubeLogger { event ->
         val details = if (event.details.isEmpty()) "" else event.details.entries.joinToString(prefix = " [", postfix = "]") {
@@ -156,9 +123,7 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
         logger = logger,
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val minted = ConcurrentHashMap<String, VyonExStream>()
-    private val excluded = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     suspend fun extract(
         videoId: String,
@@ -190,15 +155,17 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
             profileId = stream.profileId,
             headers = stream.headers,
         )
-        if (minted.size >= MAX_REMEMBERED) minted.clear()
-        minted[extracted.url] = extracted
+        stateLock.withLock {
+            if (minted.size >= MAX_REMEMBERED) minted.clear()
+            minted[extracted.url] = extracted
+        }
         return extracted
     }
 
-    fun headersFor(url: String): Map<String, String>? = minted[url]?.headers
+    fun headersFor(url: String): Map<String, String>? = stateLock.withLock { minted[url]?.headers }
 
     fun onRefused(url: String): String? {
-        val refused = minted.remove(url) ?: return null
+        val refused = stateLock.withLock { minted.remove(url) } ?: return null
         exclude(refused.videoId, refused.profileId)
         // A refused ciphered URL may mean the remote cipher config is stale; refresh it off-path.
         scope.launch { runCatching { cipherService.refreshAfterStreamRejection() } }
@@ -207,12 +174,16 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
 
     fun exclude(videoId: String, profileId: String) {
         host.log(VyonExLogLevel.WARN, "VyonEx: $profileId refused $videoId; skipping it for this track", videoId)
-        excluded.getOrPut(videoId) { ConcurrentHashMap() }[profileId] = host.nowMs() + EXCLUDE_MS
+        stateLock.withLock {
+            excluded.getOrPut(videoId) { mutableMapOf() }[profileId] = host.nowMs() + EXCLUDE_MS
+        }
     }
 
     fun onSessionChanged() {
-        excluded.clear()
-        minted.clear()
+        stateLock.withLock {
+            excluded.clear()
+            minted.clear()
+        }
         if (host.configStore.enabled) warm(0)
     }
 
@@ -224,10 +195,12 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
     }
 
     private fun excludedFor(videoId: String): Set<String> {
-        val entries = excluded[videoId] ?: return emptySet()
-        val now = host.nowMs()
-        entries.entries.removeAll { it.value <= now }
-        return entries.keys.toSet()
+        return stateLock.withLock {
+            val entries = excluded[videoId] ?: return@withLock emptySet()
+            val now = host.nowMs()
+            entries.entries.removeAll { it.value <= now }
+            entries.keys.toSet()
+        }
     }
 
     private companion object {
@@ -236,7 +209,6 @@ internal class PrimaryExtractorBackend(private val host: VyonExHost) {
         const val EXCLUDE_MS = 10 * 60 * 1000L
         const val MAX_REMEMBERED = 64
         const val WARM_DELAY_MS = 2_000L
-        const val KEPT_PLAYERS = 3
     }
 }
 // bxane

@@ -62,6 +62,8 @@ kotlin {
 
         iosMain.dependencies {
             implementation("io.ktor:ktor-client-darwin:3.5.2")
+            implementation("io.ktor:ktor-client-content-negotiation:3.5.2")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.5.2")
         }
 
         jvmTest.dependencies {

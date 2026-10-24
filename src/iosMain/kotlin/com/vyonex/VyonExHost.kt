@@ -3,11 +3,8 @@
 package com.vyonex
 
 import com.vyonex.internal.primary.extraction.TokenProvider
-import io.ktor.client.HttpClient
 
-/** iOS host services, with transport and script storage supplied by the app. */
+/** iOS host services; VyonEx owns its Darwin HTTP transport. */
 interface VyonExHost : VyonExHostServices {
     val tokenProvider: TokenProvider?
-    val filesDir: String?
-    val httpClient: HttpClient
 }
