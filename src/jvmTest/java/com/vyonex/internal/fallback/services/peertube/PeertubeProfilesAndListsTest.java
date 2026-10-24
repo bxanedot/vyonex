@@ -83,6 +83,39 @@ class PeertubeProfilesAndListsTest {
     }
 
     @Test
+    void accountPreservesUnavailableAndMalformedResponseErrors() throws Exception {
+        final String accountUrl = BASE + "/api/v1/accounts/alice@tube.example";
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ListLinkHandler link = service.getChannelLHFactory()
+                .fromUrl(BASE + "/a/alice@tube.example");
+
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, "{\"error\":\"Account unavailable\"}")));
+        final ChannelExtractor unavailable = service.getChannelExtractor(link);
+        final ContentNotAvailableException unavailableError = assertThrows(
+                ContentNotAvailableException.class, unavailable::fetchPage);
+        assertEquals("Account unavailable", unavailableError.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, "not-json")));
+        final ChannelExtractor malformed = service.getChannelExtractor(link);
+        final ParsingException parseError = assertThrows(ParsingException.class, malformed::fetchPage);
+        assertEquals("Invalid PeerTube account response", parseError.getMessage());
+    }
+
+    @Test
+    void accountUsesItsFollowerCountWhenChannelListIsUnavailable() throws Exception {
+        final String accountUrl = BASE + "/api/v1/accounts/alice@tube.example";
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, """
+                {"id":7,"displayName":"Alice","followersCount":5}
+                """)));
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ChannelExtractor account = service.getChannelExtractor(service.getChannelLHFactory()
+                .fromUrl(BASE + "/a/alice@tube.example"));
+        account.fetchPage();
+
+        assertEquals(5, account.getSubscriberCount());
+    }
+
+    @Test
     void channelExposesItsOwnerAndPlaylistTab() throws Exception {
         final String channelUrl = BASE + "/api/v1/video-channels/music@tube.example";
         final StubDownloader downloader = new StubDownloader(Map.of(channelUrl, """
