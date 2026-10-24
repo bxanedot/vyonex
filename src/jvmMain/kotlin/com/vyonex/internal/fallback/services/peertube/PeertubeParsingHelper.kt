@@ -94,17 +94,17 @@ public class PeertubeParsingHelper private constructor() {
         @JvmStatic
         @Throws(ParsingException::class)
         public fun requiredString(item: JsonObject, path: String): String =
-            valueAt(item, path) as? String
+            PeertubeFieldReader.stringAt(item, path)
                 ?: throw ParsingException("Missing string field: $path")
 
         @JvmStatic
         public fun optionalString(item: JsonObject, path: String): String? =
-            valueAt(item, path) as? String
+            PeertubeFieldReader.stringAt(item, path)
 
         @JvmStatic
         @Throws(ParsingException::class)
         public fun requiredNumber(item: JsonObject, path: String): Number =
-            valueAt(item, path) as? Number
+            PeertubeFieldReader.numberAt(item, path)
                 ?: throw ParsingException("Missing numeric field: $path")
 
         @JvmStatic
@@ -172,12 +172,5 @@ public class PeertubeParsingHelper private constructor() {
             baseUrl + if (path.startsWith('/')) path else "/$path"
         }
 
-        private fun valueAt(item: JsonObject, path: String): Any? {
-            var value: Any? = item
-            for (key in path.split('.')) {
-                value = (value as? JsonObject)?.get(key) ?: return null
-            }
-            return value
-        }
     }
 }
