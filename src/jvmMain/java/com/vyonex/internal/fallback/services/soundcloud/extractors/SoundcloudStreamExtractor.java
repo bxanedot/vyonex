@@ -20,6 +20,8 @@ import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioCandidate
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioFormat;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTagParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackPayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTrackPayloadParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscoding;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscodingMapper;
 import com.vyonex.internal.fallback.stream.AudioStream;
@@ -30,9 +32,9 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import com.vyonex.internal.json.JsonParserException;
+import com.vyonex.internal.json.JsonWriter;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -68,8 +70,9 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
 
     @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        final JsonObject track = SoundcloudParsingHelper.resolveFor(downloader, getUrl());
-        final String policy = track.getString("policy", "");
+        final SoundcloudTrackPayload track = SoundcloudTrackPayloadParser.INSTANCE.parse(
+                JsonWriter.string(SoundcloudParsingHelper.resolveFor(downloader, getUrl())));
+        final String policy = track.getPolicy();
         if (!"ALLOW".equals(policy) && !"MONETIZE".equals(policy)) {
             available = false;
             if ("SNIP".equals(policy)) throw new SoundCloudGoPlusContentException();
@@ -80,36 +83,25 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
         }
         available = true;
 
-        final JsonObject user = track.getObject("user");
-        id = String.valueOf(track.get("id"));
-        name = track.getString("title", "");
-        uploadDate = track.getString("created_at");
-        artworkUrl = track.getString("artwork_url");
-        if (artworkUrl == null) artworkUrl = user.getString("avatar_url");
-        description = track.getString("description", "");
-        length = track.getLong("duration") / 1000;
-        viewCount = track.getLong("playback_count");
-        likeCount = track.getLong("likes_count", -1);
-        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
-        uploaderName = user.getString("username", "");
-        uploaderAvatarUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("avatar_url", ""));
-        uploaderVerified = user.getBoolean("verified");
-        streamable = track.getBoolean("streamable");
-        trackAuthorization = track.getString("track_authorization");
-        sharing = track.getString("sharing", "");
-        category = track.getString("genre", "");
-        licence = track.getString("license", "");
-        tagList = track.getString("tag_list", "");
-
-        final List<SoundcloudTranscoding> availableTranscodings = new ArrayList<>();
-        for (final Object value : track.getObject("media").getArray("transcodings")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject transcoding = (JsonObject) value;
-            availableTranscodings.add(new SoundcloudTranscoding(transcoding.getString("url"),
-                    transcoding.getObject("format").getString("protocol", ""),
-                    transcoding.getString("preset", Stream.ID_UNKNOWN)));
-        }
-        transcodings = List.copyOf(availableTranscodings);
+        id = track.getId();
+        name = track.getTitle();
+        uploadDate = track.getCreatedAt();
+        artworkUrl = track.getArtworkUrl();
+        description = track.getDescription();
+        length = track.getDurationMillis() / 1000;
+        viewCount = track.getPlaybackCount();
+        likeCount = track.getLikesCount();
+        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(track.getUserPermalinkUrl());
+        uploaderName = track.getUserName();
+        uploaderAvatarUrl = SoundcloudParsingHelper.toHttpsUrl(track.getUserAvatarUrl());
+        uploaderVerified = track.getUserVerified();
+        streamable = track.getStreamable();
+        trackAuthorization = track.getTrackAuthorization();
+        sharing = track.getSharing();
+        category = track.getGenre();
+        licence = track.getLicense();
+        tagList = track.getTagList();
+        transcodings = List.copyOf(track.getTranscodings());
     }
 
     @Override public String getId() { return id; }
