@@ -52,7 +52,19 @@ public object MediaCCCParsingHelper {
         downloader: Downloader,
         url: String,
         localization: Localization?,
-    ): JsonObject {
+    ): JsonObject = try {
+        JsonParser.`object`().from(fetchJsonBody(downloader, url, localization))
+    } catch (error: JsonParserException) {
+        throw ExtractionException("Could not parse API response from $url", error)
+    }
+
+    @JvmStatic
+    @Throws(IOException::class, ExtractionException::class)
+    public fun fetchJsonBody(
+        downloader: Downloader,
+        url: String,
+        localization: Localization?,
+    ): String {
         val response: Response? = if (localization == null) {
             downloader.get(url)
         } else {
@@ -64,11 +76,7 @@ public object MediaCCCParsingHelper {
                 "API request failed with HTTP ${response.responseCode()} for $url",
             )
         }
-        return try {
-            JsonParser.`object`().from(response.responseBody())
-        } catch (error: JsonParserException) {
-            throw ExtractionException("Could not parse API response from $url", error)
-        }
+        return response.responseBody()
     }
 
     @JvmStatic
