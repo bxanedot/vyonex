@@ -1,27 +1,28 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.primary.cipher
 
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Test
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class PlayerCipherUrlSolverContractTest {
     @Test
-    fun solvesSignatureAndNFromAnOfflinePlayerWrapper() = runBlocking {
-        val solver = PlayerCipherUrlSolver.create(PLAYER_SCRIPT)
-        assertNotNull(solver)
+    fun solvesSignatureAndNFromAnOfflinePlayerWrapper() = runTest {
+        val solver = assertNotNull(PlayerCipherUrlSolver.create(PLAYER_SCRIPT))
         try {
-            assertEquals("eborp-erutangis-xenoyv", solver?.solveSignature("vyonex-signature-probe"))
-            assertEquals("eborp-n-xenoyv", solver?.solveN("vyonex-n-probe"))
+            assertEquals("eborp-erutangis-xenoyv", solver.solveSignature("vyonex-signature-probe"))
+            assertEquals("eborp-n-xenoyv", solver.solveN("vyonex-n-probe"))
         } finally {
-            solver?.dispose()
+            solver.dispose()
         }
     }
 
     @Test
-    fun rejectsPlayersWithoutAWrapperOwnedTransformFactory() = runBlocking {
+    fun rejectsPlayersWithoutAWrapperOwnedTransformFactory() = runTest {
         assertNull(PlayerCipherUrlSolver.create("var _yt_player = {}; (function(g) {})(_yt_player);"))
     }
 

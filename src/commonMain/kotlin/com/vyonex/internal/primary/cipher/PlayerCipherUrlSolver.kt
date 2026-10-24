@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 bxane
+// SPDX-License-Identifier: GPL-3.0-only
 // bxane
 package com.vyonex.internal.primary.cipher
 
@@ -16,7 +18,7 @@ internal class PlayerCipherUrlSolver private constructor(
         suspend fun create(playerCode: String): PlayerCipherUrlSolver? =
             PlayerCipherScriptParser.parse(playerCode)?.let { create(it) }
 
-        suspend fun create(parsed: PlayerCipherScriptParser.ParsedPlayer): PlayerCipherUrlSolver? {
+        suspend fun create(parsed: ParsedPlayerCipherScript): PlayerCipherUrlSolver? {
             val engine = QuickJsEngine()
             try {
                 engine.initialize()
@@ -46,8 +48,8 @@ internal class PlayerCipherUrlSolver private constructor(
               const url = "$PLAYER_URL";
               const signature = "$SIGNATURE_PROBE";
               const n = "$N_PROBE";
-                  const encodedSignature = encodeURIComponent(signature);
-                  const initial = factory(url, "s", encodedSignature);
+              const encodedSignature = encodeURIComponent(signature);
+              const initial = factory(url, "s", encodedSignature);
               if (!initial || typeof initial.set !== "function" || typeof initial.get !== "function") return "";
               for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(initial))) {
                 if (["constructor", "set", "get", "clone"].includes(method)) continue;

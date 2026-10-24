@@ -4,7 +4,7 @@
 
 **Goal:** Keep VyonEx's JVM extractor usable and expose the same supported extraction API to Swift/iOS from one Kotlin Multiplatform project.
 
-**Architecture:** Convert the existing Gradle project to KMP, share the public value types and extractor orchestration, and keep JVM-only engines in `jvmMain` behind platform services. Add Darwin and JavaScriptCore implementations for iOS; retain the six `com.vyonex` public API names and the existing JVM call shape where possible.
+**Architecture:** Convert the existing Gradle project to KMP, share the public value types, extraction orchestration, QuickJS runtime, and player URL-cipher parser. Keep JVM-only HTTP adapters and the legacy Rhino parser in `jvmMain`; use Darwin for iOS HTTP while the public extraction facade and host are ported.
 
 **Tech Stack:** Kotlin Multiplatform 2.4.21, Gradle 9.8.2, JDK 27 for builds, JVM bytecode 26, Ktor 3.5.2, Darwin, Kotlin/Native iOS Arm64 and simulator targets.
 
@@ -22,7 +22,7 @@
 - JVM client source compatibility: compile a fixture implementing all six public APIs on the JVM.
 - Swift visibility: inspect generated framework headers for the six API names and an async extraction call.
 - HTTP failures and malformed service payloads: retain typed errors and existing fallbacks in offline tests.
-- Missing host storage or JavaScriptCore support: extraction must fail or fall back without crashing.
+- Missing host storage or QuickJS runtime support: extraction must fail or fall back without crashing.
 - iOS target drift: compile both device and simulator frameworks in macOS CI for every shared API change.
 
 ---
@@ -31,7 +31,7 @@
 
 **Files:** `settings.gradle.kts`, `build.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`, `src/main/**`, `src/jvmMain/**`, `src/commonMain/kotlin/com/vyonex/**`, `src/test/**`, `src/jvmTest/**`, and a macOS workflow.
 
-**Interfaces:** Keep the six public names; move only platform-neutral value and config types to `commonMain`. Keep Java, filesystem, OkHttp, protobuf, ICU, and JS engine code in `jvmMain`. Add iOS device and simulator frameworks using shared source sets.
+**Interfaces:** Keep the six public names; move platform-neutral values, extraction orchestration, QuickJS execution, and the player URL-cipher parser to `commonMain`. Keep Java, filesystem, OkHttp, protobuf, ICU, and the legacy Rhino parser in `jvmMain`. Add iOS device and simulator frameworks using shared source sets.
 
 - [ ] Add JVM API compatibility tests and assertions that shared models are available from common code.
 - [ ] Convert the project to the KMP plugin, relocate sources to the standard source sets, configure JVM and iOS targets, and declare Darwin in `iosMain`.
