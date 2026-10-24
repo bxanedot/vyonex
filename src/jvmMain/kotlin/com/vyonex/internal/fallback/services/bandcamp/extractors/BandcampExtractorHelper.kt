@@ -11,6 +11,8 @@ import com.vyonex.internal.fallback.exceptions.ReCaptchaException
 import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsParseException
 import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsParser
 import com.vyonex.internal.fallback.services.bandcamp.BandcampArtistDetailsPayload
+import com.vyonex.internal.fallback.services.bandcamp.BandcampItemUrlParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampItemUrlParser
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampUrlParser
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampRadioUrlParser
@@ -45,14 +47,14 @@ public object BandcampExtractorHelper {
             ?: throw ParsingException("Bandcamp item type is missing")
         val endpoint = "$BASE_API_URL/mobile/22/tralbum_details?band_id=$bandId&tralbum_id=$itemId&tralbum_type=${type[0]}"
         try {
-            val response = JsonParser.`object`().from(currentDownloader().get(endpoint).responseBody())
-            return forceHttps(response.getString("bandcamp_url"))
+            val url = BandcampItemUrlParser.parse(currentDownloader().get(endpoint).responseBody())
+            return forceHttps(url)
                 ?: throw ParsingException("Bandcamp item response has no URL")
         } catch (error: IOException) {
             throw ParsingException("Could not resolve Bandcamp item URL", error)
         } catch (error: ReCaptchaException) {
             throw ParsingException("Could not resolve Bandcamp item URL", error)
-        } catch (error: JsonParserException) {
+        } catch (error: BandcampItemUrlParseException) {
             throw ParsingException("Could not resolve Bandcamp item URL", error)
         }
     }
