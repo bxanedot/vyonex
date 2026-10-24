@@ -16,7 +16,11 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.SoundCloudGoPlusContentException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioCandidate;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudAudioFormat;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscoding;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudTranscodingMapper;
 import com.vyonex.internal.fallback.stream.AudioStream;
 import com.vyonex.internal.fallback.stream.DeliveryMethod;
 import com.vyonex.internal.fallback.stream.Description;
@@ -54,7 +58,7 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
     private String category;
     private String licence;
     private String tagList;
-    private List<Transcoding> transcodings = List.of();
+    private List<SoundcloudTranscoding> transcodings = List.of();
     private boolean available = true;
 
     public SoundcloudStreamExtractor(final StreamingService service, final LinkHandler handler) {
@@ -96,11 +100,11 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
         licence = track.getString("license", "");
         tagList = track.getString("tag_list", "");
 
-        final List<Transcoding> availableTranscodings = new ArrayList<>();
+        final List<SoundcloudTranscoding> availableTranscodings = new ArrayList<>();
         for (final Object value : track.getObject("media").getArray("transcodings")) {
             if (!(value instanceof JsonObject)) continue;
             final JsonObject transcoding = (JsonObject) value;
-            availableTranscodings.add(new Transcoding(transcoding.getString("url"),
+            availableTranscodings.add(new SoundcloudTranscoding(transcoding.getString("url"),
                     transcoding.getObject("format").getString("protocol", ""),
                     transcoding.getString("preset", Stream.ID_UNKNOWN)));
         }
@@ -139,21 +143,21 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
     @Override public List<AudioStream> getAudioStreams() throws IOException, ExtractionException {
         final List<AudioStream> streams = new ArrayList<>();
         if (!available || !streamable) return streams;
-        for (final Transcoding transcoding : transcodings) {
-            final String endpoint = transcoding.endpoint();
-            final String protocol = transcoding.protocol();
-            if (endpoint == null || endpoint.isBlank() || protocol.contains("encrypted")) continue;
-            final String preset = transcoding.preset();
-            final MediaFormat format = formatFor(preset);
-            if (format == null) continue;
+        for (final SoundcloudAudioCandidate candidate :
+                SoundcloudTranscodingMapper.INSTANCE.map(streamable, transcodings)) {
+            final String endpoint = candidate.getEndpoint();
+            final String preset = candidate.getPreset();
+            final MediaFormat format = switch (candidate.getFormat()) {
+                case MP3 -> MediaFormat.MP3;
+                case OPUS -> MediaFormat.OPUS;
+                case M4A -> MediaFormat.M4A;
+            };
             try {
                 final AudioStream.Builder builder = new AudioStream.Builder()
                         .setId(preset).setMediaFormat(format)
                         .setContent(getTranscodingUrl(endpoint, trackAuthorization), true);
-                if ("hls".equals(protocol)) builder.setDeliveryMethod(DeliveryMethod.HLS);
-                if (format == MediaFormat.MP3) builder.setAverageBitrate(128);
-                else if (format == MediaFormat.OPUS) builder.setAverageBitrate(64);
-                else if (format == MediaFormat.M4A) builder.setAverageBitrate(160);
+                if (candidate.getHls()) builder.setDeliveryMethod(DeliveryMethod.HLS);
+                builder.setAverageBitrate(candidate.getFormat().getBitrate());
                 final AudioStream stream = builder.build();
                 if (!Stream.containSimilarStream(stream, streams)) streams.add(stream);
             } catch (final IOException | ExtractionException ignored) {
@@ -185,13 +189,6 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
         }
     }
 
-    private static MediaFormat formatFor(final String preset) {
-        if (preset.contains("mp3")) return MediaFormat.MP3;
-        if (preset.contains("opus")) return MediaFormat.OPUS;
-        if (preset.contains("aac_160k")) return MediaFormat.M4A;
-        return null;
-    }
-
     @Override public List<VideoStream> getVideoStreams() { return List.of(); }
     @Override public List<VideoStream> getVideoOnlyStreams() { return List.of(); }
     @Override public StreamType getStreamType() { return StreamType.AUDIO_STREAM; }
@@ -214,8 +211,6 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
     @Override public String getCategory() { return category; }
     @Override public String getLicence() { return licence; }
     @Override public List<String> getTags() { return parseTags(tagList); }
-
-    private record Transcoding(String endpoint, String protocol, String preset) { }
 
     static List<String> parseTags(final String input) {
         if (input == null || input.isBlank()) return List.of();
