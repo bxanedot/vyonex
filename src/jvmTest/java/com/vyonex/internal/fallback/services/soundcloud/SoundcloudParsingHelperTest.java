@@ -43,8 +43,9 @@ class SoundcloudParsingHelperTest {
         try {
             VyonEx.init(downloader);
 
-            assertEquals("42", SoundcloudParsingHelper.resolveFor(downloader,
-                    "https://soundcloud.com/artist/track").getString("id"));
+            assertEquals("{\"id\":\"42\",\"kind\":\"track\"}",
+                    SoundcloudParsingHelper.resolveFor(downloader,
+                            "https://soundcloud.com/artist/track"));
             assertEquals(SoundcloudParsingHelper.SOUNDCLOUD_API_V2_URL
                     + "users/1/tracks?offset=10&client_id=offline-key",
                     SoundcloudParsingHelper.getStreamsFromApi(

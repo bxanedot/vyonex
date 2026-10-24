@@ -36,6 +36,13 @@ internal data class SoundcloudTrackPayload(
 )
 
 internal object SoundcloudTrackPayloadParser {
+    fun parseId(source: String): String? {
+        val response = Json.parseToJsonElement(source) as? JsonObject
+            ?: throw IllegalArgumentException("SoundCloud resolution must be a JSON object")
+        val id = response["id"]?.takeUnless { it == JsonNull } ?: return null
+        return if (id is JsonPrimitive) id.content else id.toString()
+    }
+
     fun parse(source: String): SoundcloudTrackPayload {
         val track = Json.parseToJsonElement(source) as? JsonObject
             ?: throw IllegalArgumentException("SoundCloud track response must be a JSON object")

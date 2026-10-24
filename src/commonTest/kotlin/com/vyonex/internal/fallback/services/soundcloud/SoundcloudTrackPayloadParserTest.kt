@@ -8,6 +8,16 @@ import kotlin.test.assertFailsWith
 
 class SoundcloudTrackPayloadParserTest {
     @Test
+    fun parsesResolvedIdsWithoutCoercingNullOrStructuredValues() {
+        assertEquals("42", SoundcloudTrackPayloadParser.parseId("""{"id":42}"""))
+        assertEquals("track", SoundcloudTrackPayloadParser.parseId("""{"id":"track"}"""))
+        assertEquals("{\"value\":1}", SoundcloudTrackPayloadParser.parseId("""{"id":{"value":1}}"""))
+        assertEquals(null, SoundcloudTrackPayloadParser.parseId("{}"))
+        assertEquals(null, SoundcloudTrackPayloadParser.parseId("""{"id":null}"""))
+        assertFailsWith<IllegalArgumentException> { SoundcloudTrackPayloadParser.parseId("[]") }
+    }
+
+    @Test
     fun mapsTrackMetadataAndTranscodings() {
         assertEquals(
             SoundcloudTrackPayload(

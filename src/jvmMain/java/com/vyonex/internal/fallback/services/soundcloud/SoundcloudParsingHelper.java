@@ -24,10 +24,6 @@ import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPageParse
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPagePayload;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.utils.ImageSuffix;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 
@@ -117,9 +113,9 @@ public final class SoundcloudParsingHelper {
         }
     }
 
-    public static JsonObject resolveFor(final Downloader downloader, final String url)
+    public static String resolveFor(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
-        return requestObject(downloader,
+        return requestBody(downloader,
                 SoundcloudSearchUrl.INSTANCE.resolveUrl(url, clientId()));
     }
 
@@ -151,17 +147,21 @@ public final class SoundcloudParsingHelper {
             }
         }
         final String normalized = normalizeUserUrl(url);
-        final JsonObject response;
+        final String id;
         try {
             final String widgetUrl = SoundcloudSearchUrl.INSTANCE
                     .widgetResolveUrl(normalized, clientId());
-            response = requestObject(VyonEx.getDownloader(), widgetUrl);
+            final String response = requestBody(VyonEx.getDownloader(), widgetUrl);
+            try {
+                id = SoundcloudTrackPayloadParser.INSTANCE.parseId(response);
+            } catch (final IllegalArgumentException e) {
+                throw new ParsingException("Invalid SoundCloud API response", e);
+            }
         } catch (final ExtractionException e) {
             throw new ParsingException("Unable to resolve SoundCloud URL", e);
         }
-        final Object id = response.get("id");
         if (id == null) throw new ParsingException("SoundCloud resolution has no ID");
-        return id.toString();
+        return id;
     }
 
     public static String getUsersFromApiMinItems(final int minimum,
@@ -276,16 +276,6 @@ public final class SoundcloudParsingHelper {
                 size.getWidth(), size.getResolutionLevel())).toList();
     }
 
-    private static JsonObject requestObject(final Downloader downloader, final String url)
-            throws IOException, ReCaptchaException, ParsingException {
-        final String body = requestBody(downloader, url);
-        try {
-            return JsonParser.object().from(body);
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Invalid SoundCloud API response", e);
-        }
-    }
-
     private static String requestBody(final Downloader downloader, final String url)
             throws IOException, ReCaptchaException, ParsingException {
         final Response response = downloader.get(url);
@@ -296,10 +286,6 @@ public final class SoundcloudParsingHelper {
             throw new IOException("SoundCloud request failed with HTTP " + response.responseCode());
         }
         return response.responseBody();
-    }
-
-    public static String getNextPageUrl(final JsonObject response) {
-        return getNextPageUrl(response.getString("next_href"));
     }
 
     public static String getNextPageUrl(final String next) {

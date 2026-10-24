@@ -34,7 +34,6 @@ import com.vyonex.internal.fallback.stream.StreamExtractor;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.stream.StreamType;
 import com.vyonex.internal.fallback.stream.VideoStream;
-import com.vyonex.internal.json.JsonWriter;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -70,8 +69,13 @@ public final class SoundcloudStreamExtractor extends StreamExtractor {
 
     @Override public void onFetchPage(final Downloader downloader)
             throws IOException, ExtractionException {
-        final SoundcloudTrackPayload track = SoundcloudTrackPayloadParser.INSTANCE.parse(
-                JsonWriter.string(SoundcloudParsingHelper.resolveFor(downloader, getUrl())));
+        final SoundcloudTrackPayload track;
+        try {
+            track = SoundcloudTrackPayloadParser.INSTANCE.parse(
+                    SoundcloudParsingHelper.resolveFor(downloader, getUrl()));
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
+        }
         final String policy = track.getPolicy();
         if (!"ALLOW".equals(policy) && !"MONETIZE".equals(policy)) {
             available = false;
