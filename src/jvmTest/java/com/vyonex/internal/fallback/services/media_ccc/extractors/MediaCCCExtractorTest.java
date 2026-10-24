@@ -269,6 +269,26 @@ class MediaCCCExtractorTest {
     }
 
     @Test
+    void recordingRejectsMalformedConferenceJson() throws Exception {
+        final String eventUrl = "https://api.media.ccc.de/public/events/talk-1";
+        final String conferenceUrl = "https://api.media.ccc.de/public/conferences/fosdem";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                eventUrl, "{\"title\":\"Talk\",\"conference_url\":\"https://media.ccc.de/c/fosdem\"}",
+                conferenceUrl, "not-json"));
+        VyonEx.init(downloader);
+        final MediaCCCService service = new MediaCCCService(8);
+        final StreamExtractor recording = service.getStreamExtractor(
+                MediaCCCStreamLinkHandlerFactory.getInstance()
+                        .fromUrl("https://media.ccc.de/v/talk-1"));
+
+        final ExtractionException error = assertThrows(ExtractionException.class,
+                () -> recording.onFetchPage(downloader));
+
+        assertEquals("Could not parse API response from " + conferenceUrl, error.getMessage());
+        assertEquals(List.of(eventUrl, conferenceUrl), downloader.requestedUrls);
+    }
+
+    @Test
     void liveRoomMapsManifestsAndDirectStreams() throws Exception {
         final String liveUrl = "https://streaming.media.ccc.de/streams/v2.json";
         final StubDownloader downloader = new StubDownloader(Map.of(liveUrl, LIVE_STREAMS_BODY));
