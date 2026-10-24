@@ -15,12 +15,8 @@ public class PeertubeStreamLinkHandlerFactory private constructor() : LinkHandle
 
     @Throws(ParsingException::class)
     override fun getId(url: String): String {
-        val path = PeertubeUrl.segments(url) ?: throw ParsingException("Invalid PeerTube URL: $url")
-        if (path.size == 2 && (path[0] == "w" || path[0] == "videos")) return path[1]
-        if (path.size == 3 && path[0] == "videos"
-            && (path[1] == "watch" || path[1] == "embed")
-        ) return path[2]
-        throw ParsingException("URL does not identify a PeerTube video")
+        val parsed = PeertubeUrl.parse(url) ?: throw ParsingException("Invalid PeerTube URL: $url")
+        return PeertubeUrl.videoId(parsed) ?: throw ParsingException("URL does not identify a PeerTube video")
     }
 
     override fun onAcceptUrl(url: String): Boolean = try {

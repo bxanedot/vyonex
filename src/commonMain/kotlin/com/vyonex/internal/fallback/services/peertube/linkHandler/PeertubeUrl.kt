@@ -6,7 +6,10 @@ package com.vyonex.internal.fallback.services.peertube.linkHandler
 import io.ktor.http.Url
 
 internal object PeertubeUrl {
-    internal data class Parsed(val path: String, val query: String)
+    internal data class Parsed(val path: String, val query: String) {
+        val segments: List<String>
+            get() = path.split('/').filter(String::isNotEmpty)
+    }
 
     private val webAuthority = Regex("^https?://[^/?#]+", RegexOption.IGNORE_CASE)
     private val malformedEscape = Regex("%(?![0-9A-Fa-f]{2})")
@@ -25,7 +28,17 @@ internal object PeertubeUrl {
     }
 
     fun segments(value: String?): List<String>? =
-        parse(value)?.path?.split('/')?.filter(String::isNotEmpty)
+        parse(value)?.segments
+
+    fun videoId(url: Parsed): String? {
+        val path = url.segments
+        return when {
+            path.size == 2 && (path[0] == "w" || path[0] == "videos") -> path[1]
+            path.size == 3 && path[0] == "videos" &&
+                (path[1] == "watch" || path[1] == "embed") -> path[2]
+            else -> null
+        }
+    }
 
     fun accepts(value: String?): Boolean = parse(value) != null
 }

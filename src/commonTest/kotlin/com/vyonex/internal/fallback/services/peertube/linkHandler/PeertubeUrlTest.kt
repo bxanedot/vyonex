@@ -33,4 +33,19 @@ class PeertubeUrlTest {
         assertNull(PeertubeUrl.parse("https://tube.example\\w/video-id"))
         assertFalse(PeertubeUrl.accepts("https:///w/video-id"))
     }
+
+    @Test
+    fun extractsVideoIdsFromSupportedWatchRoutes() {
+        listOf(
+            "/w/video-id" to "video-id",
+            "/videos/video-id" to "video-id",
+            "/videos/watch/video-id" to "video-id",
+            "/videos/embed/video-id" to "video-id",
+        ).forEach { (path, id) ->
+            assertEquals(id, PeertubeUrl.videoId(requireNotNull(PeertubeUrl.parse("https://tube.example$path"))))
+        }
+        assertNull(PeertubeUrl.videoId(requireNotNull(PeertubeUrl.parse(
+            "https://tube.example/videos/watch/playlist/list-id",
+        ))))
+    }
 }
