@@ -22,12 +22,12 @@ Ship VyonEx as one Kotlin Multiplatform Gradle module that remains usable from J
 
 ## Chosen design
 
-Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; use platform adapters for filesystem and HTTP. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. The primary backend, public YouTube `extract` facade, QuickJS-KT runtime, player-wrapper parser, cipher solvers, challenge orchestration, and YouTube cipher service now live in common/iOS source sets. The Rhino-backed parser fallback and watch-page fallback extractor remain JVM-only.
+Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; use platform adapters for filesystem and HTTP. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. The primary backend, public YouTube `extract` facade, watch-page response parser, QuickJS-KT runtime, player-wrapper parser, cipher solvers, challenge orchestration, and YouTube cipher service now live in common/iOS source sets. The Rhino-backed parser and legacy NewPipe fallback APIs remain JVM-only.
 
 ## Port status
 
 - Shared and locally verified: extractor request orchestration, primary backend wiring, QuickJS runtime, player URL-cipher parser/solver, configured player cipher solver, challenge orchestration, and YouTube cipher service. The JVM retains the legacy parser fallback through a platform seam; iOS uses the shared parser path.
-- iOS exposes `VyonExHost`, `VyonEx`, and the primary `extract`/header/session methods. The iOS Darwin client is created internally. The Rhino-backed legacy player-function parser, watch-page fallback methods, and persistent prepared-player script cache remain JVM-only.
+- iOS exposes `VyonExHost`, `VyonEx`, and YouTube extraction with primary clients followed by the shared watch-page fallback, plus header/session methods. The iOS Darwin client is created internally. The Rhino-backed player-function parser and legacy NewPipe fallback methods remain JVM-only; prepared-player scripts use memory-only caching on iOS.
 - Windows checks compile iOS device/simulator main and test sources. Native simulator test execution and Apple framework linking must pass on macOS CI before these shared cipher slices are considered supported on iOS.
 
 Move shared value types first, then the YouTube primary path and its platform services, then non-YouTube services, YouTube fallback, and bundled assets. The JVM target remains functional throughout the migration. A source or attribution notice is retired only after its replacement passes offline compatibility tests on the targets it serves.

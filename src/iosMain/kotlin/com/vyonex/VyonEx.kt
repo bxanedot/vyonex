@@ -1,7 +1,7 @@
 package com.vyonex
 // bxane
 
-/** YouTube primary extractor exposed to Swift through the VyonEx framework. */
+/** YouTube primary and watch-page fallback extraction exposed through the VyonEx framework. */
 class VyonEx(host: VyonExHost) {
     private val primary = PrimaryExtractorBackend(host)
 
@@ -12,7 +12,7 @@ class VyonEx(host: VyonExHost) {
         maxKbps: Int,
         skipClients: Set<String> = emptySet(),
         requireM4a: Boolean = false,
-    ): VyonExStream? = primary.extract(videoId, maxKbps, skipClients, requireM4a)
+    ): VyonExStream? = primary.extractWithWatchPageFallback(videoId, maxKbps, skipClients, requireM4a)
 
     fun headersFor(url: String): Map<String, String>? = primary.headersFor(url)
 
