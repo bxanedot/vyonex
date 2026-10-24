@@ -31,6 +31,10 @@ kotlin {
     }
 
     sourceSets {
+        commonMain.dependencies {
+            implementation("io.ktor:ktor-http:3.5.2")
+        }
+
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
