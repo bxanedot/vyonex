@@ -2,7 +2,6 @@
 package com.vyonex.internal.primary.extraction
 
 import com.vyonex.internal.primary.models.Thumbnail
-import com.vyonex.internal.primary.models.response.PlayerResponse
 import com.vyonex.internal.primary.sabr.SabrBootstrap
 import kotlin.time.Instant
 
@@ -156,30 +155,6 @@ public data class PlayerConfig(
             "visitorData=${visitorData.presence()}, " +
             "clientVersion=${clientVersion.presence()}, " +
             "encryptedHostFlags=${encryptedHostFlags.presence()})"
-}
-
-internal data class ClientResult(
-    val clientName: String,
-    val profileId: String,
-    val userAgent: String,
-    val response: PlayerResponse,
-    val usedPoToken: Boolean = false,
-    val streamingDataPoToken: String? = null,
-    val clientId: Int = 0,
-    val clientVersion: String = "",
-    val useSabr: Boolean = false,
-    val bearerAuthenticated: Boolean = false,
-) {
-    override fun toString(): String =
-        "ClientResult(" +
-            "clientName=$clientName, " +
-            "profileId=$profileId, " +
-            "usedPoToken=$usedPoToken, " +
-            "streamingDataPoToken=${streamingDataPoToken.presence()}, " +
-            "clientId=$clientId, " +
-            "clientVersion=${clientVersion.presence()}, " +
-            "useSabr=$useSabr, " +
-            "bearerAuthenticated=$bearerAuthenticated)"
 }
 
 /** Playback-statistics URLs are session data and must not be logged or serialized unintentionally. */
