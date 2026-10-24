@@ -1,6 +1,6 @@
 # VyonEx
 
-VyonEx is one Kotlin/JVM library for media extraction under the `com.vyonex` namespace.
+VyonEx is one Kotlin Multiplatform project for media extraction under the `com.vyonex` namespace.
 
 ## Install locally
 
@@ -25,14 +25,24 @@ dependencies {
 
 ## Compatibility
 
-- Kotlin/JVM 17.
-- The com.vyonex package is the public host and stream API.
+- Build and run Gradle with JDK 27.
+- Published JVM bytecode targets Java 26 and requires JDK 26 or newer at runtime.
+- Kotlin compiler: 2.4.21.
+- JVM and iOS device/simulator targets are configured.
+- The shared stream, audio, session, logging, and config types are in `commonMain`.
+- The extractor and host adapters remain JVM-only while their platform services are migrated; iOS extraction is not ready yet.
 - Runtime dependencies are declared by VyonEx.
 
 ## Build
 
 ```text
-./gradlew clean test jar publishToMavenLocal
+./gradlew clean jvmTest jvmJar publishToMavenLocal
+```
+
+On macOS, build the iOS XCFramework with:
+
+```text
+./gradlew assembleVyonExDebugXCFramework
 ```
 
 ## License
