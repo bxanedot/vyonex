@@ -82,10 +82,9 @@ class BandcampStreamExtractorTest {
     }
 
     @Test
-    void reportsMissingAndMalformedEmbeddedData() {
-        assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(""));
-        assertThrows(ParsingException.class, () -> BandcampStreamExtractor.getAlbumInfoJson(
-                "<div data-tralbum='not json'></div>"));
+    void reportsMissingAndMalformedEmbeddedData() throws Exception {
+        assertThrows(ParsingException.class, () -> fetchHtml(""));
+        assertThrows(ParsingException.class, () -> fetchHtml("<div data-tralbum='not json'></div>"));
     }
 
     @Test
@@ -100,7 +99,10 @@ class BandcampStreamExtractorTest {
     }
 
     private static BandcampStreamExtractor fetch(final String data) throws Exception {
-        final String html = "<div data-tralbum='" + data + "'></div>";
+        return fetchHtml("<div data-tralbum='" + data + "'></div>");
+    }
+
+    private static BandcampStreamExtractor fetchHtml(final String html) throws Exception {
         final Downloader downloader = new Downloader() {
             @Override
             public Response execute(final Request request) {

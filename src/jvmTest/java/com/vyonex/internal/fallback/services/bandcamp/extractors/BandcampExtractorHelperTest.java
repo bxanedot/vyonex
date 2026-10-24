@@ -32,6 +32,30 @@ class BandcampExtractorHelperTest {
     }
 
     @Test
+    void resolvesItemUrlUsingTheBandcampApi() throws Exception {
+        final Downloader previous = VyonEx.getDownloader();
+        final String[] requestUrl = new String[1];
+        final Downloader offline = new Downloader() {
+            @Override public Response execute(final Request request) {
+                requestUrl[0] = request.url();
+                return new Response(200, "OK", Map.of(),
+                        "{\"bandcamp_url\":\"http://artist.bandcamp.com/album/record\"}",
+                        request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            assertEquals("https://artist.bandcamp.com/album/record",
+                    BandcampExtractorHelper.getStreamUrlFromIds(42, 7, "album"));
+            assertEquals(BandcampExtractorHelper.BASE_API_URL
+                    + "/mobile/22/tralbum_details?band_id=42&tralbum_id=7&tralbum_type=a",
+                    requestUrl[0]);
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
     void identifiesCustomArtistDomainsByTheirCartLink() throws Exception {
         final Downloader previous = VyonEx.getDownloader();
         final Downloader offline = new Downloader() {

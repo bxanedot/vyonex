@@ -21,7 +21,6 @@ import com.vyonex.internal.fallback.stream.VideoStream
 import com.vyonex.internal.fallback.services.bandcamp.BandcampTrackPageParseException
 import com.vyonex.internal.fallback.services.bandcamp.BandcampTrackPageParser
 import com.vyonex.internal.fallback.services.bandcamp.BandcampTrackPagePayload
-import com.vyonex.internal.json.JsonObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -136,10 +135,4 @@ public class BandcampStreamExtractor(
         val document: Document,
     )
 
-    public companion object {
-        @JvmStatic
-        @Throws(ParsingException::class)
-        public fun getAlbumInfoJson(html: String): JsonObject =
-            BandcampExtractorHelper.getJsonAttribute(html, "data-tralbum")
-    }
 }

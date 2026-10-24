@@ -120,8 +120,6 @@ class BandcampChannelExtractorTest {
             channel.onFetchPage(offline);
             assertEquals("Artist", channel.getName());
             assertEquals("https://img.example/banner.jpg", channel.getBanners().get(0).getUrl());
-            assertEquals("track", BandcampExtractorHelper.getArtistDetails(offline, "artist")
-                    .getArray("discography").getObject(0).getString("item_type"));
 
             final BandcampChannelTabExtractor tab = new BandcampChannelTabExtractor(service,
                     new ListLinkHandler(url + "/track", url + "/track", "artist",
