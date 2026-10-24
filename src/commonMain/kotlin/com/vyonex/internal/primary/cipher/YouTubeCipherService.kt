@@ -811,8 +811,8 @@ class YouTubeCipherService(
         playerUrl: String,
         playerCode: String,
     ): CachedSolver {
-        val parseResult = PlayerScriptParser.parse(playerCode)
-        val solverScript = PlayerScriptParser.generateSolverScript(parseResult)
+        val parsed = legacyPlayerCipherFunctions(playerCode)
+        val solverScript = parsed.solverScript
 
         val solverEngine = QuickJsEngine()
         solverEngine.initialize()
@@ -822,7 +822,7 @@ class YouTubeCipherService(
         }
 
         val nSolver: suspend (String) -> String? = { input ->
-            if (parseResult.nFunctionCode != null) {
+            if (parsed.hasNTransform) {
                 try {
                     solverEngine.callFunction("_solveN", input)
                 } catch (e: CancellationException) {
@@ -836,7 +836,7 @@ class YouTubeCipherService(
         }
 
         val sigSolver: suspend (String) -> String? = { input ->
-            if (parseResult.sigFunctionCode != null) {
+            if (parsed.hasSignatureTransform) {
                 try {
                     solverEngine.callFunction("_solveSig", input)
                 } catch (e: CancellationException) {

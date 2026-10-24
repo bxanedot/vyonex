@@ -145,8 +145,9 @@ internal class PlayerCipherChallengeSolver(
         playerCode: String,
         requestOrder: List<Pair<String, List<String>>>,
     ): SolveResult {
-        val parserScript = legacyPlayerCipherSolverScript(playerCode)?.takeIf(String::isNotBlank)
-            ?: return SolveResult(emptyMap(), emptyMap())
+        val parsed = legacyPlayerCipherFunctions(playerCode)
+        if (!parsed.hasNTransform && !parsed.hasSignatureTransform) return SolveResult(emptyMap(), emptyMap())
+        val parserScript = parsed.solverScript.takeIf(String::isNotBlank) ?: return SolveResult(emptyMap(), emptyMap())
         val isolatedScript =
             """
             (function() {

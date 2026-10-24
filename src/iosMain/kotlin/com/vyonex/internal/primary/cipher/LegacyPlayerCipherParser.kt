@@ -1,4 +1,5 @@
 // bxane
 package com.vyonex.internal.primary.cipher
 
-internal actual fun legacyPlayerCipherSolverScript(playerCode: String): String? = null
+internal actual fun legacyPlayerCipherFunctions(playerCode: String): LegacyPlayerCipherFunctions =
+    LegacyPlayerCipherFunctions(solverScript = "", hasNTransform = false, hasSignatureTransform = false)

@@ -4,7 +4,7 @@
 
 **Goal:** Keep VyonEx's JVM extractor usable and expose the same supported extraction API to Swift/iOS from one Kotlin Multiplatform project.
 
-**Architecture:** Convert the existing Gradle project to KMP, share the public value types, extraction orchestration, QuickJS runtime, player URL-cipher parser, configured player cipher solver, and challenge orchestration. Keep JVM-only HTTP adapters and the legacy Rhino parser in `jvmMain`; use Darwin for iOS HTTP while the public extraction facade and host are ported.
+**Architecture:** Convert the existing Gradle project to KMP, share the public value types, extraction orchestration, QuickJS runtime, player URL-cipher parser, configured player cipher solver, challenge orchestration, and YouTube cipher service. Keep JVM-only HTTP adapters and the legacy Rhino parser in `jvmMain`; use Darwin for iOS HTTP while the public extraction facade and host are ported.
 
 **Tech Stack:** Kotlin Multiplatform 2.4.21, Gradle 9.8.2, JDK 27 for builds, JVM bytecode 26, Ktor 3.5.2, Darwin, Kotlin/Native iOS Arm64 and simulator targets.
 
