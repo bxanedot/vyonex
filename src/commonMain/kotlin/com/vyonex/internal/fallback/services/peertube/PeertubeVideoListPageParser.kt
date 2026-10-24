@@ -11,20 +11,20 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 
-internal data class PeertubeTrendingPagePayload(
+internal data class PeertubeVideoListPagePayload(
     val total: Long,
     val data: JsonArray?,
     val error: String?,
 )
 
-internal object PeertubeTrendingPageParser {
-    fun parse(source: String): PeertubeTrendingPagePayload {
+internal object PeertubeVideoListPageParser {
+    fun parse(source: String): PeertubeVideoListPagePayload {
         val response = try {
-            Json.parseToJsonElement(source) as? JsonObject ?: throw PeertubeTrendingPageParseException()
+            Json.parseToJsonElement(source) as? JsonObject ?: throw PeertubeVideoListPageParseException()
         } catch (error: SerializationException) {
-            throw PeertubeTrendingPageParseException(error)
+            throw PeertubeVideoListPageParseException(error)
         }
-        return PeertubeTrendingPagePayload(
+        return PeertubeVideoListPagePayload(
             total = response.long("total"),
             data = response["data"] as? JsonArray,
             error = response.string("error")?.takeIf(String::isNotBlank),
@@ -39,5 +39,5 @@ internal object PeertubeTrendingPageParser {
             ?.let { it.longOrNull ?: it.doubleOrNull?.toLong() } ?: 0
 }
 
-internal class PeertubeTrendingPageParseException(cause: Throwable? = null) :
-    IllegalArgumentException("Invalid PeerTube kiosk results", cause)
+internal class PeertubeVideoListPageParseException(cause: Throwable? = null) :
+    IllegalArgumentException("Invalid PeerTube video list response", cause)

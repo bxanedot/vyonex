@@ -12,8 +12,8 @@ import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.kiosk.KioskExtractor
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
-import com.vyonex.internal.fallback.services.peertube.PeertubeTrendingPageParseException
-import com.vyonex.internal.fallback.services.peertube.PeertubeTrendingPageParser
+import com.vyonex.internal.fallback.services.peertube.PeertubeVideoListPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubeVideoListPageParser
 import com.vyonex.internal.fallback.stream.StreamInfoItem
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector
 import com.vyonex.internal.json.JsonParser
@@ -38,8 +38,8 @@ public class PeertubeTrendingExtractor(
             ?: throw IllegalArgumentException("Page URL is required")
         val body = PeertubeParsingHelper.readApiBody(getDownloader().get(url), "kiosk results")
         val payload = try {
-            PeertubeTrendingPageParser.parse(body)
-        } catch (error: PeertubeTrendingPageParseException) {
+            PeertubeVideoListPageParser.parse(body)
+        } catch (error: PeertubeVideoListPageParseException) {
             throw ParsingException("Invalid PeerTube kiosk results response", error)
         }
         payload.error?.let { throw ContentNotAvailableException(it) }

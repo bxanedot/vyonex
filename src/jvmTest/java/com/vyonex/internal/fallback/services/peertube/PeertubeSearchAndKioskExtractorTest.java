@@ -99,6 +99,21 @@ class PeertubeSearchAndKioskExtractorTest {
     }
 
     @Test
+    void searchPreservesApiAndMalformedResponseErrors() throws Exception {
+        final String url = "https://tube.example/api/v1/search/videos?search=hello&start=0&count=12";
+        VyonEx.init(new StubDownloader(Map.of(url, "{\"error\":\"Search unavailable\"}")));
+        final SearchExtractor unavailableSearch = createSearchExtractor("https://tube.example");
+        final ContentNotAvailableException unavailable = assertThrows(
+                ContentNotAvailableException.class, unavailableSearch::getInitialPage);
+        assertEquals("Search unavailable", unavailable.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(url, "not-json")));
+        final SearchExtractor malformedSearch = createSearchExtractor("https://tube.example");
+        final ParsingException malformed = assertThrows(ParsingException.class, malformedSearch::getInitialPage);
+        assertEquals("Invalid PeerTube search results response", malformed.getMessage());
+    }
+
+    @Test
     void sepiaSearchUsesTheVideoHostFromEachResult() throws Exception {
         final String url = PeertubeSearchQueryHandlerFactory.SEPIA_BASE_URL
                 + "/api/v1/search/videos?search=hello&start=0&count=12";
@@ -184,6 +199,15 @@ class PeertubeSearchAndKioskExtractorTest {
                 + "\",\"name\":\"Video " + id
                 + "\",\"account\":{\"name\":\"alice\",\"host\":\"tube.example\","
                 + "\"displayName\":\"Alice\"}" + embed + "}]}";
+    }
+
+    private static SearchExtractor createSearchExtractor(final String baseUrl) throws Exception {
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(baseUrl, "Offline"));
+        final String queryUrl = PeertubeSearchQueryHandlerFactory.getInstance().getUrl(
+                "hello", List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), "", baseUrl);
+        final SearchQueryHandler query = new SearchQueryHandler(queryUrl, queryUrl, "hello",
+                List.of(PeertubeSearchQueryHandlerFactory.VIDEOS), "");
+        return service.getSearchExtractor(query);
     }
 
     private static final class StubDownloader extends Downloader {

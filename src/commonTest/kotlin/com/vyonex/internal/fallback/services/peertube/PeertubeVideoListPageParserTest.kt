@@ -7,10 +7,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class PeertubeTrendingPageParserTest {
+class PeertubeVideoListPageParserTest {
     @Test
     fun parsesTotalsItemsAndApiErrors() {
-        val page = PeertubeTrendingPageParser.parse(
+        val page = PeertubeVideoListPageParser.parse(
             """{"total":13,"data":[{"video":{"uuid":"trend-1"}},null],"error":"Unavailable"}""",
         )
 
@@ -21,7 +21,7 @@ class PeertubeTrendingPageParserTest {
 
     @Test
     fun defaultsTotalAndLeavesMissingDataForTheAdapterToReport() {
-        val page = PeertubeTrendingPageParser.parse("""{"total":"13","error":4}""")
+        val page = PeertubeVideoListPageParser.parse("""{"total":"13","error":4}""")
 
         assertEquals(0L, page.total)
         assertEquals(null, page.data)
@@ -30,11 +30,11 @@ class PeertubeTrendingPageParserTest {
 
     @Test
     fun rejectsMalformedAndNonObjectResponses() {
-        assertFailsWith<PeertubeTrendingPageParseException> {
-            PeertubeTrendingPageParser.parse("not-json")
+        assertFailsWith<PeertubeVideoListPageParseException> {
+            PeertubeVideoListPageParser.parse("not-json")
         }
-        assertFailsWith<PeertubeTrendingPageParseException> {
-            PeertubeTrendingPageParser.parse("[]")
+        assertFailsWith<PeertubeVideoListPageParseException> {
+            PeertubeVideoListPageParser.parse("[]")
         }
     }
 }
