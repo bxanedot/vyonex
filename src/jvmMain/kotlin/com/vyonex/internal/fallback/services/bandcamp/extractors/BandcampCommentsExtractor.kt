@@ -13,10 +13,9 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampReviewPageParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampReviewPageParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampReviewPayload
 import com.vyonex.internal.json.JsonWriter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -36,12 +35,14 @@ public class BandcampCommentsExtractor(
 
     @Throws(IOException::class, ExtractionException::class)
     override fun getInitialPage(): InfoItemsPage<CommentsInfoItem> {
-        val data = embeddedData("#collectors-data", "data-blob")
-        val reviews = data.getArray("reviews")
-            ?: throw ParsingException("Bandcamp review data has no reviews")
-        val items = collect(reviews)
-        if (!data.getBoolean("more_reviews_available")) return InfoItemsPage(items, null)
-        return InfoItemsPage(items, Page(listOf(trackId(), nextToken(reviews))))
+        val data = try {
+            BandcampReviewPageParser.parseEmbedded(embeddedData())
+        } catch (error: BandcampReviewPageParseException) {
+            throw ParsingException("Bandcamp review data is invalid", error)
+        }
+        val items = collect(data.reviews)
+        if (!data.moreAvailable) return InfoItemsPage(items, null)
+        return InfoItemsPage(items, Page(listOf(trackId(), nextToken(data.nextToken))))
     }
 
     @Throws(IOException::class, ExtractionException::class)
@@ -57,43 +58,35 @@ public class BandcampCommentsExtractor(
             .end().done()
             .toByteArray(StandardCharsets.UTF_8)
         val response = try {
-            JsonParser.`object`().from(
-                downloader.postWithContentTypeJson(REVIEWS_API_URL, emptyMap(), body)
-                    .responseBody(),
+            BandcampReviewPageParser.parseResponse(
+                downloader.postWithContentTypeJson(REVIEWS_API_URL, emptyMap(), body).responseBody(),
             )
         } catch (error: ReCaptchaException) {
             throw ParsingException("Bandcamp reviews response is invalid", error)
-        } catch (error: JsonParserException) {
+        } catch (error: BandcampReviewPageParseException) {
             throw ParsingException("Bandcamp reviews response is invalid", error)
         }
-        val reviews = response.getArray("results")
-            ?: throw ParsingException("Bandcamp reviews response has no results")
-        val items = collect(reviews)
-        if (!response.getBoolean("more_available")) return InfoItemsPage(items, null)
-        return InfoItemsPage(items, Page(listOf(ids[0], nextToken(reviews))))
+        val items = collect(response.reviews)
+        if (!response.moreAvailable) return InfoItemsPage(items, null)
+        return InfoItemsPage(items, Page(listOf(ids[0], nextToken(response.nextToken))))
     }
 
     @Throws(ExtractionException::class)
     override fun isCommentsDisabled(): Boolean = BandcampExtractorHelper.isRadioUrl(url)
 
-    private fun collect(reviews: JsonArray): CommentsInfoItemsCollector {
+    private fun collect(reviews: List<BandcampReviewPayload>): CommentsInfoItemsCollector {
         val items = CommentsInfoItemsCollector(serviceId)
-        for (value in reviews) {
-            val review = value as? JsonObject ?: continue
+        for (review in reviews) {
             items.commit(BandcampCommentsInfoItemExtractor(review, url))
         }
         return items
     }
 
     @Throws(ParsingException::class)
-    private fun embeddedData(selector: String, attribute: String): JsonObject {
-        val element = pageDocument().selectFirst("$selector[$attribute]")
+    private fun embeddedData(): String {
+        val element = pageDocument().selectFirst("#collectors-data[$REVIEW_DATA_ATTRIBUTE]")
             ?: throw ParsingException("Bandcamp page has no review data")
-        return try {
-            JsonParser.`object`().from(element.attr(attribute))
-        } catch (error: JsonParserException) {
-            throw ParsingException("Bandcamp review data is invalid", error)
-        }
+        return element.attr(REVIEW_DATA_ATTRIBUTE)
     }
 
     @Throws(ParsingException::class)
@@ -101,8 +94,8 @@ public class BandcampCommentsExtractor(
         val properties = pageDocument().selectFirst("meta[name=bc-page-properties][content]")
             ?: throw ParsingException("Bandcamp page has no item metadata")
         val id = try {
-            JsonParser.`object`().from(properties.attr("content")).getLong("item_id")
-        } catch (error: JsonParserException) {
+            BandcampReviewPageParser.parseTrackId(properties.attr("content"))
+        } catch (error: BandcampReviewPageParseException) {
             throw ParsingException("Bandcamp item metadata is invalid", error)
         }
         if (id <= 0) throw ParsingException("Bandcamp page has an invalid item ID")
@@ -110,21 +103,15 @@ public class BandcampCommentsExtractor(
     }
 
     @Throws(ParsingException::class)
-    private fun nextToken(reviews: JsonArray): String {
-        var token: String? = null
-        for (value in reviews) {
-            val review = value as? JsonObject ?: continue
-            token = review.getString("token", token)
-        }
-        return token?.takeIf(String::isNotBlank)
-            ?: throw ParsingException("Bandcamp reviews did not include a next-page token")
-    }
+    private fun nextToken(token: String?): String = token?.takeIf(String::isNotBlank)
+        ?: throw ParsingException("Bandcamp reviews did not include a next-page token")
 
     @Throws(ParsingException::class)
     private fun pageDocument(): Document = document
         ?: throw ParsingException("Bandcamp comments page has not been fetched")
 
     public companion object {
+        private const val REVIEW_DATA_ATTRIBUTE = "data-blob"
         public const val REVIEWS_API_URL = "${BandcampExtractorHelper.BASE_API_URL}/tralbumcollectors/2/reviews"
     }
 }
