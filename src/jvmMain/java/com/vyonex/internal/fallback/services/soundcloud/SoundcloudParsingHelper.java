@@ -14,9 +14,14 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudChannelInfoItemExtractor;
-import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudLikesInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudMultiInfoPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudMultiInfoPagePayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPagePayload;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPagePayload;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
 import com.vyonex.internal.fallback.utils.ImageSuffix;
 import com.vyonex.internal.json.JsonArray;
@@ -176,13 +181,17 @@ public final class SoundcloudParsingHelper {
     public static String getUsersFromApi(final ChannelInfoItemsCollector collector,
                                          final String apiUrl)
             throws IOException, ReCaptchaException, ParsingException {
-        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
-        for (final Object value : response.getArray("collection")) {
-            if (value instanceof JsonObject) {
-                collector.commit(new SoundcloudChannelInfoItemExtractor((JsonObject) value));
-            }
+        final SoundcloudUsersPagePayload response;
+        try {
+            response = SoundcloudUsersPageParser.INSTANCE.parse(
+                    requestBody(VyonEx.getDownloader(), apiUrl));
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
         }
-        return getNextPageUrl(response);
+        for (final var user : response.getUsers()) {
+            collector.commit(new SoundcloudChannelInfoItemExtractor(user));
+        }
+        return getNextPageUrl(response.getNextPageUrl());
     }
 
     public static String getStreamsFromApiMinItems(final int minimum,
@@ -208,60 +217,42 @@ public final class SoundcloudParsingHelper {
     public static String getStreamsFromApi(final StreamInfoItemsCollector collector,
                                            final String apiUrl, final boolean charts)
             throws IOException, ReCaptchaException, ParsingException {
-        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
-        for (final Object value : response.getArray("collection")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject item = (JsonObject) value;
-            collector.commit(new SoundcloudStreamInfoItemExtractor(
-                    charts ? item.getObject("track") : item));
+        final SoundcloudStreamsPagePayload response;
+        try {
+            response = SoundcloudStreamsPageParser.INSTANCE.parse(
+                    requestBody(VyonEx.getDownloader(), apiUrl), charts);
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
         }
-        return getNextPageUrl(response);
+        for (final var track : response.getTracks()) {
+            collector.commit(new SoundcloudStreamInfoItemExtractor(track));
+        }
+        return getNextPageUrl(response.getNextPageUrl());
     }
 
     public static String getInfoItemsFromApi(final MultiInfoItemsCollector collector,
                                              final String apiUrl)
             throws IOException, ReCaptchaException, ParsingException {
-        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
-        for (final Object value : response.getArray("collection")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject item = (JsonObject) value;
-            switch (item.getString("kind", "")) {
-                case "user" -> collector.commit(new SoundcloudChannelInfoItemExtractor(item));
-                case "track" -> collector.commit(new SoundcloudStreamInfoItemExtractor(item));
-                case "playlist" -> collector.commit(new SoundcloudPlaylistInfoItemExtractor(item));
-                case "like" -> {
-                    final JsonObject playlist = item.getObject("playlist", null);
-                    collector.commit(playlist == null
-                            ? new SoundcloudLikesInfoItemExtractor(item)
-                            : new SoundcloudPlaylistInfoItemExtractor(playlist));
-                }
-                default -> { }
+        final SoundcloudMultiInfoPagePayload response;
+        try {
+            response = SoundcloudMultiInfoPageParser.INSTANCE.parse(
+                    requestBody(VyonEx.getDownloader(), apiUrl));
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
+        }
+        for (final var item : response.getItems()) {
+            if (item instanceof SoundcloudSearchResult.User user) {
+                collector.commit(new SoundcloudChannelInfoItemExtractor(user.getItem()));
+            } else if (item instanceof SoundcloudSearchResult.Track track) {
+                collector.commit(new SoundcloudStreamInfoItemExtractor(track.getItem()));
+            } else if (item instanceof SoundcloudSearchResult.Playlist playlist) {
+                collector.commit(new SoundcloudPlaylistInfoItemExtractor(playlist.getItem()));
             }
         }
-        return getNextPageUrl(response);
-    }
-
-    public static String getUploaderUrl(final JsonObject object) {
-        return https(object.getObject("user").getString("permalink_url", ""));
-    }
-
-    public static String getAvatarUrl(final JsonObject object) {
-        return https(object.getObject("user").getString("avatar_url", ""));
-    }
-
-    public static String getUploaderName(final JsonObject object) {
-        return object.getObject("user").getString("username", "");
+        return getNextPageUrl(response.getNextPageUrl());
     }
 
     public static String toHttpsUrl(final String value) { return https(value); }
-
-    public static List<Image> getAllImagesFromTrackObject(final JsonObject track)
-            throws ParsingException {
-        String url = track.getString("artwork_url");
-        if (url == null) url = track.getObject("user").getString("avatar_url");
-        if (url == null || url.isBlank()) throw new ParsingException("Track has no artwork");
-        return getAllImagesFromArtworkOrAvatarUrl(url);
-    }
 
     public static List<Image> getAllImagesFromArtworkOrAvatarUrl(final String url) {
         return imageVariants(url, "large", ARTWORK_SIZES);
@@ -287,6 +278,16 @@ public final class SoundcloudParsingHelper {
 
     private static JsonObject requestObject(final Downloader downloader, final String url)
             throws IOException, ReCaptchaException, ParsingException {
+        final String body = requestBody(downloader, url);
+        try {
+            return JsonParser.object().from(body);
+        } catch (final JsonParserException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
+        }
+    }
+
+    private static String requestBody(final Downloader downloader, final String url)
+            throws IOException, ReCaptchaException, ParsingException {
         final Response response = downloader.get(url);
         if (response == null || response.responseBody().isBlank()) {
             throw new ParsingException("SoundCloud returned an empty response");
@@ -294,11 +295,7 @@ public final class SoundcloudParsingHelper {
         if (response.responseCode() >= 400) {
             throw new IOException("SoundCloud request failed with HTTP " + response.responseCode());
         }
-        try {
-            return JsonParser.object().from(response.responseBody());
-        } catch (final JsonParserException e) {
-            throw new ParsingException("Invalid SoundCloud API response", e);
-        }
+        return response.responseBody();
     }
 
     public static String getNextPageUrl(final JsonObject response) {

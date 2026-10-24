@@ -25,24 +25,22 @@ internal object SoundcloudSearchPageParser {
         val collection = SoundcloudInfoItemPayloadParser.run { document.array("collection") }
         return SoundcloudSearchPagePayload(
             results = collection.mapNotNull { value ->
-                val item = SoundcloudInfoItemPayloadParser.objectValue(value) ?: return@mapNotNull null
-                when (SoundcloudInfoItemPayloadParser.run { item.string("kind") }) {
-                    "track" -> SoundcloudSearchResult.Track(
-                        SoundcloudInfoItemPayloadParser.track(item),
-                    )
-                    "user" -> SoundcloudSearchResult.User(
-                        SoundcloudInfoItemPayloadParser.profile(item),
-                    )
-                    "playlist" -> SoundcloudSearchResult.Playlist(
-                        SoundcloudInfoItemPayloadParser.playlist(item),
-                    )
-                    else -> null
-                }
+                SoundcloudInfoItemPayloadParser.objectValue(value)?.let(::result)
             },
             collectionSize = collection.size,
             nextPageUrl = SoundcloudInfoItemPayloadParser.run { document.string("next_href") },
         )
     }
+
+    internal fun result(item: JsonObject): SoundcloudSearchResult? =
+        when (SoundcloudInfoItemPayloadParser.run { item.string("kind") }) {
+            "track" -> SoundcloudSearchResult.Track(SoundcloudInfoItemPayloadParser.track(item))
+            "user" -> SoundcloudSearchResult.User(SoundcloudInfoItemPayloadParser.profile(item))
+            "playlist" -> SoundcloudSearchResult.Playlist(
+                SoundcloudInfoItemPayloadParser.playlist(item),
+            )
+            else -> null
+        }
 
     private fun parseObject(source: String): JsonObject = try {
         Json.parseToJsonElement(source) as? JsonObject

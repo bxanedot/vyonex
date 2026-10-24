@@ -9,7 +9,6 @@ import com.vyonex.internal.fallback.playlist.PlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudPlaylistInfoItem;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudProfileInfoItem;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -24,18 +23,6 @@ public final class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoIt
     private final long trackCount;
     @Nullable private final String artworkUrl;
 
-    public SoundcloudPlaylistInfoItemExtractor(final JsonObject playlist) {
-        final JsonObject user = playlist.getObject("user");
-        title = playlist.getString("title", "");
-        url = SoundcloudParsingHelper.toHttpsUrl(playlist.getString("permalink_url", ""));
-        uploaderName = user.getString("username", "");
-        uploaderUrl = SoundcloudParsingHelper.toHttpsUrl(user.getString("permalink_url", ""));
-        avatarUrl = user.getString("avatar_url");
-        uploaderVerified = user.getBoolean("verified");
-        trackCount = playlist.getLong("track_count");
-        artworkUrl = artworkUrl(playlist, avatarUrl);
-    }
-
     public SoundcloudPlaylistInfoItemExtractor(final SoundcloudPlaylistInfoItem playlist) {
         final SoundcloudProfileInfoItem user = playlist.getUser();
         title = playlist.getTitle();
@@ -46,21 +33,6 @@ public final class SoundcloudPlaylistInfoItemExtractor implements PlaylistInfoIt
         uploaderVerified = user.getVerified();
         trackCount = playlist.getTrackCount();
         artworkUrl = playlist.getArtworkUrl();
-    }
-
-    private static String artworkUrl(final JsonObject playlist, @Nullable final String avatarUrl) {
-        String value = playlist.getString("artwork_url");
-        if (value == null || value.isBlank()) {
-            for (final Object item : playlist.getArray("tracks")) {
-                if (!(item instanceof JsonObject track)) continue;
-                value = track.getString("artwork_url");
-                if (value == null || value.isBlank()) {
-                    value = track.getObject("user").getString("avatar_url");
-                }
-                if (value != null && !value.isBlank()) return value;
-            }
-        }
-        return value == null || value.isBlank() ? avatarUrl : value;
     }
 
     @Override public String getName() { return title; }

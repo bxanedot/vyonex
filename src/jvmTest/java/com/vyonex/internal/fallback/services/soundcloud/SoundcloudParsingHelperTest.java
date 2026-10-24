@@ -4,6 +4,7 @@
 package com.vyonex.internal.fallback.services.soundcloud;
 
 import com.vyonex.internal.fallback.Image;
+import com.vyonex.internal.fallback.MultiInfoItemsCollector;
 import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemsCollector;
 import com.vyonex.internal.fallback.downloader.Downloader;
@@ -11,7 +12,6 @@ import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -56,17 +56,9 @@ class SoundcloudParsingHelperTest {
     }
 
     @Test
-    void parsesDateAndKeepsArtworkUrlWithoutGuessingDimensions() throws Exception {
+    void parsesSoundcloudDates() throws Exception {
         final var date = SoundcloudParsingHelper.parseDate("2026-10-22T12:30:00Z");
         assertEquals(Instant.parse("2026-10-22T12:30:00Z"), date.getInstant());
-
-        final var track = JsonParser.object().from("""
-                {"artwork_url":"http://images.example/cover.jpg"}
-                """);
-        final Image image = SoundcloudParsingHelper.getAllImagesFromTrackObject(track).get(0);
-        assertEquals("https://images.example/cover.jpg", image.getUrl());
-        assertEquals(Image.WIDTH_UNKNOWN, image.getWidth());
-        assertEquals(Image.HEIGHT_UNKNOWN, image.getHeight());
     }
 
     @Test
@@ -107,6 +99,93 @@ class SoundcloudParsingHelperTest {
             VyonEx.init(downloader);
             assertEquals("", SoundcloudParsingHelper.getUsersFromApiMinItems(1,
                     new ChannelInfoItemsCollector(1), url));
+            assertEquals(List.of(url), downloader.requestedUrls);
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void mapsUserPagesFromOfflineApiResponses() throws Exception {
+        final String url = "https://api-v2.soundcloud.com/users/7/followings?client_id=offline-key";
+        final String next = "https://api-v2.soundcloud.com/users/7/followings?offset=50"
+                + "&client_id=offline-key";
+        final StubDownloader downloader = new StubDownloader(Map.of(url, """
+                {"collection":[{"username":"Alice","permalink_url":"http://soundcloud.com/alice",
+                  "avatar_url":"https://images.example/alice.jpg","followers_count":12,
+                  "track_count":4,"description":"Producer","verified":true},null],
+                 "next_href":"https://api-v2.soundcloud.com/users/7/followings?offset=50&client_id=offline-key"}
+                """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final ChannelInfoItemsCollector users = new ChannelInfoItemsCollector(31);
+
+            assertEquals(next, SoundcloudParsingHelper.getUsersFromApi(users, url));
+            assertEquals(1, users.getItems().size());
+            assertEquals("Alice", users.getItems().get(0).getName());
+            assertEquals("https://soundcloud.com/alice", users.getItems().get(0).getUrl());
+            assertEquals(12, users.getItems().get(0).getSubscriberCount());
+            assertEquals(4, users.getItems().get(0).getStreamCount());
+            assertEquals("Producer", users.getItems().get(0).getDescription());
+            assertEquals(List.of(url), downloader.requestedUrls);
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void mapsTrackAndChartPagesFromOfflineApiResponses() throws Exception {
+        final String tracksUrl = "https://api-v2.soundcloud.com/users/7/tracks?client_id=offline-key";
+        final String chartsUrl = "https://api-v2.soundcloud.com/charts?client_id=offline-key";
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                tracksUrl, """
+                        {"collection":[{"id":42,"title":"Rain","duration":90000,
+                          "permalink_url":"https://soundcloud.com/a/rain",
+                          "user":{"username":"Alice"}}],"next_href":null}
+                        """,
+                chartsUrl, """
+                        {"collection":[{"track":{"id":7,"title":"Wind",
+                          "permalink_url":"https://soundcloud.com/a/wind"}}]}
+                        """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final StreamInfoItemsCollector tracks = new StreamInfoItemsCollector(31);
+            final StreamInfoItemsCollector charts = new StreamInfoItemsCollector(31);
+
+            assertEquals("", SoundcloudParsingHelper.getStreamsFromApi(tracks, tracksUrl));
+            assertEquals("", SoundcloudParsingHelper.getStreamsFromApi(charts, chartsUrl, true));
+            assertEquals(List.of("Rain"), tracks.getItems().stream()
+                    .map(item -> item.getName()).toList());
+            assertEquals(List.of("Wind"), charts.getItems().stream()
+                    .map(item -> item.getName()).toList());
+            assertEquals(List.of(tracksUrl, chartsUrl), downloader.requestedUrls);
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void mapsMixedChannelTabPagesFromOfflineApiResponses() throws Exception {
+        final String url = "https://api-v2.soundcloud.com/users/7/likes?client_id=offline-key";
+        final StubDownloader downloader = new StubDownloader(Map.of(url, """
+                {"collection":[{"kind":"user","username":"Alice"},
+                  {"kind":"track","title":"Rain"},
+                  {"kind":"playlist","title":"Mix"},
+                  {"kind":"like","track":{"title":"Liked"}},
+                  {"kind":"like","playlist":{"title":"Liked Mix"}}],
+                 "next_href":"https://api-v2.soundcloud.com/users/7/likes?offset=20&client_id=offline-key"}
+                """));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            final MultiInfoItemsCollector items = new MultiInfoItemsCollector(31);
+
+            assertEquals("https://api-v2.soundcloud.com/users/7/likes?offset=20&client_id=offline-key",
+                    SoundcloudParsingHelper.getInfoItemsFromApi(items, url));
+            assertEquals(List.of("Alice", "Rain", "Mix", "Liked", "Liked Mix"),
+                    items.getItems().stream().map(item -> item.getName()).toList());
             assertEquals(List.of(url), downloader.requestedUrls);
         } finally {
             VyonEx.init(previous);
