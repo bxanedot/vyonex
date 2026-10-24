@@ -29,6 +29,9 @@ internal object SoundcloudSearchUrl {
         "https://api-widget.soundcloud.com/resolve?url=${FormUrlEncoder.encode(url)}" +
             "&format=json&client_id=$clientId"
 
+    fun embedPlayerUrl(apiUrl: String): String =
+        "https://w.soundcloud.com/player/?url=${FormUrlEncoder.encode(apiUrl)}"
+
     fun withClientId(nextUrl: String, clientId: String): String {
         if (nextUrl.isBlank() || nextUrl.contains("client_id=")) return nextUrl
         return "$nextUrl${if (nextUrl.contains('?')) '&' else '?'}client_id=$clientId"
