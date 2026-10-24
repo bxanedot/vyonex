@@ -13,7 +13,9 @@ import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.linkhandler.ReadyChannelTabListLinkHandler
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory
-import com.vyonex.internal.json.JsonObject
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCConferencePayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException
 
 public class MediaCCCConferenceExtractor(
     service: StreamingService,
@@ -64,9 +66,13 @@ internal fun fetchMediaCCCConferenceData(
     conferenceId: String,
 ): MediaCCCConferenceData {
     val url = MediaCCCConferenceLinkHandlerFactory.CONFERENCE_API_ENDPOINT + conferenceId
-    val payload: JsonObject = MediaCCCParsingHelper.fetchJsonObject(downloader, url, null)
-    val events = payload.getArray("events").streamAsJsonObjects()
-        .map(::MediaCCCStreamInfoItemExtractor)
-        .toList()
-    return MediaCCCConferenceData(payload.getString("title"), payload.getString("logo_url"), events)
+    val payload = try {
+        MediaCCCListingPayloadDecoder.decodeConference(
+            MediaCCCParsingHelper.fetchJsonBody(downloader, url, null),
+        )
+    } catch (error: MediaCCCListingParseException) {
+        throw ExtractionException("Could not parse API response from $url", error)
+    }
+    val events = payload.events.map(::MediaCCCStreamInfoItemExtractor)
+    return MediaCCCConferenceData(payload.title, payload.logoUrl, events)
 }

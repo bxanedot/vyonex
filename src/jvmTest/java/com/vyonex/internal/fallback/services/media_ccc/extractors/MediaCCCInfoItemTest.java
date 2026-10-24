@@ -8,6 +8,7 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class MediaCCCInfoItemTest {
         assertEquals("https://media.ccc.de/c/fosdem", channel.getUrl());
         assertEquals("https://cdn.example.test/fosdem.jpg", channel.getThumbnails().get(0).getUrl());
 
-        final JsonObject event = JsonParser.object().from("""
+        final MediaCCCEventPayload event = MediaCCCEventPayload.Companion.decode("""
                 {"length":1800,"view_count":345,"conference_title":"FOSDEM",
                  "conference_url":"https://media.ccc.de/c/fosdem",
                  "release_date":"2026-02-01T12:00:00Z","title":"A VyonEx talk",
@@ -107,8 +108,8 @@ class MediaCCCInfoItemTest {
 
     @Test
     void rejectsEventItemsWithoutTitleOrGuid() throws Exception {
-        final JsonObject noTitle = JsonParser.object().from("{\"guid\":\"talk-1\"}");
-        final JsonObject noGuid = JsonParser.object().from("{\"title\":\"Talk\"}");
+        final MediaCCCEventPayload noTitle = MediaCCCEventPayload.Companion.decode("{\"guid\":\"talk-1\"}");
+        final MediaCCCEventPayload noGuid = MediaCCCEventPayload.Companion.decode("{\"title\":\"Talk\"}");
 
         assertThrows(ParsingException.class,
                 () -> new MediaCCCStreamInfoItemExtractor(noTitle).getName());

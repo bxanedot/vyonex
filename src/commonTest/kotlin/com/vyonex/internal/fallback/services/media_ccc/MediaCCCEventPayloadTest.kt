@@ -51,4 +51,41 @@ class MediaCCCEventPayloadTest {
             MediaCCCEventPayload.decode("not-json")
         }
     }
+
+    @Test
+    fun decodesConferenceAndEventSearchListings() {
+        val conference = MediaCCCListingPayloadDecoder.decodeConference(
+            """{"title":"FOSDEM","logo_url":"https://cdn.example/logo.jpg",
+                "events":[{"title":"Talk","guid":"talk-1",
+                  "conference_title":"FOSDEM","conference_url":"https://media.ccc.de/c/fosdem",
+                  "release_date":"2026-02-01T12:00:00Z","length":1200,
+                  "view_count":34,"thumb_url":"https://cdn.example/thumb.jpg"}],
+                "future_field":true}""",
+        )
+        val event = conference.events.single()
+
+        assertEquals("FOSDEM", conference.title)
+        assertEquals("https://cdn.example/logo.jpg", conference.logoUrl)
+        assertEquals("talk-1", event.guid)
+        assertEquals("FOSDEM", event.conferenceTitle)
+        assertEquals(1200L, event.length)
+        assertEquals("https://cdn.example/thumb.jpg", event.thumbUrl)
+
+        val search = MediaCCCListingPayloadDecoder.decodeEventSearch(
+            """{"events":[{"title":"Found talk","guid":"found-1",
+                "release_date":"2026-02-01T12:00:00Z"}],"future_field":true}""",
+        )
+        assertEquals("Found talk", search.events.single().title)
+        assertEquals(emptyList(), MediaCCCListingPayloadDecoder.decodeConference("{}").events)
+    }
+
+    @Test
+    fun malformedListingPayloadsFailAtTheDecodeBoundary() {
+        assertFailsWith<MediaCCCListingParseException> {
+            MediaCCCListingPayloadDecoder.decodeConference("not-json")
+        }
+        assertFailsWith<MediaCCCListingParseException> {
+            MediaCCCListingPayloadDecoder.decodeEventSearch("""{"events":[{"length":"invalid"}]}""")
+        }
+    }
 }
