@@ -11,8 +11,10 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCConferenceListingPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -30,11 +32,18 @@ public class MediaCCCConferenceKiosk extends KioskExtractor<ChannelInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final JsonObject data = MediaCCCParsingHelper.fetchJsonObject(downloader,
-                getLinkHandler().getUrl(), getExtractorLocalization());
-        title = data.getString("Conferences");
-        conferences = data.getArray("conferences").streamAsJsonObjects()
-                .map(MediaCCCConferenceInfoItemExtractor::new).toList();
+        final String url = getLinkHandler().getUrl();
+        try {
+            final MediaCCCConferenceListingPayload data =
+                    MediaCCCListingPayloadDecoder.INSTANCE.decodeConferenceList(
+                            MediaCCCParsingHelper.fetchJsonBody(downloader, url,
+                                    getExtractorLocalization()));
+            title = data.getTitle();
+            conferences = data.getConferences().stream()
+                    .map(MediaCCCConferenceInfoItemExtractor::new).toList();
+        } catch (MediaCCCListingParseException error) {
+            throw new ExtractionException("Could not parse API response from " + url, error);
+        }
     }
 
     @Nonnull @Override public InfoItemsPage<ChannelInfoItem> getInitialPage() {

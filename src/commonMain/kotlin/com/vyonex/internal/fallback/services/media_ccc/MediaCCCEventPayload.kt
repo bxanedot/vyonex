@@ -68,6 +68,19 @@ internal data class MediaCCCEventListingPayload(
     val events: List<MediaCCCEventPayload> = emptyList(),
 )
 
+@Serializable
+internal data class MediaCCCConferenceSummaryPayload(
+    val title: String? = null,
+    val url: String? = null,
+    @SerialName("logo_url") val logoUrl: String? = null,
+)
+
+@Serializable
+internal data class MediaCCCConferenceListingPayload(
+    @SerialName("Conferences") val title: String? = null,
+    val conferences: List<MediaCCCConferenceSummaryPayload> = emptyList(),
+)
+
 internal object MediaCCCListingPayloadDecoder {
     private val decoder = Json { ignoreUnknownKeys = true }
 
@@ -79,6 +92,9 @@ internal object MediaCCCListingPayloadDecoder {
 
     fun decodeRecentEvents(body: String): MediaCCCEventListingPayload =
         decode(body, "recent events")
+
+    fun decodeConferenceList(body: String): MediaCCCConferenceListingPayload =
+        decode(body, "conference list")
 
     private inline fun <reified T> decode(body: String, kind: String): T = try {
         decoder.decodeFromString<T>(body)

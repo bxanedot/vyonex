@@ -7,7 +7,7 @@ import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.ListExtractor;
 import com.vyonex.internal.fallback.channel.ChannelInfoItemExtractor;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
-import com.vyonex.internal.json.JsonObject;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCConferenceSummaryPayload;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -20,10 +20,10 @@ public class MediaCCCConferenceInfoItemExtractor implements ChannelInfoItemExtra
     @Nullable private final String url;
     private final List<Image> thumbnails;
 
-    public MediaCCCConferenceInfoItemExtractor(final JsonObject conference) {
-        title = conference.getString("title");
-        url = conference.getString("url");
-        thumbnails = getImageListFromLogoImageUrl(conference.getString("logo_url"));
+    public MediaCCCConferenceInfoItemExtractor(final MediaCCCConferenceSummaryPayload conference) {
+        title = conference.getTitle();
+        url = conference.getUrl();
+        thumbnails = getImageListFromLogoImageUrl(conference.getLogoUrl());
     }
 
     @Override public String getDescription() { return ""; }
