@@ -32,6 +32,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api("io.ktor:ktor-client-core:3.5.2")
             implementation("io.ktor:ktor-http:3.5.2")
             implementation("dev.whyoleg.cryptography:cryptography-core:0.6.0")
             implementation("dev.whyoleg.cryptography:cryptography-provider-optimal:0.6.0")
@@ -40,11 +41,12 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation("io.ktor:ktor-client-mock:3.5.2")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
 
         jvmMain.dependencies {
             api("com.squareup.okhttp3:okhttp:5.3.2")
-            api("io.ktor:ktor-client-core:3.5.2")
             api("io.ktor:ktor-client-okhttp:3.5.2")
             api("io.ktor:ktor-client-content-negotiation:3.5.2")
             api("io.ktor:ktor-serialization-kotlinx-json:3.5.2")
@@ -63,7 +65,6 @@ kotlin {
         }
 
         jvmTest.dependencies {
-            implementation("io.ktor:ktor-client-mock:3.5.2")
             implementation("org.junit.jupiter:junit-jupiter:6.1.2")
             runtimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
         }
