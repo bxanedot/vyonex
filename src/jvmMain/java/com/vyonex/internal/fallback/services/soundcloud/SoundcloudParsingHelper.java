@@ -116,8 +116,8 @@ public final class SoundcloudParsingHelper {
 
     public static JsonObject resolveFor(final Downloader downloader, final String url)
             throws IOException, ExtractionException {
-        return requestObject(downloader, SOUNDCLOUD_API_V2_URL + "resolve?url="
-                + encode(url) + "&client_id=" + clientId());
+        return requestObject(downloader,
+                SoundcloudSearchUrl.INSTANCE.resolveUrl(url, clientId()));
     }
 
     public static String resolveUrlWithEmbedPlayer(final String apiUrl)

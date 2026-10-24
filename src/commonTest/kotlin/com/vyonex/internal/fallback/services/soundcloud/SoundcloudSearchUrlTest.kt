@@ -37,6 +37,19 @@ class SoundcloudSearchUrlTest {
     }
 
     @Test
+    fun buildsResolveUrlWithFormEncodedTarget() {
+        assertEquals(
+            "https://api-v2.soundcloud.com/resolve?url=" +
+                "https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack%3Fa%3Done+two%26b%3D%F0%9F%90%88" +
+                "&client_id=offline-key",
+            SoundcloudSearchUrl.resolveUrl(
+                "https://soundcloud.com/artist/track?a=one two&b=🐈",
+                "offline-key",
+            ),
+        )
+    }
+
+    @Test
     fun addsClientIdToPaginationLinksOnlyWhenMissing() {
         assertEquals(
             "https://api-v2.soundcloud.com/users/1/tracks?client_id=key",
