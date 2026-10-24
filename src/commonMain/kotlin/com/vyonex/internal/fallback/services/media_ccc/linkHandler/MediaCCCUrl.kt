@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
+// bxane
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler
 
+import com.vyonex.internal.url.FormUrlEncoder
 import io.ktor.http.Url
 import io.ktor.http.decodeURLPart
 
@@ -41,4 +43,7 @@ internal object MediaCCCUrl {
     fun pathSegments(uri: Parsed): List<String> = uri.path.split('/').filter(String::isNotEmpty)
 
     fun hasHost(uri: Parsed, host: String): Boolean = uri.host.equals(host, ignoreCase = true)
+
+    fun searchUrl(query: String): String =
+        "https://media.ccc.de/public/events/search?q=${FormUrlEncoder.encode(query)}"
 }

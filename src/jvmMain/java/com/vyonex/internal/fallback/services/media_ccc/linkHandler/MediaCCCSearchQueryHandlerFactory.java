@@ -5,8 +5,6 @@ package com.vyonex.internal.fallback.services.media_ccc.linkHandler;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandlerFactory;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public final class MediaCCCSearchQueryHandlerFactory extends SearchQueryHandlerFactory {
@@ -24,7 +22,6 @@ public final class MediaCCCSearchQueryHandlerFactory extends SearchQueryHandlerF
     @Override public String[] getAvailableSortFilter() { return new String[0]; }
     @Override public String getUrl(final String query, final List<String> filters,
                                    final String sort) throws ParsingException {
-        return "https://media.ccc.de/public/events/search?q="
-                + URLEncoder.encode(query, StandardCharsets.UTF_8);
+        return MediaCCCUrl.INSTANCE.searchUrl(query);
     }
 }

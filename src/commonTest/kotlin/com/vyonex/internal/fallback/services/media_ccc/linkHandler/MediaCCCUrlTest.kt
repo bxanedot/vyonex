@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 bxane
 // SPDX-License-Identifier: GPL-3.0-only
+// bxane
 package com.vyonex.internal.fallback.services.media_ccc.linkHandler
 
 import kotlin.test.Test
@@ -37,5 +38,13 @@ class MediaCCCUrlTest {
 
         assertEquals(listOf("chaos-2026", "room"), MediaCCCUrl.pathSegments(parsed!!))
         assertFalse(parsed.hasQuery)
+    }
+
+    @Test
+    fun searchUrlKeepsFormEncodedQuery() {
+        assertEquals(
+            "https://media.ccc.de/public/events/search?q=space+%26+caf%C3%A9",
+            MediaCCCUrl.searchUrl("space & café"),
+        )
     }
 }
