@@ -4,10 +4,16 @@
 package com.vyonex
 
 import com.vyonex.internal.fallback.services.bandcamp.BandcampSuggestionParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampTrackPageParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampTrackPagePayload
+import com.vyonex.internal.fallback.services.bandcamp.linkHandler.BandcampUrlParser
+import com.vyonex.internal.primary.cipher.getTextWithoutRedirects
 import com.vyonex.internal.primary.bodyAsTextLimited
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.http.Url
+import io.ktor.http.isSuccess
 import io.ktor.http.ContentType
 import io.ktor.http.content.TextContent
 import kotlinx.serialization.json.JsonNull
@@ -16,6 +22,28 @@ import kotlinx.serialization.json.put
 
 /** Bandcamp's public autocomplete endpoint, usable with JVM and Darwin Ktor clients. */
 internal class BandcampClient(private val httpClient: HttpClient) {
+    suspend fun track(url: String): BandcampTrackPagePayload {
+        val parsed = BandcampUrlParser.parse(url)
+            ?.takeIf {
+                it.host.equals("bandcamp.com", ignoreCase = true) || it.host.endsWith(".bandcamp.com", ignoreCase = true)
+            }
+            ?.takeIf { BandcampUrlParser.isArtistContent(it, "track") && it.segments.size == 2 }
+            ?: throw IllegalArgumentException("Invalid Bandcamp track URL")
+        val requestUrl = Url("https://${parsed.host}${parsed.path}")
+        require(requestUrl.protocol.name == "https" && requestUrl.port == 443 && requestUrl.user == null && requestUrl.password == null) {
+            "Invalid Bandcamp track URL"
+        }
+        val response = httpClient.getTextWithoutRedirects(requestUrl, MAX_RESPONSE_BYTES)
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Bandcamp track page failed with HTTP ${response.status.value}")
+        }
+        val page = BandcampTrackPageParser.parse(requireNotNull(response.body))
+        if (page.trackCount != 1 || !page.hasFile || page.audioUrl.isNullOrBlank()) {
+            throw IllegalStateException("Bandcamp track is unavailable")
+        }
+        return page
+    }
+
     suspend fun suggestions(query: String): List<String> {
         val response = httpClient.post(AUTOCOMPLETE_URL) {
             setBody(

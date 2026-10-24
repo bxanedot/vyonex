@@ -17,6 +17,7 @@ class VyonExJvmApiTest {
             "initializeFallback",
             "audioCandidates",
             "bandcampSuggestions",
+            "bandcampTrack",
             "extract",
             "headersFor",
             "onRefused",
@@ -33,6 +34,7 @@ class VyonExJvmApiTest {
         stream: VyonExStream,
         candidate: VyonExAudioCandidate,
         format: VyonExAudioFormat,
+        track: BandcampTrack,
     ) {
         host.session()
         host.configStore
@@ -59,10 +61,19 @@ class VyonExJvmApiTest {
         candidate.mimeType
         candidate.format
         format.name
+        track.title
+        track.url
+        track.artist
+        track.publishDate
+        track.artId
+        track.description
+        track.audioUrl
+        track.durationSeconds
         extractor.init()
         extractor.initializeFallback()
         extractor.audioCandidates("video")
         extractor.bandcampSuggestions("ambient")
+        extractor.bandcampTrack("https://artist.bandcamp.com/track/song")
         extractor.extract("video", 128, emptySet(), false)
         extractor.headersFor("https://media.example/audio")
         extractor.onRefused("https://media.example/audio")

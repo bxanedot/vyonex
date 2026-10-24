@@ -269,6 +269,9 @@ internal class PrimaryExtractorBackend(
 
     internal suspend fun bandcampSuggestions(query: String): List<String> = bandcamp.suggestions(query)
 
+    internal suspend fun bandcampTrack(url: String) = bandcamp.track(url)
+
+
     private suspend fun fetchWatchPageAudioFormats(videoId: String): Pair<YoutubeWatchPage, List<Format>>? {
         applySession()
         val page = configParser.fetchWatchPage(videoId, useLoginCookies = innerTube.hasSapCookieAuth()) ?: return null

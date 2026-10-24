@@ -20,6 +20,97 @@ import kotlin.test.assertTrue
 
 class BandcampClientTest {
     @Test
+    fun fetchesTrackMetadataOnlyForHttpsBandcampTrackPagesWithoutFollowingRedirects() = runTest {
+        var requestUrl: String? = null
+        val client = HttpClient(MockEngine { request ->
+            requestUrl = request.url.toString()
+            respond(
+                ByteReadChannel("""{"url":"https://artist.bandcamp.com/track/song","artist":"Artist","trackinfo":[{"file":{"mp3-128":"https://audio.example/song.mp3"},"duration":42}],"current":{"title":"Song"}}"""),
+                HttpStatusCode.OK,
+            )
+        })
+        try {
+            val track = BandcampClient(client).track("http://artist.bandcamp.com/track/song")
+            assertEquals("https://artist.bandcamp.com/track/song", requestUrl)
+            assertEquals("Song", track.title)
+            assertEquals("Artist", track.artist)
+            assertEquals("https://audio.example/song.mp3", track.audioUrl)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun rejectsUntrustedBandcampTrackUrlsBeforeNetworkRequest() = runTest {
+        var requestSeen = false
+        val client = HttpClient(MockEngine {
+            requestSeen = true
+            respond(ByteReadChannel("{}"), HttpStatusCode.OK)
+        })
+        try {
+            assertFailsWith<IllegalArgumentException> {
+                BandcampClient(client).track("https://bandcamp.com.evil.example/track/song")
+            }
+            assertFailsWith<IllegalArgumentException> {
+                BandcampClient(client).track("https://artist.bandcamp.com/album/song")
+            }
+            assertEquals(false, requestSeen)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun redirectsAreRejectedAndPaidTracksRemainUnavailable() = runTest {
+        var redirectRequests = 0
+        val redirectClient = HttpClient(MockEngine {
+            redirectRequests++
+            respond(ByteReadChannel(""), HttpStatusCode.Found, headers = io.ktor.http.headersOf("Location", "https://evil.example/"))
+        })
+        try {
+            assertFailsWith<IllegalStateException> { BandcampClient(redirectClient).track("https://artist.bandcamp.com/track/song") }
+            assertEquals(1, redirectRequests)
+        } finally {
+            redirectClient.close()
+        }
+
+        val paidClient = HttpClient(MockEngine {
+            respond(ByteReadChannel("""{"url":"https://artist.bandcamp.com/track/song","trackinfo":[{"file":null}],"current":{"title":"Song"}}"""), HttpStatusCode.OK)
+        })
+        try {
+            assertFailsWith<IllegalStateException> { BandcampClient(paidClient).track("https://artist.bandcamp.com/track/song") }
+        } finally {
+            paidClient.close()
+        }
+    }
+
+    @Test
+    fun malformedTrackPageAndHttpFailureAreReported() = runTest {
+        val malformedClient = HttpClient(MockEngine {
+            respond(ByteReadChannel("not-json"), HttpStatusCode.OK)
+        })
+        try {
+            assertFailsWith<IllegalArgumentException> {
+                BandcampClient(malformedClient).track("https://artist.bandcamp.com/track/song")
+            }
+        } finally {
+            malformedClient.close()
+        }
+
+        val failedClient = HttpClient(MockEngine {
+            respond(ByteReadChannel("blocked"), HttpStatusCode.ServiceUnavailable)
+        })
+        try {
+            val error = assertFailsWith<IllegalStateException> {
+                BandcampClient(failedClient).track("https://artist.bandcamp.com/track/song")
+            }
+            assertEquals("Bandcamp track page failed with HTTP 503", error.message)
+        } finally {
+            failedClient.close()
+        }
+    }
+
+    @Test
     fun postsAutocompleteRequestAndParsesSuggestions() = runTest {
         var requestSeen = false
         val client = HttpClient(MockEngine { request ->

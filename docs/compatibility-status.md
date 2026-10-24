@@ -6,7 +6,7 @@ The stable entry points are the six `com.vyonex` types named below. The host int
 
 | API | JVM | iOS / Swift | Contract |
 | --- | --- | --- | --- |
-| `VyonEx` | Available | Available | JVM exposes `init`; iOS exposes `initialize`. Both expose `initializeFallback`, `audioCandidates`, `bandcampSuggestions`, `extract`, `headersFor`, `onRefused`, `exclude`, and `onSessionChanged`. `initializeFallback` is currently a no-op. |
+| `VyonEx` | Available | Available | JVM exposes `init`; iOS exposes `initialize`. Both expose `initializeFallback`, `audioCandidates`, `bandcampSuggestions`, `bandcampTrack`, `extract`, `headersFor`, `onRefused`, `exclude`, and `onSessionChanged`. `initializeFallback` is currently a no-op. |
 | `VyonExHost` | Available | Available | Both inherit session, config, time and logging services. JVM additionally receives a token provider, files directory and OkHttp client; iOS receives its token provider and uses Darwin transport. |
 | `VyonExStream` | Shared | Shared | Video ID, URL, bitrate, MIME type, loudness, client/profile identifiers and request headers. |
 | `VyonExAudioCandidate` | Shared | Shared | URL, bitrate, MIME type and normalized audio format. |
@@ -20,7 +20,7 @@ The stable entry points are the six `com.vyonex` types named below. The host int
 | Service | JVM implementation | Shared/iOS status |
 | --- | --- | --- |
 | YouTube | Primary extraction and progressive audio candidates | Primary extraction and watch-page fallback are exposed to Swift; QuickJS/cipher and host behavior are covered by shared tests. |
-| Bandcamp | JVM fallback service and extractors; `VyonEx.bandcampSuggestions` | Autocomplete is available through the shared facade and host transport. Search, track, playlist, and radio extraction remain JVM-only. |
+| Bandcamp | JVM fallback service and extractors; `VyonEx.bandcampSuggestions`, `VyonEx.bandcampTrack` | Autocomplete and direct track page metadata/audio URL are available through the shared facade and host transport. Search, playlist, and radio extraction remain JVM-only. |
 | MediaCCC | JVM fallback service and extractors | Several response mappers/parsers and tests are shared; service extraction is not exposed through the stable facade on iOS. |
 | PeerTube | JVM fallback service and extractors | Several URL/response parsers and tests are shared; service extraction is not exposed through the stable facade on iOS. |
 | SoundCloud | JVM fallback service and extractors | Parsing and payload mappers are shared; service extraction is not exposed through the stable facade on iOS. |

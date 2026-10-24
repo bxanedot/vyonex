@@ -17,6 +17,10 @@ class VyonEx(host: VyonExHost) {
     /** Returns Bandcamp autocomplete suggestions without exposing transport implementation types. */
     suspend fun bandcampSuggestions(query: String): List<String> = primary.bandcampSuggestions(query)
 
+    /** Fetches playable track page metadata from a Bandcamp track URL. */
+    suspend fun bandcampTrack(url: String): BandcampTrack = primary.bandcampTrack(url).toPublicTrack()
+
+
     suspend fun extract(
         videoId: String,
         maxKbps: Int,
