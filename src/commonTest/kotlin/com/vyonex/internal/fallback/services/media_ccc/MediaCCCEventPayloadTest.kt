@@ -91,12 +91,33 @@ class MediaCCCEventPayloadTest {
     }
 
     @Test
+    fun decodesConferenceDirectoryWithOptionalLogoAndUnknownFields() {
+        val listing = MediaCCCListingPayloadDecoder.decodeConferenceList(
+            """{"Conferences":"Conferences","conferences":[
+                {"title":"FOSDEM","url":"https://media.ccc.de/c/fosdem",
+                 "logo_url":"https://cdn.example/fosdem.jpg","future":true},
+                {"title":"No logo","url":"https://media.ccc.de/c/no-logo"}],
+                "future_field":true}""",
+        )
+
+        assertEquals("Conferences", listing.title)
+        assertEquals("FOSDEM", listing.conferences[0].title)
+        assertEquals("https://media.ccc.de/c/fosdem", listing.conferences[0].url)
+        assertEquals("https://cdn.example/fosdem.jpg", listing.conferences[0].logoUrl)
+        assertNull(listing.conferences[1].logoUrl)
+        assertEquals(emptyList(), MediaCCCListingPayloadDecoder.decodeConferenceList("{}").conferences)
+    }
+
+    @Test
     fun malformedListingPayloadsFailAtTheDecodeBoundary() {
         assertFailsWith<MediaCCCListingParseException> {
             MediaCCCListingPayloadDecoder.decodeConference("not-json")
         }
         assertFailsWith<MediaCCCListingParseException> {
             MediaCCCListingPayloadDecoder.decodeEventSearch("""{"events":[{"length":"invalid"}]}""")
+        }
+        assertFailsWith<MediaCCCListingParseException> {
+            MediaCCCListingPayloadDecoder.decodeConferenceList("""{"conferences":[{"title":4}]}""")
         }
     }
 }

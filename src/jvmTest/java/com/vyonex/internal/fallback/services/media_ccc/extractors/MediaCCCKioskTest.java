@@ -45,7 +45,26 @@ class MediaCCCKioskTest {
         assertEquals(1, page.getItems().size());
         assertEquals("FOSDEM", page.getItems().get(0).getName());
         assertEquals("https://media.ccc.de/c/fosdem", page.getItems().get(0).getUrl());
+        assertEquals("https://cdn.example.test/fosdem.jpg",
+                page.getItems().get(0).getThumbnails().get(0).getUrl());
+        assertEquals("Conferences", kiosk.getName());
         assertEquals("https://media.ccc.de/public/conferences", downloader.requestedUrl);
+    }
+
+    @Test
+    void conferenceKioskWrapsMalformedListingAsExtractionFailure() throws Exception {
+        final ListLinkHandler link = MediaCCCConferencesListLinkHandlerFactory.getInstance()
+                .fromUrl("https://media.ccc.de/public/conferences");
+        final StubDownloader downloader = new StubDownloader("not-json");
+        VyonEx.init(downloader);
+        final MediaCCCConferenceKiosk kiosk = new MediaCCCConferenceKiosk(
+                new MediaCCCService(8), link, MediaCCCConferenceKiosk.KIOSK_ID);
+
+        final ExtractionException error = assertThrows(
+                ExtractionException.class, () -> kiosk.onFetchPage(downloader));
+
+        assertEquals("Could not parse API response from https://media.ccc.de/public/conferences",
+                error.getMessage());
     }
 
     @Test

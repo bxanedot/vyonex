@@ -9,6 +9,7 @@ import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCConferenceInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor;
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCConferenceSummaryPayload;
 import com.vyonex.internal.json.JsonObject;
 import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -21,12 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class MediaCCCInfoItemTest {
     @Test
     void mapsConferenceAndEventApiFields() throws Exception {
-        final JsonObject conference = JsonParser.object().from("""
-                {"title":"FOSDEM","url":"https://media.ccc.de/c/fosdem",
-                 "logo_url":"https://cdn.example.test/fosdem.jpg"}
-                """);
         final MediaCCCConferenceInfoItemExtractor channel =
-                new MediaCCCConferenceInfoItemExtractor(conference);
+                new MediaCCCConferenceInfoItemExtractor(new MediaCCCConferenceSummaryPayload(
+                        "FOSDEM", "https://media.ccc.de/c/fosdem",
+                        "https://cdn.example.test/fosdem.jpg"));
 
         assertEquals("FOSDEM", channel.getName());
         assertEquals("https://media.ccc.de/c/fosdem", channel.getUrl());
