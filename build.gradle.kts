@@ -33,6 +33,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation("io.ktor:ktor-http:3.5.2")
+            implementation("dev.whyoleg.cryptography:cryptography-core:0.6.0")
+            implementation("dev.whyoleg.cryptography:cryptography-provider-optimal:0.6.0")
             api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
         }
 
