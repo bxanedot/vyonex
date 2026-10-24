@@ -14,7 +14,9 @@ import com.vyonex.internal.fallback.channel.tabs.ChannelTabs;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.ContentCountry;
@@ -109,6 +111,25 @@ class PeertubeProfilesAndListsTest {
     }
 
     @Test
+    void channelKeepsUnavailableAndMalformedResponseErrors() throws Exception {
+        final String channelUrl = BASE + "/api/v1/video-channels/music@tube.example";
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ListLinkHandler link = service.getChannelLHFactory()
+                .fromUrl(BASE + "/c/music@tube.example");
+
+        VyonEx.init(new StubDownloader(Map.of(channelUrl, "{\"error\":\"Channel unavailable\"}")));
+        final ChannelExtractor unavailable = service.getChannelExtractor(link);
+        final ContentNotAvailableException unavailableError = assertThrows(
+                ContentNotAvailableException.class, unavailable::fetchPage);
+        assertEquals("Channel unavailable", unavailableError.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(channelUrl, "not-json")));
+        final ChannelExtractor malformed = service.getChannelExtractor(link);
+        final ParsingException parseError = assertThrows(ParsingException.class, malformed::fetchPage);
+        assertEquals("Invalid PeerTube channel response", parseError.getMessage());
+    }
+
+    @Test
     void playlistAndChannelTabReturnPagedVideos() throws Exception {
         final String playlistUrl = BASE + "/api/v1/video-playlists/list-1";
         final String playlistVideosUrl = playlistUrl + "/videos?start=0&count=12";
@@ -179,6 +200,24 @@ class PeertubeProfilesAndListsTest {
                 .getInstance().fromId("list-1", BASE));
 
         assertThrows(ExtractionException.class, playlist::fetchPage);
+    }
+
+    @Test
+    void playlistPreservesUnavailableAndMalformedResponseErrors() throws Exception {
+        final String playlistUrl = BASE + "/api/v1/video-playlists/list-1";
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final var link = PeertubePlaylistLinkHandlerFactory.getInstance().fromId("list-1", BASE);
+
+        VyonEx.init(new StubDownloader(Map.of(playlistUrl, "{\"error\":\"Playlist unavailable\"}")));
+        final var unavailable = service.getPlaylistExtractor(link);
+        final ContentNotAvailableException unavailableError = assertThrows(
+                ContentNotAvailableException.class, unavailable::fetchPage);
+        assertEquals("Playlist unavailable", unavailableError.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(playlistUrl, "not-json")));
+        final var malformed = service.getPlaylistExtractor(link);
+        final ParsingException parseError = assertThrows(ParsingException.class, malformed::fetchPage);
+        assertEquals("Invalid PeerTube playlist response", parseError.getMessage());
     }
 
     private static final class StubDownloader extends Downloader {

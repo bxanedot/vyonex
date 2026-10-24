@@ -166,7 +166,7 @@ public class PeertubeParsingHelper private constructor() {
             baseUrl,
         )
 
-        private fun toImages(images: List<PeertubeImageReference>, baseUrl: String): List<Image> =
+        internal fun toImages(images: List<PeertubeImageReference>, baseUrl: String): List<Image> =
             Collections.unmodifiableList(images.map { image ->
                 Image(
                     resolve(baseUrl, image.path),

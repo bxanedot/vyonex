@@ -55,4 +55,25 @@ class PeertubeInstanceTest {
             VyonEx.init(previous);
         }
     }
+
+    @Test
+    void reportsMalformedConfigurationAsAParsingError() throws Exception {
+        final Downloader previous = VyonEx.getDownloader();
+        final Downloader offline = new Downloader() {
+            @Override
+            public Response execute(final Request request) {
+                return new Response(200, "OK", Map.of(), "not-json", request.url());
+            }
+        };
+        try {
+            VyonEx.init(offline);
+            final Exception error = assertThrows(Exception.class,
+                    () -> new PeertubeInstance("https://tube.example").fetchInstanceMetaData());
+            assertEquals("Unable to parse PeerTube instance metadata", error.getMessage());
+            assertEquals("Invalid PeerTube instance configuration response",
+                    error.getCause().getMessage());
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
 }
