@@ -33,6 +33,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation("io.ktor:ktor-http:3.5.2")
+            api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
         }
 
         commonTest.dependencies {
@@ -45,7 +46,6 @@ kotlin {
             api("io.ktor:ktor-client-okhttp:3.5.2")
             api("io.ktor:ktor-client-content-negotiation:3.5.2")
             api("io.ktor:ktor-serialization-kotlinx-json:3.5.2")
-            api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
             api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             implementation("io.github.dokar3:quickjs-kt:1.0.14")
             implementation("org.jsoup:jsoup:1.22.2")
