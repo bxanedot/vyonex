@@ -14,6 +14,7 @@ internal data class MediaCCCLiveConferencePayload(
     val conference: String? = null,
     val slug: String? = null,
     val description: String? = null,
+    val isCurrentlyStreaming: Boolean? = null,
     val groups: List<MediaCCCLiveGroupPayload>? = null,
 )
 

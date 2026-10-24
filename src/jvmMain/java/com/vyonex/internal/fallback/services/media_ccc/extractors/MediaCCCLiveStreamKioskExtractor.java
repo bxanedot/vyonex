@@ -6,16 +6,17 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveConferencePayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoomPayload;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveStreamPayload;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
 
-import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromLiveStreamItem;
+import static com.vyonex.internal.fallback.services.media_ccc.extractors.MediaCCCParsingHelper.getThumbnailsFromStreamItem;
 
 public class MediaCCCLiveStreamKioskExtractor implements StreamInfoItemExtractor {
     @Nullable private final String title;
@@ -25,22 +26,22 @@ public class MediaCCCLiveStreamKioskExtractor implements StreamInfoItemExtractor
     private final List<Image> thumbnails;
     private final StreamType streamType;
 
-    public MediaCCCLiveStreamKioskExtractor(final JsonObject conference, final String group,
-                                            final JsonObject room) {
-        title = room.getObject("talks").getObject("current").getString("title");
-        link = room.getString("link");
-        uploaderName = conference.getString("conference") + " - " + group + " - "
-                + room.getString("display");
-        uploaderUrl = "https://media.ccc.de/c/" + conference.getString("slug");
-        thumbnails = getThumbnailsFromLiveStreamItem(room);
-        streamType = streamType(room.getArray("streams"));
+    public MediaCCCLiveStreamKioskExtractor(final MediaCCCLiveConferencePayload conference,
+                                            final String group,
+                                            final MediaCCCLiveRoomPayload room) {
+        title = room.getTalks() == null || room.getTalks().getCurrent() == null
+                ? null : room.getTalks().getCurrent().getTitle();
+        link = room.getLink();
+        uploaderName = conference.getConference() + " - " + group + " - " + room.getDisplay();
+        uploaderUrl = "https://media.ccc.de/c/" + conference.getSlug();
+        thumbnails = getThumbnailsFromStreamItem(room.getThumb(), room.getPoster());
+        streamType = streamType(room.getStreams());
     }
 
-    private static StreamType streamType(final JsonArray streams) {
-        for (final Object value : streams) {
-            if (value instanceof JsonObject
-                    && "video".equals(((JsonObject) value).getString("type"))) {
-                return StreamType.LIVE_STREAM;
+    private static StreamType streamType(final List<MediaCCCLiveStreamPayload> streams) {
+        if (streams != null) {
+            for (final MediaCCCLiveStreamPayload stream : streams) {
+                if ("video".equals(stream.getType())) return StreamType.LIVE_STREAM;
             }
         }
         return StreamType.AUDIO_LIVE_STREAM;
