@@ -8,17 +8,15 @@ import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.channel.ChannelExtractor
 import com.vyonex.internal.fallback.channel.tabs.ChannelTabs
 import com.vyonex.internal.fallback.downloader.Downloader
-import com.vyonex.internal.fallback.downloader.Response
 import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
+import com.vyonex.internal.fallback.services.peertube.PeertubeAccountChannelsParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeAccountPageParseException
 import com.vyonex.internal.fallback.services.peertube.PeertubeAccountPageParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelTabLinkHandlerFactory
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
 import java.io.IOException
 
 public class PeertubeAccountExtractor @Throws(ParsingException::class) constructor(
@@ -54,13 +52,10 @@ public class PeertubeAccountExtractor @Throws(ParsingException::class) construct
         var followers = accountFollowers
         val channelListUrl = "$baseUrl$API${getId()}/video-channels"
         try {
-            val result = PeertubeParsingHelper.readApiObject(
+            val response = PeertubeParsingHelper.readApiBody(
                 getDownloader().get(channelListUrl), "account channel data",
             )
-            val channels: JsonArray = result.getArray("data")
-            for (value in channels) {
-                if (value is JsonObject) followers += value.getLong("followersCount")
-            }
+            followers += PeertubeAccountChannelsParser.followerCount(response)
         } catch (_: Exception) {
             // The account total remains useful when its optional channel list cannot be read.
         }

@@ -102,6 +102,20 @@ class PeertubeProfilesAndListsTest {
     }
 
     @Test
+    void accountUsesItsFollowerCountWhenChannelListIsUnavailable() throws Exception {
+        final String accountUrl = BASE + "/api/v1/accounts/alice@tube.example";
+        VyonEx.init(new StubDownloader(Map.of(accountUrl, """
+                {"id":7,"displayName":"Alice","followersCount":5}
+                """)));
+        final PeertubeService service = new PeertubeService(3, new PeertubeInstance(BASE, "Offline"));
+        final ChannelExtractor account = service.getChannelExtractor(service.getChannelLHFactory()
+                .fromUrl(BASE + "/a/alice@tube.example"));
+        account.fetchPage();
+
+        assertEquals(5, account.getSubscriberCount());
+    }
+
+    @Test
     void channelExposesItsOwnerAndPlaylistTab() throws Exception {
         final String channelUrl = BASE + "/api/v1/video-channels/music@tube.example";
         final StubDownloader downloader = new StubDownloader(Map.of(channelUrl, """
