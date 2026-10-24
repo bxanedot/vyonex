@@ -11,14 +11,14 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headers
 import io.ktor.utils.io.ByteReadChannel
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Test
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class YtConfigParserContractTest {
     @Test
-    fun readsPlayerConfigurationFromTheWatchPage() = runBlocking {
+    fun readsPlayerConfigurationFromTheWatchPage() = runTest {
         val requests = mutableListOf<Pair<String, String?>>()
         val client =
             HttpClient(
@@ -39,14 +39,14 @@ class YtConfigParserContractTest {
             assertEquals("visitor-token", config.visitorData)
             assertEquals("2.20261001.00.00", config.clientVersion)
             assertNull(config.encryptedHostFlags)
-            assertEquals(listOf("https://www.youtube.com/watch?v=$VIDEO_ID&bpctr=9999999999&has_verified=1" to null), requests)
+            assertEquals(listOf<Pair<String, String?>>("https://www.youtube.com/watch?v=$VIDEO_ID&bpctr=9999999999&has_verified=1" to null), requests)
         } finally {
             client.close()
         }
     }
 
     @Test
-    fun retriesAnAuthenticatedEmbedPageWithoutCookiesAndKeepsItsReferer() = runBlocking {
+    fun retriesAnAuthenticatedEmbedPageWithoutCookiesAndKeepsItsReferer() = runTest {
         val requests = mutableListOf<Pair<String?, String?>>()
         val client =
             HttpClient(
@@ -69,7 +69,7 @@ class YtConfigParserContractTest {
 
             assertEquals("secret-flag", config.encryptedHostFlags)
             assertEquals(
-                listOf(
+                listOf<Pair<String?, String?>>(
                     "SID=session; SAPISID=token" to "https://www.reddit.com/",
                     null to "https://www.reddit.com/",
                 ),
