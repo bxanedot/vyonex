@@ -7,15 +7,17 @@ import com.vyonex.internal.fallback.Image
 import com.vyonex.internal.fallback.Page
 import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.downloader.Downloader
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.playlist.PlaylistExtractor
+import com.vyonex.internal.fallback.services.peertube.PeertubePlaylistPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubePlaylistPageParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.stream.Description
 import com.vyonex.internal.fallback.stream.StreamInfoItem
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector
-import com.vyonex.internal.json.JsonObject
 import java.io.IOException
 
 public class PeertubePlaylistExtractor(
@@ -70,23 +72,24 @@ public class PeertubePlaylistExtractor(
 
     @Throws(IOException::class, ExtractionException::class)
     override fun onFetchPage(downloader: Downloader) {
-        val data = PeertubeParsingHelper.readApiObject(downloader.get(getUrl()), "playlist")
-        PeertubeParsingHelper.validate(data)
-        val owner: JsonObject = data.getObject("ownerAccount")
-        val channel: JsonObject = data.getObject("videoChannel")
+        val response = PeertubeParsingHelper.readApiBody(downloader.get(getUrl()), "playlist")
+        val data = try {
+            PeertubePlaylistPageParser.parse(response)
+        } catch (error: PeertubePlaylistPageParseException) {
+            throw ParsingException("Invalid PeerTube playlist response", error)
+        }
+        data.error?.let { throw ContentNotAvailableException(it) }
         playlist = Playlist(
-            displayName = data.getString("displayName"),
-            description = data.getString("description"),
-            videoCount = data.getLong("videosLength", -1),
-            ownerUrl = owner.getString("url"),
-            ownerName = owner.getString("displayName"),
-            channelName = channel.getString("displayName"),
-            channelUrl = channel.getString("url"),
-            thumbnails = PeertubeParsingHelper.getThumbnailsFromPlaylistOrVideoItem(getBaseUrl(), data),
-            ownerAvatars = PeertubeParsingHelper
-                .getAvatarsFromOwnerAccountOrVideoChannelObject(getBaseUrl(), owner),
-            channelAvatars = PeertubeParsingHelper
-                .getAvatarsFromOwnerAccountOrVideoChannelObject(getBaseUrl(), channel),
+            displayName = data.displayName,
+            description = data.description,
+            videoCount = data.videoCount,
+            ownerUrl = data.ownerUrl,
+            ownerName = data.ownerName,
+            channelName = data.channelName,
+            channelUrl = data.channelUrl,
+            thumbnails = PeertubeParsingHelper.toImages(data.thumbnails, getBaseUrl()),
+            ownerAvatars = PeertubeParsingHelper.toImages(data.ownerAvatars, getBaseUrl()),
+            channelAvatars = PeertubeParsingHelper.toImages(data.channelAvatars, getBaseUrl()),
         )
     }
 
