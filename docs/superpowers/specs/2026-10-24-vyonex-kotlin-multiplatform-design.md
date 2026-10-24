@@ -22,13 +22,13 @@ Ship VyonEx as one Kotlin Multiplatform Gradle module that remains usable from J
 
 ## Chosen design
 
-Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; add common APIs in compatible increments and use platform adapters for filesystem and HTTP. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. The QuickJS-KT runtime, player-wrapper parser, and URL-cipher solver now live in `commonMain`; the Rhino-backed parser fallback, cipher service, host, and public extraction facade remain JVM-only.
+Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm64`, `iosSimulatorArm64`, `iosX64`). Keep JVM binary signatures where they already exist; add common APIs in compatible increments and use platform adapters for filesystem and HTTP. Use Ktor common APIs for shared HTTP behavior, the OkHttp engine on JVM, and Darwin on iOS. The QuickJS-KT runtime, player-wrapper parser, URL-cipher solver, and remote-config cipher solver now live in `commonMain`; the Rhino-backed parser fallback, cipher service, host, and public extraction facade remain JVM-only.
 
 ## Port status
 
-- Shared and locally verified: extractor request orchestration, QuickJS runtime, and the player URL-cipher parser/solver. The parser now uses the same Kotlin implementation on JVM and iOS.
+- Shared and locally verified: extractor request orchestration, QuickJS runtime, player URL-cipher parser/solver, and configured player cipher solver. These use common implementations on JVM and iOS.
 - Still JVM-only: the `VyonEx`/`VyonExHost` facade, primary backend wiring and YouTube cipher service, the Rhino-backed legacy player-function parser, and fallback extractor.
-- Windows checks compile iOS device/simulator main and test sources. Native simulator test execution and Apple framework linking must pass on macOS CI before the new parser slice is considered supported on iOS.
+- Windows checks compile iOS device/simulator main and test sources. Native simulator test execution and Apple framework linking must pass on macOS CI before these shared cipher slices are considered supported on iOS.
 
 Move shared value types first, then the YouTube primary path and its platform services, then non-YouTube services, YouTube fallback, and bundled assets. The JVM target remains functional throughout the migration. A source or attribution notice is retired only after its replacement passes offline compatibility tests on the targets it serves.
 
