@@ -6,9 +6,9 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -26,15 +26,15 @@ public class MediaCCCStreamInfoItemExtractor implements StreamInfoItemExtractor 
     private final long viewCount;
     private final List<Image> thumbnails;
 
-    public MediaCCCStreamInfoItemExtractor(final JsonObject event) {
-        title = event.getString("title");
-        guid = event.getString("guid");
-        conferenceTitle = event.getString("conference_title");
-        conferenceUrl = event.getString("conference_url");
-        releaseDate = event.getString("release_date");
-        length = event.getLong("length");
-        viewCount = event.getLong("view_count");
-        thumbnails = getThumbnailsFromStreamItem(event);
+    public MediaCCCStreamInfoItemExtractor(final MediaCCCEventPayload event) {
+        title = event.getTitle();
+        guid = event.getGuid();
+        conferenceTitle = event.getConferenceTitle();
+        conferenceUrl = event.getConferenceUrl();
+        releaseDate = event.getReleaseDate();
+        length = event.getLength() == null ? 0 : event.getLength();
+        viewCount = event.getViewCount() == null ? 0 : event.getViewCount();
+        thumbnails = getThumbnailsFromStreamItem(event.getThumbUrl(), event.getPosterUrl());
     }
 
     @Override public StreamType getStreamType() { return StreamType.VIDEO_STREAM; }

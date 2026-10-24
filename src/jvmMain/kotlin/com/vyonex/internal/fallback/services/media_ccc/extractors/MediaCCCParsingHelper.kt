@@ -101,13 +101,21 @@ public object MediaCCCParsingHelper {
         thumbnails(item, "thumb_url", "poster_url")
 
     @JvmStatic
+    public fun getThumbnailsFromStreamItem(thumbUrl: String?, posterUrl: String?): List<Image> =
+        thumbnails(thumbUrl, posterUrl)
+
+    @JvmStatic
     public fun getThumbnailsFromLiveStreamItem(item: JsonObject): List<Image> =
         thumbnails(item, "thumb", "poster")
 
     private fun thumbnails(item: JsonObject, previewKey: String, posterKey: String): List<Image> {
+        return thumbnails(item.getString(previewKey), item.getString(posterKey))
+    }
+
+    private fun thumbnails(thumbUrl: String?, posterUrl: String?): List<Image> {
         val images = mutableListOf<Image>()
-        appendImage(images, item.getString(previewKey), Image.ResolutionLevel.MEDIUM)
-        appendImage(images, item.getString(posterKey), Image.ResolutionLevel.HIGH)
+        appendImage(images, thumbUrl, Image.ResolutionLevel.MEDIUM)
+        appendImage(images, posterUrl, Image.ResolutionLevel.HIGH)
         return Collections.unmodifiableList(images)
     }
 

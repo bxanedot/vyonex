@@ -12,6 +12,8 @@ import kotlinx.serialization.json.JsonPrimitive
 @Serializable
 internal data class MediaCCCEventPayload(
     val title: String? = null,
+    val guid: String? = null,
+    @SerialName("conference_title") val conferenceTitle: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
     val description: String? = null,
     val length: Long? = null,
@@ -51,3 +53,36 @@ internal data class MediaCCCRecordingPayload(
 
 internal class MediaCCCEventParseException(cause: SerializationException) :
     IllegalArgumentException("Invalid MediaCCC event JSON", cause)
+
+@Serializable
+internal data class MediaCCCConferencePayload(
+    val title: String? = null,
+    @SerialName("logo_url") val logoUrl: String? = null,
+    val events: List<MediaCCCEventPayload> = emptyList(),
+)
+
+@Serializable
+internal data class MediaCCCEventSearchPayload(
+    val events: List<MediaCCCEventPayload> = emptyList(),
+)
+
+internal object MediaCCCListingPayloadDecoder {
+    private val decoder = Json { ignoreUnknownKeys = true }
+
+    fun decodeConference(body: String): MediaCCCConferencePayload =
+        decode(body, "conference")
+
+    fun decodeEventSearch(body: String): MediaCCCEventSearchPayload =
+        decode(body, "event search")
+
+    private inline fun <reified T> decode(body: String, kind: String): T = try {
+        decoder.decodeFromString<T>(body)
+    } catch (error: SerializationException) {
+        throw MediaCCCListingParseException(kind, error)
+    }
+}
+
+internal class MediaCCCListingParseException(
+    kind: String,
+    cause: SerializationException,
+) : IllegalArgumentException("Invalid MediaCCC $kind JSON", cause)

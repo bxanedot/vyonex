@@ -17,6 +17,9 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler
 import com.vyonex.internal.fallback.search.SearchExtractor
 import com.vyonex.internal.fallback.services.media_ccc.extractors.infoItems.MediaCCCStreamInfoItemExtractor
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventSearchPayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferencesListLinkHandlerFactory
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCSearchQueryHandlerFactory
 import java.util.Locale
@@ -57,14 +60,16 @@ public class MediaCCCSearchExtractor(
         conferenceResults = null
         val filters = linkHandler.contentFilters
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.EVENTS)) {
-            eventResults = MediaCCCParsingHelper.fetchJsonObject(
-                downloader,
-                url,
-                extractorLocalization,
-            ).getArray("events").streamAsJsonObjects()
-                .filter { it.getString("release_date") != null }
+            val payload = try {
+                MediaCCCListingPayloadDecoder.decodeEventSearch(
+                    MediaCCCParsingHelper.fetchJsonBody(downloader, url, extractorLocalization),
+                )
+            } catch (error: MediaCCCListingParseException) {
+                throw ExtractionException("Could not parse API response from $url", error)
+            }
+            eventResults = payload.events
+                .filter { it.releaseDate != null }
                 .map(::MediaCCCStreamInfoItemExtractor)
-                .toList()
         }
         if (includes(filters, MediaCCCSearchQueryHandlerFactory.CONFERENCES)) {
             conferenceResults = MediaCCCConferenceKiosk(
