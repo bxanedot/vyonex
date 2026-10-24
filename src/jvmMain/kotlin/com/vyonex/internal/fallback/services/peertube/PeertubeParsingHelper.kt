@@ -22,15 +22,13 @@ import com.vyonex.internal.json.JsonObject
 import com.vyonex.internal.json.JsonParser
 import com.vyonex.internal.json.JsonParserException
 import java.net.URI
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import java.util.Collections
 
 public class PeertubeParsingHelper private constructor() {
     public companion object {
-        public const val START_KEY = "start"
+        public const val START_KEY = PeertubePagination.START_KEY
         public const val COUNT_KEY = "count"
-        public const val ITEMS_PER_PAGE = 12
+        public const val ITEMS_PER_PAGE = PeertubePagination.ITEMS_PER_PAGE
 
         @JvmStatic
         @Throws(ContentNotAvailableException::class)
@@ -57,42 +55,8 @@ public class PeertubeParsingHelper private constructor() {
         }
 
         @JvmStatic
-        public fun getNextPage(previousUrl: String, total: Long): Page? {
-            val queryStart = previousUrl.indexOf('?')
-            if (queryStart < 0) return null
-            val queryEnd = previousUrl.indexOf('#', queryStart).let {
-                if (it < 0) previousUrl.length else it
-            }
-
-            var start = queryStart + 1
-            while (start < queryEnd) {
-                val separator = previousUrl.indexOf('&', start).let {
-                    if (it < 0 || it > queryEnd) queryEnd else it
-                }
-                val equals = previousUrl.indexOf('=', start).takeIf { it in start until separator }
-                val nameEnd = equals ?: separator
-                if (previousUrl.substring(start, nameEnd) == START_KEY) {
-                    val valueStart = equals?.plus(1) ?: return null
-                    val current = try {
-                        URLDecoder.decode(previousUrl.substring(valueStart, separator), StandardCharsets.UTF_8)
-                            .toLong()
-                    } catch (_: IllegalArgumentException) {
-                        return null
-                    }
-                    if (current < 0) return null
-                    val next = try {
-                        Math.addExact(current, ITEMS_PER_PAGE.toLong())
-                    } catch (_: ArithmeticException) {
-                        return null
-                    }
-                    if (next >= total) return null
-                    return Page(previousUrl.substring(0, valueStart) + next
-                        + previousUrl.substring(separator))
-                }
-                start = separator + 1
-            }
-            return null
-        }
+        public fun getNextPage(previousUrl: String, total: Long): Page? =
+            PeertubePagination.nextPageUrl(previousUrl, total)?.let(::Page)
 
         @JvmStatic
         @Throws(ParsingException::class)
