@@ -3,6 +3,7 @@
 // bxane
 package com.vyonex.internal.fallback.services.peertube.linkHandler
 
+import com.vyonex.internal.url.FormUrlEncoder
 import io.ktor.http.Url
 
 internal object PeertubeUrl {
@@ -73,6 +74,15 @@ internal object PeertubeUrl {
         "channels" -> "/video-channels"
         "playlists" -> "/video-playlists"
         else -> null
+    }
+
+    fun encodeSearchQuery(query: String): String = FormUrlEncoder.encode(query)
+
+    fun searchEndpoint(filter: String?): String = when (filter ?: "videos") {
+        "videos", "sepia_videos" -> "/api/v1/search/videos"
+        "channels" -> "/api/v1/search/video-channels"
+        "playlists" -> "/api/v1/search/video-playlists"
+        else -> "/api/v1/search/video-playlists"
     }
 
     fun accepts(value: String?): Boolean = parse(value) != null

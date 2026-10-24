@@ -45,6 +45,14 @@ class BandcampUrlParserTest {
     }
 
     @Test
+    fun buildsSearchUrlWithFormEncodedQuery() {
+        assertEquals(
+            "https://bandcamp.com/search?q=music+%26+caf%C3%A9&page=1",
+            BandcampUrlParser.searchUrl("music & café"),
+        )
+    }
+
+    @Test
     fun rejectsInvalidWebUrls() {
         listOf(
             null,

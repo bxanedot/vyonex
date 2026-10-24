@@ -6,8 +6,6 @@ package com.vyonex.internal.fallback.services.peertube.linkHandler
 import com.vyonex.internal.fallback.ServiceList
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandlerFactory
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 public class PeertubeSearchQueryHandlerFactory private constructor() : SearchQueryHandlerFactory() {
     @Throws(ParsingException::class)
@@ -23,13 +21,8 @@ public class PeertubeSearchQueryHandlerFactory private constructor() : SearchQue
         sortFilter: String,
         baseUrl: String,
     ): String {
-        val endpoint = when (filters.firstOrNull() ?: VIDEOS) {
-            VIDEOS, SEPIA_VIDEOS -> SEARCH_ENDPOINT_VIDEOS
-            CHANNELS -> SEARCH_ENDPOINT_CHANNELS
-            PLAYLISTS -> SEARCH_ENDPOINT_PLAYLISTS
-            else -> SEARCH_ENDPOINT_PLAYLISTS
-        }
-        return "$baseUrl$endpoint?search=${URLEncoder.encode(query, StandardCharsets.UTF_8)}"
+        val endpoint = PeertubeUrl.searchEndpoint(filters.firstOrNull())
+        return "$baseUrl$endpoint?search=${PeertubeUrl.encodeSearchQuery(query)}"
     }
 
     override fun getAvailableContentFilter(): Array<String> =

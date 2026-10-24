@@ -90,4 +90,20 @@ class PeertubeUrlTest {
         assertEquals("/video-playlists", PeertubeUrl.channelTabSuffix("playlists"))
         assertNull(PeertubeUrl.channelTabSuffix("unsupported"))
     }
+
+    @Test
+    fun encodesSearchTermsForQueryParameters() {
+        assertEquals("art+%26+caf%C3%A9", PeertubeUrl.encodeSearchQuery("art & café"))
+        assertEquals("a%7E%21*%27%28%29+%2B%26", PeertubeUrl.encodeSearchQuery("a~!*'() +&"))
+        assertEquals("", PeertubeUrl.encodeSearchQuery(""))
+    }
+
+    @Test
+    fun selectsSearchEndpointsFromContentFilters() {
+        assertEquals("/api/v1/search/videos", PeertubeUrl.searchEndpoint(null))
+        assertEquals("/api/v1/search/videos", PeertubeUrl.searchEndpoint("sepia_videos"))
+        assertEquals("/api/v1/search/video-channels", PeertubeUrl.searchEndpoint("channels"))
+        assertEquals("/api/v1/search/video-playlists", PeertubeUrl.searchEndpoint("playlists"))
+        assertEquals("/api/v1/search/video-playlists", PeertubeUrl.searchEndpoint("unsupported"))
+    }
 }
