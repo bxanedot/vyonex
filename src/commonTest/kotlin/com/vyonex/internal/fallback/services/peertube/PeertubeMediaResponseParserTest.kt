@@ -39,10 +39,50 @@ class PeertubeMediaResponseParserTest {
                     ),
                 ),
                 isLive = true,
+                metadata = PeertubeVideoMetadata(
+                    name = "Video",
+                    publishedAt = "2026-01-02T03:04:05Z",
+                    description = "Description",
+                    nsfw = true,
+                    duration = 123,
+                    views = 456,
+                    likes = 7,
+                    dislikes = 2,
+                    accountName = "alice",
+                    accountHost = "tube.example",
+                    accountDisplayName = "Alice",
+                    channelName = "music",
+                    channelDisplayName = "Music",
+                    channelUrl = "https://tube.example/c/music",
+                    hlsUrl = "https://cdn.example/master.m3u8",
+                    isLive = true,
+                    privacyId = 1,
+                    category = "Music",
+                    licence = "CC BY",
+                    languageId = "en",
+                    tags = listOf("ambient", "instrumental"),
+                    support = "Support link",
+                ),
             ),
             PeertubeMediaResponseParser.parse(
                 """{
+                    "name": "Video",
+                    "publishedAt": "2026-01-02T03:04:05Z",
+                    "description": "Description",
+                    "nsfw": true,
+                    "duration": 123,
+                    "views": 456,
+                    "likes": 7,
+                    "dislikes": 2,
                     "isLive": true,
+                    "support": "Support link",
+                    "tags": ["ambient", "instrumental", 4],
+                    "account": {"name": "alice", "host": "tube.example", "displayName": "Alice"},
+                    "channel": {"name": "music", "displayName": "Music", "url": "https://tube.example/c/music"},
+                    "privacy": {"id": 1},
+                    "category": {"label": "Music"},
+                    "licence": {"label": "CC BY"},
+                    "language": {"id": "en"},
                     "files": [{
                         "fileUrl": "https://cdn.example/video.mp4",
                         "fileDownloadUrl": "https://cdn.example/download/video.mp4",
@@ -72,6 +112,30 @@ class PeertubeMediaResponseParserTest {
                 files = listOf(PeertubeMediaFile(null, null, null, -1, null, -1, false)),
                 playlists = listOf(PeertubeMediaPlaylist("https://cdn.example/live.m3u8", emptyList())),
                 isLive = false,
+                metadata = PeertubeVideoMetadata(
+                    name = null,
+                    publishedAt = null,
+                    description = "",
+                    nsfw = false,
+                    duration = 0,
+                    views = -1,
+                    likes = -1,
+                    dislikes = -1,
+                    accountName = null,
+                    accountHost = null,
+                    accountDisplayName = null,
+                    channelName = "",
+                    channelDisplayName = null,
+                    channelUrl = null,
+                    hlsUrl = "https://cdn.example/live.m3u8",
+                    isLive = false,
+                    privacyId = -1,
+                    category = "",
+                    licence = "",
+                    languageId = null,
+                    tags = emptyList(),
+                    support = "",
+                ),
             ),
             PeertubeMediaResponseParser.parse(
                 """{
@@ -96,5 +160,15 @@ class PeertubeMediaResponseParserTest {
         assertFailsWith<IllegalArgumentException> {
             PeertubeMediaResponseParser.parse("[]")
         }
+    }
+
+    @Test
+    fun preservesLongMetadataPrecision() {
+        val metadata = PeertubeMediaResponseParser
+            .parse("""{"duration": 12.9, "views": 9007199254740993}""")
+            .metadata
+
+        assertEquals(12, metadata.duration)
+        assertEquals(9007199254740993, metadata.views)
     }
 }

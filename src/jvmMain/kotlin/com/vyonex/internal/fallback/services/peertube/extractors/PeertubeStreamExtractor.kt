@@ -46,6 +46,8 @@ public class PeertubeStreamExtractor(
 ) : StreamExtractor(service, handler) {
     private lateinit var page: JsonObject
     private val optionalResponses = mutableMapOf<String, JsonObject?>()
+    private val payload by lazy { PeertubeMediaResponseParser.parse(JsonWriter.string(video)) }
+    private val metadata get() = payload.metadata
     private val media by lazy(::readMedia)
     private val subtitles by lazy(::readSubtitles)
 
@@ -67,9 +69,10 @@ public class PeertubeStreamExtractor(
     }
 
     @Throws(ParsingException::class)
-    override fun getName(): String = PeertubeParsingHelper.requiredString(video, "name")
+    override fun getName(): String = metadata.name
+        ?: throw ParsingException("Missing string field: name")
 
-    override fun getTextualUploadDate(): String? = video.getString("publishedAt")
+    override fun getTextualUploadDate(): String? = metadata.publishedAt
 
     @Throws(ParsingException::class)
     override fun getUploadDate(): DateWrapper? = DateWrapper.fromInstant(getTextualUploadDate())
@@ -78,59 +81,48 @@ public class PeertubeStreamExtractor(
         PeertubeParsingHelper.getThumbnailsFromPlaylistOrVideoItem(apiBaseUrl, video)
 
     override fun getDescription(): Description = Description(
-        video.getString("description", ""), Description.MARKDOWN,
+        metadata.description, Description.MARKDOWN,
     )
 
-    override fun getAgeLimit(): Int = if (video.getBoolean("nsfw")) 18 else NO_AGE_LIMIT
+    override fun getAgeLimit(): Int = if (metadata.nsfw) 18 else NO_AGE_LIMIT
 
-    override fun getLength(): Long = video.getLong("duration")
+    override fun getLength(): Long = metadata.duration
 
-    override fun getViewCount(): Long = video.getLong("views", -1)
+    override fun getViewCount(): Long = metadata.views
 
-    override fun getLikeCount(): Long = video.getLong("likes", -1)
+    override fun getLikeCount(): Long = metadata.likes
 
-    override fun getDislikeCount(): Long = video.getLong("dislikes", -1)
+    override fun getDislikeCount(): Long = metadata.dislikes
 
     @Throws(ParsingException::class)
     override fun getTimeStamp(): Long = getTimestampSeconds("start=([^&#]*)").coerceAtLeast(0)
 
     @Throws(ParsingException::class)
     override fun getUploaderUrl(): String {
-        val account = video.getObject("account")
-        val name = PeertubeParsingHelper.requiredString(account, "name")
-        val host = PeertubeParsingHelper.requiredString(account, "host")
+        val name = metadata.accountName
+            ?: throw ParsingException("Missing string field: account.name")
+        val host = metadata.accountHost
+            ?: throw ParsingException("Missing string field: account.host")
         return PeertubeChannelLinkHandlerFactory.getInstance()
             .fromId("accounts/$name@$host", apiBaseUrl).url
     }
 
     @Throws(ParsingException::class)
-    override fun getUploaderName(): String {
-        val account = video.getObject("account")
-        return account.getString("displayName")?.takeIf(String::isNotBlank)
-            ?: PeertubeParsingHelper.requiredString(account, "name")
-    }
+    override fun getUploaderName(): String = metadata.accountDisplayName?.takeIf(String::isNotBlank)
+        ?: metadata.accountName ?: throw ParsingException("Missing string field: account.name")
 
     override fun getUploaderAvatars(): List<Image> = PeertubeParsingHelper
         .getAvatarsFromOwnerAccountOrVideoChannelObject(apiBaseUrl, video.getObject("account"))
 
-    override fun getSubChannelUrl(): String {
-        val channel = video.getObject("channel")
-        return channel.getString("url")?.takeIf(String::isNotBlank) ?: ""
-    }
+    override fun getSubChannelUrl(): String = metadata.channelUrl?.takeIf(String::isNotBlank) ?: ""
 
-    override fun getSubChannelName(): String {
-        val channel = video.getObject("channel")
-        return channel.getString("displayName")?.takeIf(String::isNotBlank)
-            ?: channel.getString("name", "")
-    }
+    override fun getSubChannelName(): String = metadata.channelDisplayName?.takeIf(String::isNotBlank)
+        ?: metadata.channelName
 
     override fun getSubChannelAvatars(): List<Image> = PeertubeParsingHelper
         .getAvatarsFromOwnerAccountOrVideoChannelObject(apiBaseUrl, video.getObject("channel"))
 
-    override fun getHlsUrl(): String = video.getArray("streamingPlaylists")
-        .filterIsInstance<JsonObject>()
-        .firstNotNullOfOrNull { it.getString("playlistUrl")?.takeIf(String::isNotBlank) }
-        ?: ""
+    override fun getHlsUrl(): String = metadata.hlsUrl
 
     @Throws(IOException::class, ExtractionException::class)
     override fun getAudioStreams(): List<AudioStream> = media.audio
@@ -150,7 +142,7 @@ public class PeertubeStreamExtractor(
         if (format == null) emptyList() else subtitles.filter { it.format == format }
 
     override fun getStreamType(): StreamType =
-        if (video.getBoolean("isLive")) StreamType.LIVE_STREAM else StreamType.VIDEO_STREAM
+        if (metadata.isLive) StreamType.LIVE_STREAM else StreamType.VIDEO_STREAM
 
     @Throws(IOException::class, ExtractionException::class)
     override fun getRelatedItems(): StreamInfoItemsCollector {
@@ -170,9 +162,10 @@ public class PeertubeStreamExtractor(
         return items
     }
 
-    override fun getHost(): String = PeertubeParsingHelper.requiredString(video, "account.host")
+    override fun getHost(): String = metadata.accountHost
+        ?: throw ParsingException("Missing string field: account.host")
 
-    override fun getPrivacy(): Privacy = when (video.getObject("privacy").getInt("id", -1)) {
+    override fun getPrivacy(): Privacy = when (metadata.privacyId) {
         1 -> Privacy.PUBLIC
         2 -> Privacy.UNLISTED
         4 -> Privacy.PRIVATE
@@ -180,18 +173,16 @@ public class PeertubeStreamExtractor(
         else -> Privacy.OTHER
     }
 
-    override fun getCategory(): String = video.getObject("category").getString("label", "")
+    override fun getCategory(): String = metadata.category
 
-    override fun getLicence(): String = video.getObject("licence").getString("label", "")
+    override fun getLicence(): String = metadata.licence
 
-    override fun getLanguageInfo(): Locale? = video.getObject("language").getString("id")
+    override fun getLanguageInfo(): Locale? = metadata.languageId
         ?.takeIf(String::isNotBlank)?.let(Locale::forLanguageTag)
 
-    override fun getTags(): List<String> = Collections.unmodifiableList(
-        video.getArray("tags").filterIsInstance<String>(),
-    )
+    override fun getTags(): List<String> = Collections.unmodifiableList(metadata.tags)
 
-    override fun getSupportInfo(): String = video.getString("support", "")
+    override fun getSupportInfo(): String = metadata.support
 
     @Throws(ParsingException::class)
     override fun getStreamSegments(): List<StreamSegment> = try {
@@ -261,7 +252,6 @@ public class PeertubeStreamExtractor(
     }
 
     private fun readMedia(): MediaStreams {
-        val payload = PeertubeMediaResponseParser.parse(JsonWriter.string(video))
         val streams = PeertubeMediaMapper.map(
             files = payload.files,
             playlists = payload.playlists,
