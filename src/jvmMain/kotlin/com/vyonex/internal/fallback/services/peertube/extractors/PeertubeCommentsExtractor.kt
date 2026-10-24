@@ -9,14 +9,15 @@ import com.vyonex.internal.fallback.comments.CommentsExtractor
 import com.vyonex.internal.fallback.comments.CommentsInfoItem
 import com.vyonex.internal.fallback.comments.CommentsInfoItemsCollector
 import com.vyonex.internal.fallback.downloader.Downloader
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
+import com.vyonex.internal.fallback.services.peertube.PeertubeCommentsPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubeCommentsPageParser
+import com.vyonex.internal.fallback.services.peertube.PeertubeCommentPayload
+import com.vyonex.internal.fallback.services.peertube.PeertubeCommentThreadPayload
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
-import com.vyonex.internal.json.JsonArray
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 
@@ -37,33 +38,33 @@ public class PeertubeCommentsExtractor(
         val url = page?.url?.takeIf(String::isNotBlank)
             ?: throw IllegalArgumentException("Page URL is required")
         val body = page.body
-        val data = if (body != null) parseEmbedded(body)
-        else PeertubeParsingHelper.readApiObject(getDownloader().get(url), "comment data")
-        PeertubeParsingHelper.validate(data)
+        val source = body?.let { String(it, StandardCharsets.UTF_8) }
+            ?: PeertubeParsingHelper.readApiBody(getDownloader().get(url), "comment data")
+        val data = try {
+            PeertubeCommentsPageParser.parse(source)
+        } catch (error: PeertubeCommentsPageParseException) {
+            val message = if (body != null) "Invalid embedded comment replies"
+            else "Invalid PeerTube comment data response"
+            throw ParsingException(message, error)
+        }
+        data.error?.takeIf(String::isNotBlank)?.let { throw ContentNotAvailableException(it) }
 
         val items = CommentsInfoItemsCollector(getServiceId())
-        if (body != null || page.id != null || data.has(CHILDREN) || isReply()) {
-            collectReplies(items, data.getArray(CHILDREN))
+        if (body != null || page.id != null || data.hasThreadsField || isReply()) {
+            collectReplies(items, data.threads)
             return InfoItemsPage(items, null)
         }
 
-        val comments = data.getArray("data", null)
+        val comments = data.comments
             ?: throw ParsingException("Comment response has no data array")
         collectComments(items, comments)
-        val total = data.getLong("total", comments.size.toLong())
+        val total = data.total ?: data.commentCount?.toLong() ?: 0L
         return InfoItemsPage(items, PeertubeParsingHelper.getNextPage(url, total))
     }
 
-    private fun parseEmbedded(body: ByteArray): JsonObject = try {
-        JsonParser.`object`().from(String(body, StandardCharsets.UTF_8))
-    } catch (error: JsonParserException) {
-        throw ParsingException("Invalid embedded comment replies", error)
-    }
-
-    private fun collectComments(items: CommentsInfoItemsCollector, comments: JsonArray) {
-        for (value in comments) {
-            val comment = value as? JsonObject ?: continue
-            if (!comment.getBoolean("isDeleted")) {
+    private fun collectComments(items: CommentsInfoItemsCollector, comments: List<PeertubeCommentPayload>) {
+        for (comment in comments) {
+            if (!comment.deleted) {
                 items.commit(PeertubeCommentsInfoItemExtractor(
                     comment, null, getUrl(), getBaseUrl(), false,
                 ))
@@ -71,13 +72,12 @@ public class PeertubeCommentsExtractor(
         }
     }
 
-    private fun collectReplies(items: CommentsInfoItemsCollector, replies: JsonArray) {
-        for (value in replies) {
-            val node = value as? JsonObject ?: continue
-            val comment = node.getObject("comment", null) ?: continue
-            if (!comment.getBoolean("isDeleted")) {
+    private fun collectReplies(items: CommentsInfoItemsCollector, replies: List<PeertubeCommentThreadPayload>) {
+        for (node in replies) {
+            val comment = node.comment ?: continue
+            if (!comment.deleted) {
                 items.commit(PeertubeCommentsInfoItemExtractor(
-                    comment, node.getArray(CHILDREN), getUrl(), getBaseUrl(), true,
+                    comment, node.children, getUrl(), getBaseUrl(), true,
                 ))
             }
         }
@@ -87,7 +87,4 @@ public class PeertubeCommentsExtractor(
 
     override fun onFetchPage(downloader: Downloader) = Unit
 
-    private companion object {
-        const val CHILDREN = "children"
-    }
 }

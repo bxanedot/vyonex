@@ -31,6 +31,10 @@ internal object PeertubeImageParser {
     fun profileImages(source: String, listKey: String, fallbackKey: String): List<PeertubeImageReference> {
         val item = Json.parseToJsonElement(source) as? JsonObject
             ?: throw IllegalArgumentException("Image response must be a JSON object")
+        return profileImages(item, listKey, fallbackKey)
+    }
+
+    fun profileImages(item: JsonObject, listKey: String, fallbackKey: String): List<PeertubeImageReference> {
         val values = item.array(listKey)
         return if (values.isEmpty()) {
             listOfNotNull(item[fallbackKey]?.let(::profileImage))
