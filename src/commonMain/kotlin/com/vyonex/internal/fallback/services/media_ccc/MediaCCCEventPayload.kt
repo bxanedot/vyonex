@@ -15,8 +15,10 @@ internal data class MediaCCCEventPayload(
     val guid: String? = null,
     @SerialName("conference_title") val conferenceTitle: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
+    val date: String? = null,
     val description: String? = null,
     val length: Long? = null,
+    val duration: Long? = null,
     @SerialName("view_count") val viewCount: Long? = null,
     @SerialName("conference_url") val conferenceUrl: String? = null,
     @SerialName("frontend_link") val frontendLink: String? = null,
@@ -62,7 +64,7 @@ internal data class MediaCCCConferencePayload(
 )
 
 @Serializable
-internal data class MediaCCCEventSearchPayload(
+internal data class MediaCCCEventListingPayload(
     val events: List<MediaCCCEventPayload> = emptyList(),
 )
 
@@ -72,8 +74,11 @@ internal object MediaCCCListingPayloadDecoder {
     fun decodeConference(body: String): MediaCCCConferencePayload =
         decode(body, "conference")
 
-    fun decodeEventSearch(body: String): MediaCCCEventSearchPayload =
+    fun decodeEventSearch(body: String): MediaCCCEventListingPayload =
         decode(body, "event search")
+
+    fun decodeRecentEvents(body: String): MediaCCCEventListingPayload =
+        decode(body, "recent events")
 
     private inline fun <reified T> decode(body: String, kind: String): T = try {
         decoder.decodeFromString<T>(body)

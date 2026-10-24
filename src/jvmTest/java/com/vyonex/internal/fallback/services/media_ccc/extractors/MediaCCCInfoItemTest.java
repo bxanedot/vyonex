@@ -53,7 +53,7 @@ class MediaCCCInfoItemTest {
 
     @Test
     void mapsRecentAndLiveRoomFields() throws Exception {
-        final JsonObject recentEvent = JsonParser.object().from("""
+        final MediaCCCEventPayload recentEvent = MediaCCCEventPayload.Companion.decode("""
                 {"title":"Recent talk","frontend_link":"https://media.ccc.de/v/talk-2",
                  "poster_url":"https://cdn.example.test/poster.jpg","duration":600,
                  "view_count":17,"conference_title":"Chaos","conference_url":"https://api.media.ccc.de/public/conferences/chaos",
@@ -71,15 +71,15 @@ class MediaCCCInfoItemTest {
         assertEquals(DateWrapper.fromInstant("2026-02-01T12:00:00Z").getInstant(),
                 recent.getUploadDate().getInstant());
         final MediaCCCRecentKioskExtractor offsetDate = new MediaCCCRecentKioskExtractor(
-                JsonParser.object().from("{\"date\":\"2026-02-01T12:00:00.000+02:00\"}"));
+                MediaCCCEventPayload.Companion.decode("{\"date\":\"2026-02-01T12:00:00.000+02:00\"}"));
         assertEquals(DateWrapper.fromInstant("2026-02-01T10:00:00Z").getInstant(),
                 offsetDate.getUploadDate().getInstant());
 
         final MediaCCCRecentKioskExtractor undated = new MediaCCCRecentKioskExtractor(
-                JsonParser.object().from("{}"));
+                MediaCCCEventPayload.Companion.decode("{}"));
         assertNull(undated.getUploadDate());
         final MediaCCCRecentKioskExtractor invalidDate = new MediaCCCRecentKioskExtractor(
-                JsonParser.object().from("{\"date\":\"not-a-date\"}"));
+                MediaCCCEventPayload.Companion.decode("{\"date\":\"not-a-date\"}"));
         assertThrows(ParsingException.class, invalidDate::getUploadDate);
 
         final JsonObject conference = JsonParser.object().from(

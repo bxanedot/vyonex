@@ -10,9 +10,10 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingPayloadDecoder;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCListingParseException;
 import com.vyonex.internal.fallback.stream.StreamInfoItem;
 import com.vyonex.internal.fallback.stream.StreamInfoItemsCollector;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -31,10 +32,17 @@ public class MediaCCCRecentKiosk extends KioskExtractor<StreamInfoItem> {
 
     @Override public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        events = MediaCCCParsingHelper.fetchJsonObject(downloader, RECENT_EVENTS_URL,
-                getExtractorLocalization()).getArray("events").streamAsJsonObjects()
-                .map(MediaCCCRecentKioskExtractor::new)
-                .filter(event -> event.getDuration() > 0).toList();
+        try {
+            events = MediaCCCListingPayloadDecoder.INSTANCE.decodeRecentEvents(
+                            MediaCCCParsingHelper.fetchJsonBody(downloader, RECENT_EVENTS_URL,
+                                    getExtractorLocalization()))
+                    .getEvents().stream()
+                    .map(MediaCCCRecentKioskExtractor::new)
+                    .filter(event -> event.getDuration() > 0).toList();
+        } catch (MediaCCCListingParseException error) {
+            throw new ExtractionException(
+                    "Could not parse API response from " + RECENT_EVENTS_URL, error);
+        }
     }
 
     @Nonnull @Override public InfoItemsPage<StreamInfoItem> getInitialPage() {

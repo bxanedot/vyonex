@@ -6,10 +6,10 @@ package com.vyonex.internal.fallback.services.media_ccc.extractors;
 import com.vyonex.internal.fallback.Image;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCEventPayload;
 import com.vyonex.internal.fallback.services.media_ccc.linkHandler.MediaCCCConferenceLinkHandlerFactory;
 import com.vyonex.internal.fallback.stream.StreamInfoItemExtractor;
 import com.vyonex.internal.fallback.stream.StreamType;
-import com.vyonex.internal.json.JsonObject;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -28,15 +28,15 @@ public class MediaCCCRecentKioskExtractor implements StreamInfoItemExtractor {
     private final long viewCount;
     private final List<Image> thumbnails;
 
-    public MediaCCCRecentKioskExtractor(final JsonObject event) {
-        title = event.getString("title");
-        url = event.getString("frontend_link");
-        conferenceTitle = event.getString("conference_title");
-        conferenceUrl = event.getString("conference_url");
-        date = event.getString("date");
-        duration = event.getLong("duration");
-        viewCount = event.getLong("view_count");
-        thumbnails = getImageListFromLogoImageUrl(event.getString("poster_url"));
+    public MediaCCCRecentKioskExtractor(final MediaCCCEventPayload event) {
+        title = event.getTitle();
+        url = event.getFrontendLink();
+        conferenceTitle = event.getConferenceTitle();
+        conferenceUrl = event.getConferenceUrl();
+        date = event.getDate();
+        duration = event.getDuration() == null ? 0 : event.getDuration();
+        viewCount = event.getViewCount() == null ? 0 : event.getViewCount();
+        thumbnails = getImageListFromLogoImageUrl(event.getPosterUrl());
     }
 
     @Override public String getName() throws ParsingException { return title; }
