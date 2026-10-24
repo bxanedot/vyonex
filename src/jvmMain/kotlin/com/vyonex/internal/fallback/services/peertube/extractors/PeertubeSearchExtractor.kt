@@ -9,12 +9,15 @@ import com.vyonex.internal.fallback.MultiInfoItemsCollector
 import com.vyonex.internal.fallback.Page
 import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.downloader.Downloader
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler
 import com.vyonex.internal.fallback.search.SearchExtractor
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
-import com.vyonex.internal.json.JsonObject
+import com.vyonex.internal.fallback.services.peertube.PeertubeVideoListPageParseException
+import com.vyonex.internal.fallback.services.peertube.PeertubeVideoListPageParser
+import com.vyonex.internal.json.JsonParser
 import java.io.IOException
 
 public class PeertubeSearchExtractor(
@@ -41,14 +44,19 @@ public class PeertubeSearchExtractor(
     override fun getPage(page: Page?): InfoItemsPage<InfoItem> {
         val url = page?.url?.takeIf(String::isNotBlank)
             ?: throw IllegalArgumentException("Page URL is required")
-        val data: JsonObject = PeertubeParsingHelper.readApiObject(
-            getDownloader().get(url), "search results",
-        )
-        PeertubeParsingHelper.validate(data)
+        val body = PeertubeParsingHelper.readApiBody(getDownloader().get(url), "search results")
+        val payload = try {
+            PeertubeVideoListPageParser.parse(body)
+        } catch (error: PeertubeVideoListPageParseException) {
+            throw ParsingException("Invalid PeerTube search results response", error)
+        }
+        payload.error?.let { throw ContentNotAvailableException(it) }
+        val data = payload.data ?: throw ParsingException("Response data is not an array")
 
         val items = MultiInfoItemsCollector(getServiceId())
-        PeertubeParsingHelper.collectItemsFrom(items, data, getBaseUrl(), sepia)
-        return InfoItemsPage(items, PeertubeParsingHelper.getNextPage(url, data.getLong("total")))
+        val response = JsonParser.`object`().from("""{"data":$data}""")
+        PeertubeParsingHelper.collectItemsFrom(items, response, getBaseUrl(), sepia)
+        return InfoItemsPage(items, PeertubeParsingHelper.getNextPage(url, payload.total))
     }
 
     override fun onFetchPage(downloader: Downloader) = Unit
