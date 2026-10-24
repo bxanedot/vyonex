@@ -12,7 +12,9 @@ import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ContentNotAvailableException;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.kiosk.KioskExtractor;
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler;
@@ -132,7 +134,36 @@ class PeertubeSearchAndKioskExtractorTest {
     }
 
     @Test
+    void trendingPreservesApiAndMalformedResponseErrors() throws Exception {
+        final String url = "https://framatube.org/api/v1/videos?sort=-trending&start=0&count=12";
+        VyonEx.init(new StubDownloader(Map.of(url, "{\"error\":\"Trending unavailable\"}")));
+        final KioskExtractor<?> unavailableKiosk =
+                new PeertubeService(3).getKioskList().getDefaultKioskExtractor();
+        final ContentNotAvailableException unavailable = assertThrows(
+                ContentNotAvailableException.class, unavailableKiosk::getInitialPage);
+        assertEquals("Trending unavailable", unavailable.getMessage());
+
+        VyonEx.init(new StubDownloader(Map.of(url, "not-json")));
+        final KioskExtractor<?> malformedKiosk =
+                new PeertubeService(3).getKioskList().getDefaultKioskExtractor();
+        final ParsingException malformed = assertThrows(ParsingException.class, malformedKiosk::getInitialPage);
+        assertEquals("Invalid PeerTube kiosk results response", malformed.getMessage());
+    }
+
+    @Test
+    void trendingRejectsResponsesWithoutAnItemArray() throws Exception {
+        final String url = "https://framatube.org/api/v1/videos?sort=-trending&start=0&count=12";
+        VyonEx.init(new StubDownloader(Map.of(url, "{\"total\":13}")));
+        final KioskExtractor<?> kiosk = new PeertubeService(3).getKioskList().getDefaultKioskExtractor();
+
+        final ParsingException error = assertThrows(ParsingException.class, kiosk::getInitialPage);
+
+        assertEquals("Response data is not an array", error.getMessage());
+    }
+
+    @Test
     void rejectsMissingPagesBeforeMakingRequests() throws Exception {
+        VyonEx.init(new StubDownloader(Map.of()));
         final PeertubeService service = new PeertubeService(3,
                 new PeertubeInstance("https://tube.example", "Offline"));
         final String queryUrl = PeertubeSearchQueryHandlerFactory.getInstance().getUrl(
