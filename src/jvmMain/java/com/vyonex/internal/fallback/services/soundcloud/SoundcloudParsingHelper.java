@@ -14,9 +14,10 @@ import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.localization.DateWrapper;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudChannelInfoItemExtractor;
-import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudLikesInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudPlaylistInfoItemExtractor;
 import com.vyonex.internal.fallback.services.soundcloud.extractors.SoundcloudStreamInfoItemExtractor;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudMultiInfoPageParser;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudMultiInfoPagePayload;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPageParser;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudStreamsPagePayload;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudUsersPageParser;
@@ -232,47 +233,26 @@ public final class SoundcloudParsingHelper {
     public static String getInfoItemsFromApi(final MultiInfoItemsCollector collector,
                                              final String apiUrl)
             throws IOException, ReCaptchaException, ParsingException {
-        final JsonObject response = requestObject(VyonEx.getDownloader(), apiUrl);
-        for (final Object value : response.getArray("collection")) {
-            if (!(value instanceof JsonObject)) continue;
-            final JsonObject item = (JsonObject) value;
-            switch (item.getString("kind", "")) {
-                case "user" -> collector.commit(new SoundcloudChannelInfoItemExtractor(item));
-                case "track" -> collector.commit(new SoundcloudStreamInfoItemExtractor(item));
-                case "playlist" -> collector.commit(new SoundcloudPlaylistInfoItemExtractor(item));
-                case "like" -> {
-                    final JsonObject playlist = item.getObject("playlist", null);
-                    collector.commit(playlist == null
-                            ? new SoundcloudLikesInfoItemExtractor(item)
-                            : new SoundcloudPlaylistInfoItemExtractor(playlist));
-                }
-                default -> { }
+        final SoundcloudMultiInfoPagePayload response;
+        try {
+            response = SoundcloudMultiInfoPageParser.INSTANCE.parse(
+                    requestBody(VyonEx.getDownloader(), apiUrl));
+        } catch (final IllegalArgumentException e) {
+            throw new ParsingException("Invalid SoundCloud API response", e);
+        }
+        for (final var item : response.getItems()) {
+            if (item instanceof SoundcloudSearchResult.User user) {
+                collector.commit(new SoundcloudChannelInfoItemExtractor(user.getItem()));
+            } else if (item instanceof SoundcloudSearchResult.Track track) {
+                collector.commit(new SoundcloudStreamInfoItemExtractor(track.getItem()));
+            } else if (item instanceof SoundcloudSearchResult.Playlist playlist) {
+                collector.commit(new SoundcloudPlaylistInfoItemExtractor(playlist.getItem()));
             }
         }
-        return getNextPageUrl(response);
-    }
-
-    public static String getUploaderUrl(final JsonObject object) {
-        return https(object.getObject("user").getString("permalink_url", ""));
-    }
-
-    public static String getAvatarUrl(final JsonObject object) {
-        return https(object.getObject("user").getString("avatar_url", ""));
-    }
-
-    public static String getUploaderName(final JsonObject object) {
-        return object.getObject("user").getString("username", "");
+        return getNextPageUrl(response.getNextPageUrl());
     }
 
     public static String toHttpsUrl(final String value) { return https(value); }
-
-    public static List<Image> getAllImagesFromTrackObject(final JsonObject track)
-            throws ParsingException {
-        String url = track.getString("artwork_url");
-        if (url == null) url = track.getObject("user").getString("avatar_url");
-        if (url == null || url.isBlank()) throw new ParsingException("Track has no artwork");
-        return getAllImagesFromArtworkOrAvatarUrl(url);
-    }
 
     public static List<Image> getAllImagesFromArtworkOrAvatarUrl(final String url) {
         return imageVariants(url, "large", ARTWORK_SIZES);

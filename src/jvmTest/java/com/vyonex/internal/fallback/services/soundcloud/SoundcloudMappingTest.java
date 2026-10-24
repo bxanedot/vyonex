@@ -15,7 +15,6 @@ import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudPl
 import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudSearchQueryHandlerFactory;
 import com.vyonex.internal.fallback.services.soundcloud.linkHandler.SoundcloudStreamLinkHandlerFactory;
 import com.vyonex.internal.fallback.stream.StreamType;
-import com.vyonex.internal.json.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,13 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SoundcloudMappingTest {
     @Test
     void mapsTrackChannelPlaylistAndCommentFields() throws Exception {
-        final var track = JsonParser.object().from("""
-                {"id":42,"title":"Song","permalink_url":"http://soundcloud.com/a/song",
+        final SoundcloudTrackInfoItem track = SoundcloudPlaylistTrackBatchParser.INSTANCE.parse("""
+                [{"id":42,"title":"Song","permalink_url":"http://soundcloud.com/a/song",
                  "duration":125000,"created_at":"2026-10-22T12:30:00Z","playback_count":7,
                  "artwork_url":"https://images.example/song.jpg",
                  "user":{"username":"Alice","permalink_url":"http://soundcloud.com/alice",
-                   "avatar_url":"https://images.example/alice.jpg","verified":true}}
-                """);
+                   "avatar_url":"https://images.example/alice.jpg","verified":true}}]
+                """).get(0);
         final SoundcloudStreamInfoItemExtractor stream = new SoundcloudStreamInfoItemExtractor(track);
         assertEquals("Song", stream.getName());
         assertEquals("https://soundcloud.com/a/song", stream.getUrl());
@@ -41,13 +40,14 @@ class SoundcloudMappingTest {
         assertEquals("Alice", stream.getUploaderName());
         assertTrue(stream.isUploaderVerified());
         assertEquals(7, stream.getViewCount());
+        assertEquals("https://images.example/song.jpg", stream.getThumbnails().get(0).getUrl());
         assertEquals(StreamType.AUDIO_STREAM, stream.getStreamType());
 
-        final var user = JsonParser.object().from("""
-                {"username":"Alice","permalink_url":"http://soundcloud.com/alice",
+        final SoundcloudProfileInfoItem user = SoundcloudUsersPageParser.INSTANCE.parse("""
+                {"collection":[{"username":"Alice","permalink_url":"http://soundcloud.com/alice",
                  "avatar_url":"https://images.example/alice.jpg","followers_count":10,
-                 "track_count":4,"verified":true,"description":"Producer"}
-                """);
+                 "track_count":4,"verified":true,"description":"Producer"}]}
+                """).getUsers().get(0);
         final SoundcloudChannelInfoItemExtractor channel = new SoundcloudChannelInfoItemExtractor(user);
         assertEquals("Alice", channel.getName());
         assertEquals("https://soundcloud.com/alice", channel.getUrl());
@@ -55,11 +55,11 @@ class SoundcloudMappingTest {
         assertEquals(4, channel.getStreamCount());
         assertEquals("Producer", channel.getDescription());
 
-        final var playlistJson = JsonParser.object().from("""
+        final SoundcloudPlaylistInfoItem playlistJson = SoundcloudPlaylistPayloadParser.INSTANCE.parse("""
                 {"title":"Mix","permalink_url":"http://soundcloud.com/alice/sets/mix",
                  "track_count":1,"tracks":[{"artwork_url":"https://images.example/song.jpg"}],
                  "user":{"username":"Alice","permalink_url":"http://soundcloud.com/alice"}}
-                """);
+                """).getPlaylist();
         final SoundcloudPlaylistInfoItemExtractor playlist =
                 new SoundcloudPlaylistInfoItemExtractor(playlistJson);
         assertEquals("Mix", playlist.getName());
