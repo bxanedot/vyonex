@@ -12,13 +12,12 @@ import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.linkhandler.SearchQueryHandler
 import com.vyonex.internal.fallback.search.SearchExtractor
+import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampSearchItem.Album
+import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampSearchItem.Artist
+import com.vyonex.internal.fallback.services.bandcamp.extractors.BandcampSearchItem.Track
 import com.vyonex.internal.fallback.services.bandcamp.extractors.streaminfoitem.BandcampSearchStreamInfoItemExtractor
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 import java.io.IOException
-import java.net.URI
-import java.util.Locale
 
 public class BandcampSearchExtractor(
     service: StreamingService,
@@ -36,17 +35,16 @@ public class BandcampSearchExtractor(
             page.url,
             mapOf("Cookie" to listOf("identity")),
         ).responseBody()
-        val document = Jsoup.parse(html, page.url)
+        val parsed = BandcampSearchPageParser.parse(html, page.url)
         val items = MultiInfoItemsCollector(serviceId)
-        for (card in document.select(".searchresult")) {
-            val label = card.selectFirst(".result-info .itemtype") ?: continue
-            when (label.text().trim().uppercase(Locale.ROOT)) {
-                "ARTIST" -> items.commit(BandcampChannelInfoItemExtractor(card))
-                "ALBUM" -> items.commit(BandcampPlaylistInfoItemExtractor(card))
-                "TRACK" -> items.commit(BandcampSearchStreamInfoItemExtractor(card, null))
+        for (result in parsed.items) {
+            when (result) {
+                is Artist -> items.commit(BandcampChannelInfoItemExtractor(result))
+                is Album -> items.commit(BandcampPlaylistInfoItemExtractor(result))
+                is Track -> items.commit(BandcampSearchStreamInfoItemExtractor(result, null))
             }
         }
-        return InfoItemsPage(items, findNextPage(document, page.url))
+        return InfoItemsPage(items, parsed.nextPageUrl?.let(::Page))
     }
 
     @Throws(IOException::class, ExtractionException::class)
@@ -57,62 +55,7 @@ public class BandcampSearchExtractor(
     public companion object {
         @JvmStatic
         public fun findNextPage(document: Document, currentUrl: String): Page? {
-            val direct: Element? = document.selectFirst(
-                ".pagelist a.next[href], .pagelist a[rel~=next][href], .pagelist li.next a[href]",
-            )
-            val pagination: Element? = document.selectFirst(".pagelist")
-            val selected: Element? = if (pagination == null) null else selectedPage(pagination)
-            val following: Element? = if (selected == null) null else selected.nextElementSibling()
-            val fallback: Element? = if (following == null) null else following.selectFirst("a[href]")
-            val next: Element = direct ?: fallback ?: return null
-
-            return try {
-                val base = URI.create(currentUrl)
-                val target = resolvePageLink(base, URI.create(next.attr("href"))).normalize()
-                if (!sameWebOrigin(base, target)) return null
-                if (base.rawPath == target.rawPath && base.rawQuery == target.rawQuery) return null
-                Page(target.toString())
-            } catch (_: IllegalArgumentException) {
-                null
-            } catch (_: NullPointerException) {
-                null
-            }
-        }
-
-        private fun resolvePageLink(base: URI, link: URI): URI {
-            if (link.scheme == null && link.rawAuthority == null &&
-                link.rawPath.isNullOrEmpty() && link.rawQuery != null
-            ) {
-                val path = base.rawPath.orEmpty()
-                val fragment = link.rawFragment?.let { "#$it" }.orEmpty()
-                return URI.create("${base.scheme}://${base.rawAuthority}$path?${link.rawQuery}$fragment")
-            }
-            return base.resolve(link)
-        }
-
-        private fun selectedPage(pagination: Element): Element? =
-            pagination.selectFirst("li.current, li.selected, li.active")
-                ?: pagination.selectFirst("li span")?.closest("li")
-
-        private fun sameWebOrigin(base: URI, target: URI): Boolean {
-            val baseScheme = base.scheme ?: return false
-            val targetScheme = target.scheme ?: return false
-            val baseHost = base.host ?: return false
-            val targetHost = target.host ?: return false
-            if (base.rawUserInfo != null || target.rawUserInfo != null) return false
-            if (!isWebScheme(baseScheme) || !isWebScheme(targetScheme)) return false
-            return baseScheme.equals(targetScheme, ignoreCase = true) &&
-                baseHost.equals(targetHost, ignoreCase = true) &&
-                effectivePort(base) == effectivePort(target)
-        }
-
-        private fun isWebScheme(scheme: String): Boolean =
-            scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
-
-        private fun effectivePort(uri: URI): Int = when {
-            uri.port >= 0 -> uri.port
-            uri.scheme.equals("https", ignoreCase = true) -> 443
-            else -> 80
+            return BandcampSearchPageParser.findNextPageUrl(document, currentUrl)?.let(::Page)
         }
     }
 }
