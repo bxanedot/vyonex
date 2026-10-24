@@ -61,14 +61,6 @@ enum class PoTokenRequirement {
     REQUIRED,
 }
 
-enum class PoTokenProviderKind {
-    WEB_BOTGUARD,
-    WEBPAGE_ATTESTATION,
-    ANDROID_DROIDGUARD,
-    IOS_ATTESTATION,
-    EXTERNAL,
-}
-
 data class PoTokenRule(
     val requirement: PoTokenRequirement = PoTokenRequirement.NONE,
     val binding: PoTokenBinding? = null,
