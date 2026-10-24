@@ -5,8 +5,8 @@ package com.vyonex.internal.primary.extraction
 
 import com.vyonex.internal.primary.extraction.StreamResolveException.Reason
 import com.vyonex.internal.primary.extraction.strategy.ClientFailureKind
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class PlayabilityFailureContractTest {
     @Test
