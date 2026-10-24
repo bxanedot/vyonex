@@ -40,11 +40,7 @@ public class PeertubeChannelTabLinkHandlerFactory private constructor() : ListLi
 
         @JvmStatic
         @Throws(UnsupportedTabException::class)
-        public fun getUrlSuffix(tab: String): String = when (tab) {
-            ChannelTabs.VIDEOS -> "/videos"
-            ChannelTabs.CHANNELS -> "/video-channels"
-            ChannelTabs.PLAYLISTS -> "/video-playlists"
-            else -> throw UnsupportedTabException(tab)
-        }
+        public fun getUrlSuffix(tab: String): String =
+            PeertubeUrl.channelTabSuffix(tab) ?: throw UnsupportedTabException(tab)
     }
 }
