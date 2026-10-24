@@ -9,10 +9,13 @@ import com.vyonex.internal.fallback.StreamingService
 import com.vyonex.internal.fallback.downloader.Downloader
 import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.linkhandler.LinkHandler
-import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveConferencePayload
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadDecoder
 import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLivePayloadParseException
-import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoomPayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoom
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveRoomResolver
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveSourcePayload
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveStream
+import com.vyonex.internal.fallback.services.media_ccc.MediaCCCLiveThumbnail
 import com.vyonex.internal.fallback.stream.AudioStream
 import com.vyonex.internal.fallback.stream.DeliveryMethod
 import com.vyonex.internal.fallback.stream.Description
@@ -26,7 +29,7 @@ public class MediaCCCLiveStreamExtractor(
     service: StreamingService,
     linkHandler: LinkHandler,
 ) : StreamExtractor(service, linkHandler) {
-    private lateinit var room: LiveRoom
+    private lateinit var room: MediaCCCLiveRoom
 
     override fun onFetchPage(downloader: Downloader) {
         val target = id
@@ -36,22 +39,27 @@ public class MediaCCCLiveStreamExtractor(
         } catch (error: MediaCCCLivePayloadParseException) {
             throw ExtractionException("Could not parse live stream data.", error)
         }
-        for (conference in conferences) {
-            val conferenceSlug = conference.slug ?: continue
-            for (section in conference.groups.orEmpty()) {
-                for (source in section.rooms.orEmpty()) {
-                    if ("$conferenceSlug/${source.slug}" != target) continue
-                    room = readRoom(conference, section.group, source)
-                    return
-                }
-            }
-        }
-        throw ExtractionException("No live room matches $target")
+        room = MediaCCCLiveRoomResolver.findRoom(conferences, target)
+            ?: throw ExtractionException("No live room matches $target")
     }
 
     override fun getName(): String = room.display.orEmpty()
 
-    override fun getThumbnails(): List<Image> = room.thumbnails
+    override fun getThumbnails(): List<Image> = Collections.unmodifiableList(
+        room.thumbnails.map { thumbnail ->
+            Image(
+                thumbnail.url,
+                Image.HEIGHT_UNKNOWN,
+                Image.WIDTH_UNKNOWN,
+                when (thumbnail.quality) {
+                    MediaCCCLiveThumbnail.Quality.MEDIUM ->
+                        Image.ResolutionLevel.MEDIUM
+                    MediaCCCLiveThumbnail.Quality.HIGH ->
+                        Image.ResolutionLevel.HIGH
+                },
+            )
+        },
+    )
 
     override fun getDescription(): Description = Description(
         "${room.conferenceDescription} - ${room.group}",
@@ -65,54 +73,53 @@ public class MediaCCCLiveStreamExtractor(
 
     override fun getUploaderName(): String = room.conferenceName.orEmpty()
 
-    override fun getDashMpdUrl(): String = manifest("dash")
+    override fun getDashMpdUrl(): String = room.manifest("dash")
 
-    override fun getHlsUrl(): String = manifest("hls")
-
-    private fun manifest(format: String): String = room.streams.firstNotNullOfOrNull { stream ->
-        stream.formats[format]?.url?.takeIf(String::isNotEmpty)
-    }.orEmpty()
+    override fun getHlsUrl(): String = room.manifest("hls")
 
     override fun getAudioStreams(): List<AudioStream> = buildList {
         for (stream in room.streams) {
             if (stream.type != "audio") continue
-            for ((format, source) in stream.formats) {
-                if (format == "dash") continue
-                add(audio(format, source))
+            for (source in stream.formats) {
+                if (source.format == "dash") continue
+                add(audio(source))
             }
         }
     }
 
-    private fun audio(format: String, source: MediaSource): AudioStream =
+    private fun audio(source: MediaCCCLiveSourcePayload): AudioStream =
         AudioStream.Builder()
-            .setId(source.id)
+            .setId(source.tech ?: Stream.ID_UNKNOWN)
             .setContent(source.url.orEmpty(), true)
             .setAverageBitrate(AudioStream.UNKNOWN_BITRATE)
             .apply {
-                if (format == "hls") setDeliveryMethod(DeliveryMethod.HLS)
-                else setMediaFormat(MediaFormat.getFromSuffix(format))
+                if (source.format == "hls") setDeliveryMethod(DeliveryMethod.HLS)
+                else setMediaFormat(MediaFormat.getFromSuffix(source.format))
             }
             .build()
 
     override fun getVideoStreams(): List<VideoStream> = buildList {
         for (stream in room.streams) {
             if (stream.type != "video") continue
-            for ((format, source) in stream.formats) {
-                if (format == "dash") continue
-                add(video(stream, format, source))
+            for (source in stream.formats) {
+                if (source.format == "dash") continue
+                add(video(stream, source))
             }
         }
     }
 
-    private fun video(stream: LiveStream, format: String, source: MediaSource): VideoStream =
+    private fun video(
+        stream: MediaCCCLiveStream,
+        source: MediaCCCLiveSourcePayload,
+    ): VideoStream =
         VideoStream.Builder()
-            .setId(source.id)
+            .setId(source.tech ?: Stream.ID_UNKNOWN)
             .setContent(source.url.orEmpty(), true)
             .setIsVideoOnly(false)
             .setResolution("${stream.width}x${stream.height}")
             .apply {
-                if (format == "hls") setDeliveryMethod(DeliveryMethod.HLS)
-                else setMediaFormat(MediaFormat.getFromSuffix(format))
+                if (source.format == "hls") setDeliveryMethod(DeliveryMethod.HLS)
+                else setMediaFormat(MediaFormat.getFromSuffix(source.format))
             }
             .build()
 
@@ -122,74 +129,4 @@ public class MediaCCCLiveStreamExtractor(
 
     override fun getCategory(): String = room.group
 
-    private data class LiveRoom(
-        val display: String?,
-        val conferenceName: String?,
-        val conferenceSlug: String?,
-        val conferenceDescription: String?,
-        val group: String,
-        val thumbnails: List<Image>,
-        val streams: List<LiveStream>,
-    )
-
-    private data class LiveStream(
-        val type: String,
-        val width: Int,
-        val height: Int,
-        val formats: Map<String, MediaSource>,
-    )
-
-    private data class MediaSource(val id: String, val url: String?)
-
-    private fun readRoom(
-        conference: MediaCCCLiveConferencePayload,
-        group: String?,
-        source: MediaCCCLiveRoomPayload,
-    ): LiveRoom {
-        val streams = source.streams.orEmpty().map { stream ->
-            val formats = linkedMapOf<String, MediaSource>()
-            for (entry in stream.sources()) {
-                formats[entry.format] = MediaSource(entry.tech ?: Stream.ID_UNKNOWN, entry.url)
-            }
-            LiveStream(
-                stream.type.orEmpty(),
-                stream.videoSize?.getOrNull(0) ?: 0,
-                stream.videoSize?.getOrNull(1) ?: 0,
-                Collections.unmodifiableMap(formats),
-            )
-        }
-        return LiveRoom(
-            source.display,
-            conference.conference,
-            conference.slug,
-            conference.description,
-            group.orEmpty(),
-            thumbnails(source),
-            streams,
-        )
-    }
-
-    private fun thumbnails(source: MediaCCCLiveRoomPayload): List<Image> =
-        Collections.unmodifiableList(buildList {
-            source.thumb?.takeIf(String::isNotEmpty)?.let { url ->
-                add(
-                    Image(
-                        url,
-                        Image.HEIGHT_UNKNOWN,
-                        Image.WIDTH_UNKNOWN,
-                        Image.ResolutionLevel.MEDIUM,
-                    ),
-                )
-            }
-            source.poster?.takeIf(String::isNotEmpty)?.let { url ->
-                add(
-                    Image(
-                        url,
-                        Image.HEIGHT_UNKNOWN,
-                        Image.WIDTH_UNKNOWN,
-                        Image.ResolutionLevel.HIGH,
-                    ),
-                )
-            }
-        })
 }
