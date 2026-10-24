@@ -5,7 +5,9 @@ package com.vyonex.internal.fallback.services.bandcamp.linkHandler
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class BandcampUrlParserTest {
     @Test
@@ -28,6 +30,18 @@ class BandcampUrlParserTest {
             listOf("track", "song", "live"),
             BandcampUrlParser.parse("https://artist.bandcamp.com/track/song%2Flive")?.segments,
         )
+    }
+
+    @Test
+    fun classifiesArtistPagesAndContentPaths() {
+        fun parse(value: String) = requireNotNull(BandcampUrlParser.parse(value))
+
+        assertTrue(BandcampUrlParser.isArtistPage(parse("https://artist.bandcamp.com/")))
+        assertTrue(BandcampUrlParser.isArtistPage(parse("https://artist.bandcamp.com/MUSIC")))
+        assertFalse(BandcampUrlParser.isArtistPage(parse("https://artist.bandcamp.com/track/song")))
+        assertFalse(BandcampUrlParser.isArtistPage(parse("https://daily.bandcamp.com/")))
+        assertTrue(BandcampUrlParser.isArtistContent(parse("https://artist.bandcamp.com/Track/song"), "track"))
+        assertFalse(BandcampUrlParser.isArtistContent(parse("https://artist.bandcamp.com/track"), "track"))
     }
 
     @Test
