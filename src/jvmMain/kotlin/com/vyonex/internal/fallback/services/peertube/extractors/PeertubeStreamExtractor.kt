@@ -13,6 +13,7 @@ import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.LinkHandler
 import com.vyonex.internal.fallback.localization.DateWrapper
 import com.vyonex.internal.fallback.services.peertube.PeertubeCaptionResponseParser
+import com.vyonex.internal.fallback.services.peertube.PeertubeChapterResponseParser
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaDelivery
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaMapper
 import com.vyonex.internal.fallback.services.peertube.PeertubeMediaResponseParser
@@ -186,13 +187,10 @@ public class PeertubeStreamExtractor(
 
     @Throws(ParsingException::class)
     override fun getStreamSegments(): List<StreamSegment> = try {
-        optionalResponse("/chapters", "chapters")?.getArray("chapters")
-            ?.filterIsInstance<JsonObject>()
-            ?.mapNotNull { chapter ->
-                val seconds = chapter.getLong("timecode", -1)
-                if (seconds !in 0..Int.MAX_VALUE.toLong()) return@mapNotNull null
-                StreamSegment(chapter.getString("title", ""), seconds.toInt())
-            } ?: emptyList()
+        optionalResponse("/chapters", "chapters")?.let { response ->
+            PeertubeChapterResponseParser.parse(JsonWriter.string(response))
+                .map { StreamSegment(it.title, it.timecodeSeconds) }
+        } ?: emptyList()
     } catch (error: IOException) {
         throw ParsingException("Could not load PeerTube chapters", error)
     } catch (error: ExtractionException) {
