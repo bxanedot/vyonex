@@ -12,6 +12,10 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException
 import com.vyonex.internal.fallback.exceptions.ParsingException
 import com.vyonex.internal.fallback.linkhandler.LinkHandler
 import com.vyonex.internal.fallback.localization.DateWrapper
+import com.vyonex.internal.fallback.services.peertube.PeertubeMediaDelivery
+import com.vyonex.internal.fallback.services.peertube.PeertubeMediaFile
+import com.vyonex.internal.fallback.services.peertube.PeertubeMediaMapper
+import com.vyonex.internal.fallback.services.peertube.PeertubeMediaPlaylist
 import com.vyonex.internal.fallback.services.peertube.PeertubeParsingHelper
 import com.vyonex.internal.fallback.services.peertube.linkHandler.PeertubeChannelLinkHandlerFactory
 import com.vyonex.internal.fallback.stream.AudioStream
@@ -256,96 +260,66 @@ public class PeertubeStreamExtractor(
     }
 
     private fun readMedia(): MediaStreams {
-        val audio = ArrayList<AudioStream>()
-        val videoStreams = ArrayList<VideoStream>()
-
-        fun addFile(file: JsonObject, method: DeliveryMethod, manifest: String? = null) {
+        fun mediaFile(value: Any?): PeertubeMediaFile? {
+            val file = value as? JsonObject ?: return null
             val resolution = file.getObject("resolution")
-            val label = resolution.getString("label")?.takeIf(String::isNotBlank)
-                ?: resolution.getInt("id", -1).takeIf { it > 0 }?.let { "${it}p" }
-                ?: "unknown"
-            for ((key, suffix) in listOf("fileUrl" to "", "fileDownloadUrl" to "-fileDownloadUrl")) {
-                val rawUrl = file.getString(key)?.takeIf(String::isNotBlank) ?: continue
-                if (key == "fileDownloadUrl" && rawUrl == file.getString("fileUrl")) continue
-                val url = resolve(rawUrl)
-                val format = formatOf(rawUrl)
-                val id = if (method == DeliveryMethod.HLS) "$label-hls$suffix"
-                    else "$label-${format?.suffix ?: "stream"}$suffix"
-                val isAudio = resolution.getInt("id", -1) == 0
-                    || label.equals("audio", ignoreCase = true)
-                    || format?.mimeType?.startsWith("audio/") == true
-                if (isAudio) {
-                    val audioFormat = when (format) {
-                        MediaFormat.WEBM -> MediaFormat.WEBMA
-                        MediaFormat.MPEG_4 -> MediaFormat.M4A
-                        else -> format
-                    }
-                    audio.add(
-                        AudioStream.Builder()
-                            .setId(id)
-                            .setContent(url, true)
-                            .setMediaFormat(audioFormat)
-                            .setDeliveryMethod(method)
-                            .setManifestUrl(manifest)
-                            .setAverageBitrate(file.getInt("bitrate", AudioStream.UNKNOWN_BITRATE))
-                            .build(),
-                    )
-                } else {
-                    videoStreams.add(
-                        VideoStream.Builder()
-                            .setId(id)
-                            .setContent(url, true)
-                            .setMediaFormat(format)
-                            .setDeliveryMethod(method)
-                            .setManifestUrl(manifest)
-                            .setIsVideoOnly(!file.getBoolean("hasAudio"))
-                            .setResolution(label)
-                            .build(),
-                    )
-                }
-            }
+            return PeertubeMediaFile(
+                fileUrl = file.getString("fileUrl"),
+                fileDownloadUrl = file.getString("fileDownloadUrl"),
+                torrentUrl = file.getString("torrentUrl"),
+                resolutionId = resolution.getInt("id", -1),
+                resolutionLabel = resolution.getString("label"),
+                bitrate = file.getInt("bitrate", AudioStream.UNKNOWN_BITRATE),
+                hasAudio = file.getBoolean("hasAudio"),
+            )
         }
 
-        video.getArray("files").filterIsInstance<JsonObject>().forEach { file ->
-            addFile(file, DeliveryMethod.PROGRESSIVE_HTTP)
-            file.getString("torrentUrl")?.takeIf(String::isNotBlank)?.let { torrent ->
-                val label = file.getObject("resolution").getString("label", "unknown")
-                videoStreams.add(
-                    VideoStream.Builder()
-                        .setId("$label-torrent")
-                        .setContent(resolve(torrent), true)
-                        .setDeliveryMethod(DeliveryMethod.TORRENT)
-                        .setIsVideoOnly(false)
-                        .setResolution(label)
-                        .build(),
+        val streams = PeertubeMediaMapper.map(
+            files = video.getArray("files").mapNotNull(::mediaFile),
+            playlists = video.getArray("streamingPlaylists").mapNotNull { value ->
+                val playlist = value as? JsonObject ?: return@mapNotNull null
+                PeertubeMediaPlaylist(
+                    playlistUrl = playlist.getString("playlistUrl"),
+                    files = playlist.getArray("files").mapNotNull(::mediaFile),
                 )
-            }
-        }
-
-        for (playlist in video.getArray("streamingPlaylists").filterIsInstance<JsonObject>()) {
-            val manifest = playlist.getString("playlistUrl")?.takeIf(String::isNotBlank) ?: continue
-            val before = audio.size + videoStreams.size
-            playlist.getArray("files").filterIsInstance<JsonObject>().forEach {
-                addFile(it, DeliveryMethod.HLS, resolve(manifest))
-            }
-            if (before == audio.size + videoStreams.size) {
-                videoStreams.add(
-                    VideoStream.Builder()
-                        .setId(if (video.getBoolean("isLive")) "live-hls" else "hls")
-                        .setContent(resolve(manifest), true)
-                        .setDeliveryMethod(DeliveryMethod.HLS)
-                        .setManifestUrl(resolve(manifest))
-                        .setIsVideoOnly(false)
-                        .setResolution("")
-                        .build(),
-                )
-            }
-        }
-
-        return MediaStreams(
-            Collections.unmodifiableList(audio),
-            Collections.unmodifiableList(videoStreams),
+            },
+            isLive = video.getBoolean("isLive"),
         )
+        return MediaStreams(
+            Collections.unmodifiableList(streams.audio.map { candidate ->
+                val format = candidate.formatSuffix?.let(MediaFormat::getFromSuffix)
+                val audioFormat = when (format) {
+                    MediaFormat.WEBM -> MediaFormat.WEBMA
+                    MediaFormat.MPEG_4 -> MediaFormat.M4A
+                    else -> format
+                }
+                AudioStream.Builder()
+                    .setId(candidate.id)
+                    .setContent(resolve(candidate.url), true)
+                    .setMediaFormat(audioFormat)
+                    .setDeliveryMethod(candidate.delivery.toDeliveryMethod())
+                    .setManifestUrl(candidate.manifestUrl?.let(::resolve))
+                    .setAverageBitrate(candidate.bitrate)
+                    .build()
+            }),
+            Collections.unmodifiableList(streams.video.map { candidate ->
+                VideoStream.Builder()
+                    .setId(candidate.id)
+                    .setContent(resolve(candidate.url), true)
+                    .setMediaFormat(candidate.formatSuffix?.let(MediaFormat::getFromSuffix))
+                    .setDeliveryMethod(candidate.delivery.toDeliveryMethod())
+                    .setManifestUrl(candidate.manifestUrl?.let(::resolve))
+                    .setIsVideoOnly(candidate.isVideoOnly)
+                    .setResolution(candidate.resolution)
+                    .build()
+            }),
+        )
+    }
+
+    private fun PeertubeMediaDelivery.toDeliveryMethod(): DeliveryMethod = when (this) {
+        PeertubeMediaDelivery.PROGRESSIVE_HTTP -> DeliveryMethod.PROGRESSIVE_HTTP
+        PeertubeMediaDelivery.HLS -> DeliveryMethod.HLS
+        PeertubeMediaDelivery.TORRENT -> DeliveryMethod.TORRENT
     }
 
     @Throws(IOException::class, ExtractionException::class)
