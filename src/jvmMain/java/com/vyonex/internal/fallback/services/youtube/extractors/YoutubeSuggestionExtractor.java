@@ -9,14 +9,12 @@ import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Response;
 import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
+import com.vyonex.internal.fallback.services.youtube.YoutubeSuggestionParseException;
+import com.vyonex.internal.fallback.services.youtube.YoutubeSuggestionParser;
 import com.vyonex.internal.fallback.suggestion.SuggestionExtractor;
 import com.vyonex.internal.fallback.utils.Utils;
-import com.vyonex.internal.json.JsonArray;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,15 +50,8 @@ public final class YoutubeSuggestionExtractor extends SuggestionExtractor {
         }
 
         try {
-            final JsonArray rows = JsonParser.array().from(response.responseBody()).getArray(1);
-            final List<String> suggestions = new ArrayList<>(rows.size());
-            for (final Object row : rows) {
-                if (!(row instanceof JsonArray)) continue;
-                final String suggestion = ((JsonArray) row).getString(0);
-                if (suggestion != null && !suggestion.isBlank()) suggestions.add(suggestion);
-            }
-            return List.copyOf(suggestions);
-        } catch (final JsonParserException e) {
+            return List.copyOf(YoutubeSuggestionParser.INSTANCE.parse(response.responseBody()));
+        } catch (final YoutubeSuggestionParseException e) {
             throw new ParsingException("Could not parse suggestion response", e);
         }
     }
