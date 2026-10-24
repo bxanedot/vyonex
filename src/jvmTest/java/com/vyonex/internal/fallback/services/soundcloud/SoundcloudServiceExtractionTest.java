@@ -9,6 +9,7 @@ import com.vyonex.internal.fallback.VyonEx;
 import com.vyonex.internal.fallback.downloader.Downloader;
 import com.vyonex.internal.fallback.downloader.Request;
 import com.vyonex.internal.fallback.downloader.Response;
+import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.exceptions.ReCaptchaException;
 import com.vyonex.internal.fallback.linkhandler.LinkHandler;
 import com.vyonex.internal.fallback.linkhandler.ListLinkHandler;
@@ -30,6 +31,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SoundcloudServiceExtractionTest {
@@ -145,6 +147,25 @@ class SoundcloudServiceExtractionTest {
             assertEquals("Wind", secondPage.getItems().get(0).getName());
             assertEquals(List.of("ambient music"),
                     new SoundcloudSuggestionExtractor(service).suggestionList("ambient"));
+        } finally {
+            VyonEx.init(previous);
+        }
+    }
+
+    @Test
+    void reportsMalformedSuggestionsAsParsingFailures() {
+        final StubDownloader downloader = new StubDownloader(Map.of(
+                HOME, "<script src=\"" + SCRIPT + "\"></script>",
+                SCRIPT, "client_id:\"" + CLIENT_ID + "\"",
+                "https://api-v2.soundcloud.com/search/queries?q=ambient&client_id="
+                        + CLIENT_ID + "&limit=10",
+                "{"));
+        final Downloader previous = VyonEx.getDownloader();
+        try {
+            VyonEx.init(downloader);
+            assertThrows(ParsingException.class,
+                    () -> new SoundcloudSuggestionExtractor(new SoundcloudService(31))
+                            .suggestionList("ambient"));
         } finally {
             VyonEx.init(previous);
         }

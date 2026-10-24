@@ -10,13 +10,10 @@ import com.vyonex.internal.fallback.exceptions.ExtractionException;
 import com.vyonex.internal.fallback.exceptions.ParsingException;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudParsingHelper;
 import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSearchUrl;
+import com.vyonex.internal.fallback.services.soundcloud.SoundcloudSuggestionParser;
 import com.vyonex.internal.fallback.suggestion.SuggestionExtractor;
-import com.vyonex.internal.json.JsonObject;
-import com.vyonex.internal.json.JsonParser;
-import com.vyonex.internal.json.JsonParserException;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public final class SoundcloudSuggestionExtractor extends SuggestionExtractor {
@@ -32,16 +29,8 @@ public final class SoundcloudSuggestionExtractor extends SuggestionExtractor {
                     + response.responseCode());
         }
         try {
-            final List<String> suggestions = new ArrayList<>();
-            for (final Object item : JsonParser.object().from(response.responseBody())
-                    .getArray("collection")) {
-                if (item instanceof JsonObject) {
-                    final String text = ((JsonObject) item).getString("query");
-                    if (text != null) suggestions.add(text);
-                }
-            }
-            return suggestions;
-        } catch (final JsonParserException e) {
+            return SoundcloudSuggestionParser.INSTANCE.parse(response.responseBody());
+        } catch (final IllegalArgumentException e) {
             throw new ParsingException("Invalid SoundCloud suggestions response", e);
         }
     }
