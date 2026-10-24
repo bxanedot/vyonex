@@ -27,7 +27,7 @@ Use one KMP module with `commonMain`, `jvmMain`, and the iOS hierarchy (`iosArm6
 ## Port status
 
 - Shared and locally verified: extractor request orchestration, primary backend wiring, QuickJS runtime, player URL-cipher parser/solver, configured player cipher solver, challenge orchestration, and YouTube cipher service. The JVM retains the legacy parser fallback through a platform seam; iOS uses the shared parser path.
-- iOS exposes `VyonExHost`, `VyonEx`, and YouTube extraction with primary clients followed by the shared watch-page fallback, plus header/session methods. The iOS Darwin client is created internally. The Rhino-backed player-function parser and legacy NewPipe fallback methods remain JVM-only; prepared-player scripts use memory-only caching on iOS.
+- iOS exposes `VyonExHost`, `VyonEx`, YouTube extraction with primary clients followed by the shared watch-page fallback, progressive audio candidates, and header/session methods. The iOS Darwin client is created internally. The Rhino-backed player-function parser remains JVM-only; prepared-player scripts use memory-only caching on iOS. Legacy NewPipe implementation sources remain staged for replacement and removal.
 - Windows checks compile iOS device/simulator main and test sources. Native simulator test execution and Apple framework linking must pass on macOS CI before these shared cipher slices are considered supported on iOS.
 
 Move shared value types first, then the YouTube primary path and its platform services, then non-YouTube services, YouTube fallback, and bundled assets. The JVM target remains functional throughout the migration. A source or attribution notice is retired only after its replacement passes offline compatibility tests on the targets it serves.

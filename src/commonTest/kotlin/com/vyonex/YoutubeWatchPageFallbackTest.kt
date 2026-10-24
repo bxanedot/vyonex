@@ -65,6 +65,44 @@ class YoutubeWatchPageFallbackTest {
     }
 
     @Test
+    fun returnsOnlyApprovedProgressiveAudioCandidatesWithAverageBitrate() = runTest {
+        val client =
+            HttpClient(
+                MockEngine {
+                    respond(
+                        ByteReadChannel(CANDIDATE_WATCH_PAGE),
+                        HttpStatusCode.OK,
+                        headers { append(HttpHeaders.ContentType, "text/html") },
+                    )
+                },
+            )
+        try {
+            val backend =
+                PrimaryExtractorBackend(
+                    host = TestHost(),
+                    platform =
+                        PlatformExtractorDependencies(
+                            httpClient = client,
+                            backgroundDispatcher = Dispatchers.Unconfined,
+                            tokenProvider = null,
+                            readPlayer = { null },
+                            writePlayer = { _, _ -> },
+                        ),
+                )
+
+            val candidates = backend.audioCandidates("abcdefghijk")
+
+            assertEquals(2, candidates.size)
+            assertEquals("https://r1.googlevideo.com/videoplayback?itag=140", candidates[0].url)
+            assertEquals(96, candidates[0].kbps)
+            assertEquals(VyonExAudioFormat.M4A, candidates[0].format)
+            assertEquals(VyonExAudioFormat.WEBM_OPUS, candidates[1].format)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
     fun usesTheWatchPageAfterPrimaryPlaybackFails() = runTest {
         var watchRequests = 0
         val client =
@@ -193,6 +231,8 @@ class YoutubeWatchPageFallbackTest {
     }
 
     private companion object {
+        const val CANDIDATE_WATCH_PAGE =
+            """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js"}</script><script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"abcdefghijk"},"streamingData":{"adaptiveFormats":[{"itag":140,"mimeType":"audio/mp4; codecs=\"mp4a.40.2\"","bitrate":128000,"averageBitrate":96000,"url":"https://r1.googlevideo.com/videoplayback?itag=140"},{"itag":251,"mimeType":"audio/webm; codecs=\"opus\"","bitrate":192000,"averageBitrate":192000,"url":"https://r1.googlevideo.com/videoplayback?itag=251"},{"itag":141,"mimeType":"audio/mp4","bitrate":256000,"url":"https://outside.example/audio"},{"itag":18,"mimeType":"video/mp4","width":640,"height":360,"bitrate":500000,"url":"https://r1.googlevideo.com/videoplayback?itag=18"}]}};</script>"""
         const val WATCH_PAGE =
             """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js"}</script><script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"abcdefghijk"},"streamingData":{"adaptiveFormats":[{"itag":251,"mimeType":"audio/webm; codecs=\"opus\"","bitrate":192000,"url":"https://r1.googlevideo.com/videoplayback?itag=251"},{"itag":140,"mimeType":"audio/mp4; codecs=\"mp4a.40.2\"","bitrate":128000,"url":"https://r1.googlevideo.com/videoplayback?itag=140"}]}};</script>"""
     }

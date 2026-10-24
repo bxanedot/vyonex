@@ -75,7 +75,8 @@
 **Interfaces:** Preserve `initializeFallback` and `audioCandidates` behavior for JVM and iOS.
 
 - [x] Add shared watch-page player-response parsing and let iOS extraction fall back to direct audio formats; keep JVM behavior unchanged.
-- [ ] Add offline fixtures for fallback initialization, format selection, script-backed extraction, and failure fallback.
+- [x] Move progressive audio-candidate extraction onto the shared watch-page path and expose it through the iOS facade.
+- [ ] Add offline fixtures for format selection, script-backed extraction, and failure fallback.
 - [ ] Implement iOS-compatible script execution and replace bundled derived assets only when fixtures pass on both platform families.
 - [ ] Run full JVM and macOS native verification, inventory source/data, then remove only notices made obsolete by the clean-room replacements.
 

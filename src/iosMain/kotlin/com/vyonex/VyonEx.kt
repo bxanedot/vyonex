@@ -7,6 +7,11 @@ class VyonEx(host: VyonExHost) {
 
     fun initialize() = primary.init()
 
+    /** Retained for API parity; fallback extraction needs no separate initialization. */
+    fun initializeFallback() = Unit
+
+    suspend fun audioCandidates(videoId: String): List<VyonExAudioCandidate> = primary.audioCandidates(videoId)
+
     suspend fun extract(
         videoId: String,
         maxKbps: Int,

@@ -66,6 +66,7 @@ class YtConfigParserContractTest {
                 "https://media.example/audio",
                 page?.playerResponse?.streamingData?.adaptiveFormats?.single()?.url,
             )
+            assertEquals(96_000, page?.playerResponse?.streamingData?.adaptiveFormats?.single()?.averageBitrate)
         } finally {
             client.close()
         }
@@ -140,6 +141,6 @@ class YtConfigParserContractTest {
         const val WATCH_PAGE =
             """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js","signatureTimestamp":12345,"visitorData":"visitor-token","INNERTUBE_CLIENT_VERSION":"2.20261001.00.00","encryptedHostFlags":"secret-flag"}</script>"""
         const val WATCH_PAGE_WITH_PLAYER_RESPONSE =
-            """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js"}</script><script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"abcdefghijk"},"streamingData":{"adaptiveFormats":[{"itag":140,"mimeType":"audio/mp4","bitrate":128000,"url":"https://media.example/audio"}]}};</script>"""
+            """<script>{"PLAYER_JS_URL":"/s/player/abc123/player_ias.vflset/en_US/base.js"}</script><script>ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"abcdefghijk"},"streamingData":{"adaptiveFormats":[{"itag":140,"mimeType":"audio/mp4","bitrate":128000,"averageBitrate":96000,"url":"https://media.example/audio"}]}};</script>"""
     }
 }
