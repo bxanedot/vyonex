@@ -17,6 +17,7 @@ import com.vyonex.internal.primary.extraction.strategy.ContentAwareFallbackStrat
 import com.vyonex.internal.primary.extraction.PoTokenResult
 import com.vyonex.internal.primary.extraction.TokenProvider
 import com.vyonex.internal.primary.extraction.TokenProviderCapabilities
+import com.vyonex.internal.primary.extraction.YoutubeWatchPage
 import com.vyonex.internal.primary.extraction.YtConfigParserImpl
 import com.vyonex.internal.primary.extraction.isAllowedMediaUrl
 import com.vyonex.internal.primary.extraction.selectBestAudioFormat
@@ -201,18 +202,8 @@ internal class PrimaryExtractorBackend(
             YouTubeClient.WEB.clientName in excluded || WATCH_PAGE_PROFILE in excluded
         ) return null
 
-        applySession()
-        val includeLoginCookies = innerTube.hasSapCookieAuth()
-        val page = configParser.fetchWatchPage(videoId, useLoginCookies = includeLoginCookies) ?: return null
+        val (page, formats) = fetchWatchPageAudioFormats(videoId) ?: return null
         val response = page.playerResponse
-        if (response.playabilityStatus.status != "OK") return null
-
-        val formats =
-            response.streamingData?.let { it.formats.orEmpty() + it.adaptiveFormats }
-                ?.filter(Format::isAudio)
-                .orEmpty()
-        val resolvedFormats =
-            page.playerUrl?.let { cipherService.processFormats(it, formats) } ?: formats
         val audioQuality =
             when {
                 requireM4a -> AudioQuality.MP4
@@ -221,7 +212,7 @@ internal class PrimaryExtractorBackend(
             }
         val format =
             selectBestAudioFormat(
-                resolvedFormats.filter { it.url?.let(::isAllowedMediaUrl) == true },
+                formats,
                 audioQuality,
             ) ?: return null
         val url = format.url ?: return null
@@ -233,7 +224,7 @@ internal class PrimaryExtractorBackend(
                 "Referer" to "https://www.youtube.com/",
                 "Origin" to "https://www.youtube.com",
             )
-        if (includeLoginCookies) {
+        if (innerTube.hasSapCookieAuth()) {
             innerTube.sessionSnapshot().cookie?.takeIf(String::isNotBlank)?.let { headers["Cookie"] = it }
         }
 
@@ -254,6 +245,37 @@ internal class PrimaryExtractorBackend(
         }
         host.log(VyonExLogLevel.INFO, "VyonEx watch-page fallback selected audio itag=${format.itag}", videoId)
         return stream
+    }
+
+    internal suspend fun audioCandidates(videoId: String): List<VyonExAudioCandidate> {
+        val (_, formats) = fetchWatchPageAudioFormats(videoId) ?: return emptyList()
+        return formats.mapNotNull { format ->
+            val url = format.url ?: return@mapNotNull null
+            val candidateFormat =
+                when {
+                    format.mimeType.contains("audio/mp4") -> VyonExAudioFormat.M4A
+                    format.mimeType.contains("audio/webm") && format.mimeType.contains("opus") -> VyonExAudioFormat.WEBM_OPUS
+                    else -> VyonExAudioFormat.OTHER
+                }
+            VyonExAudioCandidate(
+                url = url,
+                kbps = (format.averageBitrate ?: format.bitrate) / 1_000,
+                mimeType = format.mimeType,
+                format = candidateFormat,
+            )
+        }
+    }
+
+    private suspend fun fetchWatchPageAudioFormats(videoId: String): Pair<YoutubeWatchPage, List<Format>>? {
+        applySession()
+        val page = configParser.fetchWatchPage(videoId, useLoginCookies = innerTube.hasSapCookieAuth()) ?: return null
+        if (page.playerResponse.playabilityStatus.status != "OK") return null
+        val formats =
+            page.playerResponse.streamingData?.let { it.formats.orEmpty() + it.adaptiveFormats }
+                ?.filter(Format::isAudio)
+                .orEmpty()
+        val resolvedFormats = page.playerUrl?.let { cipherService.processFormats(it, formats) } ?: formats
+        return page to resolvedFormats.filter { it.url?.let(::isAllowedMediaUrl) == true }
     }
 
     fun headersFor(url: String): Map<String, String>? = stateLock.withLock { minted[url]?.headers }

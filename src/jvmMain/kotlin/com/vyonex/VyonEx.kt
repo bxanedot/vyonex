@@ -4,16 +4,15 @@ package com.vyonex
 /** Reusable extractor adapters, constructed once by the host application. */
 class VyonEx(host: VyonExHost) {
     private val primary = PrimaryExtractorBackend(host)
-    private val fallback = FallbackExtractorBackend(host)
 
     fun init() = primary.init()
 
-    /** Initializes the fallback once, before its first stream extraction. */
-    fun initializeFallback() = fallback.initialize()
+    /** Retained for source compatibility; fallback extraction needs no separate initialization. */
+    fun initializeFallback() = Unit
 
     /** Returns playable progressive audio candidates without exposing implementation types. */
     suspend fun audioCandidates(videoId: String): List<VyonExAudioCandidate> =
-        fallback.audioCandidates(videoId)
+        primary.audioCandidates(videoId)
 
     suspend fun extract(
         videoId: String,
