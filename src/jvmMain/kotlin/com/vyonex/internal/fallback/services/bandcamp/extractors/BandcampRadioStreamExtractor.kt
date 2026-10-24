@@ -18,9 +18,9 @@ import com.vyonex.internal.fallback.stream.StreamExtractor
 import com.vyonex.internal.fallback.stream.StreamSegment
 import com.vyonex.internal.fallback.stream.StreamType
 import com.vyonex.internal.fallback.stream.VideoStream
-import com.vyonex.internal.json.JsonObject
-import com.vyonex.internal.json.JsonParser
-import com.vyonex.internal.json.JsonParserException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioEpisodeParseException
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioEpisodeParser
+import com.vyonex.internal.fallback.services.bandcamp.BandcampRadioEpisodePayload
 import org.jsoup.Jsoup
 import java.io.IOException
 import java.time.LocalDate
@@ -31,17 +31,17 @@ public class BandcampRadioStreamExtractor(
     service: StreamingService,
     linkHandler: LinkHandler,
 ) : StreamExtractor(service, linkHandler) {
-    private var show: RadioShow? = null
+    private var show: BandcampRadioEpisodePayload? = null
 
     @Throws(ParsingException::class)
     override fun onFetchPage(downloader: Downloader) {
         val showId = getId().toIntOrNull()
             ?: throw ParsingException("Invalid Bandcamp radio show ID")
-        show = parseShow(fetchShow(downloader, showId))
+        show = fetchShow(downloader, showId)
     }
 
     @Throws(ParsingException::class)
-    override fun getName(): String = required(data().title, "subtitle")
+    override fun getName(): String = required(data().subtitle, "subtitle")
 
     @Throws(ContentNotSupportedException::class)
     override fun getUploaderUrl(): String =
@@ -97,7 +97,7 @@ public class BandcampRadioStreamExtractor(
 
     override fun getStreamType(): StreamType = StreamType.AUDIO_STREAM
 
-    private fun data(): RadioShow = checkNotNull(show) {
+    private fun data(): BandcampRadioEpisodePayload = checkNotNull(show) {
         "Bandcamp radio page has not been fetched"
     }
 
@@ -114,32 +114,7 @@ public class BandcampRadioStreamExtractor(
             .build()
     }
 
-    private fun parseShow(data: JsonObject): RadioShow {
-        val segments = data.getArray("tracks").mapNotNull { value ->
-            val track = value as? JsonObject ?: return@mapNotNull null
-            val title = track.getString("title")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-            RadioSegment(
-                title = title,
-                timecode = track.getInt("timecode"),
-                artId = track.getLong("track_art_id"),
-                artist = track.getString("artist"),
-            )
-        }
-        val audio = data.getObject("audio_stream")
-        return RadioShow(
-            title = data.getString("subtitle"),
-            imageCaption = data.getString("image_caption"),
-            publishedDate = data.getString("published_date"),
-            imageId = data.getLong("show_image_id"),
-            description = data.getString("desc"),
-            duration = data.getLong("audio_duration"),
-            mp3Url = audio.getString("mp3-128"),
-            opusUrl = audio.getString("opus-lo"),
-            segments = segments,
-        )
-    }
-
-    private fun fetchShow(downloader: Downloader, id: Int): JsonObject {
+    private fun fetchShow(downloader: Downloader, id: Int): BandcampRadioEpisodePayload {
         val response = try {
             downloader.get("$API_URL$id")
         } catch (error: IOException) {
@@ -152,30 +127,11 @@ public class BandcampRadioStreamExtractor(
             throw ParsingException("Bandcamp returned no radio-show data")
         }
         return try {
-            JsonParser.`object`().from(body)
-        } catch (error: JsonParserException) {
+            BandcampRadioEpisodeParser.parse(body)
+        } catch (error: BandcampRadioEpisodeParseException) {
             throw ParsingException("Could not load Bandcamp radio show", error)
         }
     }
-
-    private data class RadioShow(
-        val title: String?,
-        val imageCaption: String?,
-        val publishedDate: String?,
-        val imageId: Long,
-        val description: String?,
-        val duration: Long,
-        val mp3Url: String?,
-        val opusUrl: String?,
-        val segments: List<RadioSegment>,
-    )
-
-    private data class RadioSegment(
-        val title: String,
-        val timecode: Int,
-        val artId: Long,
-        val artist: String?,
-    )
 
     public companion object {
         private const val API_URL = "${BandcampExtractorHelper.BASE_API_URL}/bcweekly/1/get?id="
